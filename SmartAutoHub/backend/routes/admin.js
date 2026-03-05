@@ -77,6 +77,32 @@ router.delete(
   adminController.deleteUser
 );
 
+// Create a new vehicle (Admin1 only)
+const { uploadVehicleImages } = require('../middlewares/upload');
+router.post(
+  '/vehicles',
+  authorize('admin1'),
+  uploadVehicleImages,
+  adminController.createVehicle
+);
+
+// Update a vehicle (Admin1 only)
+router.put(
+  '/vehicles/:id',
+  authorize('admin1'),
+  validateObjectId(),
+  uploadVehicleImages,
+  adminController.updateVehicle
+);
+
+// Delete a vehicle (Admin1 only)
+router.delete(
+  '/vehicles/:id',
+  authorize('admin1'),
+  validateObjectId(),
+  adminController.deleteVehicle
+);
+
 // ==================== ADMIN2 ROUTES ====================
 // User verification management
 
