@@ -961,6 +961,102 @@ const deleteVehicle = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Get users who requested manual ID verification (damaged/faded IDs)
+ * @route   GET /api/admin/manual-id-verifications
+ * @access  Private (Admin2, Admin1)
+ */
+const getManualIDVerifications = async (req, res) => {
+  try {
+    const users = await User.find({
+      manualIDVerification: true,
+      manualIDStatus: 'pending'
+    })
+      .select('firstName lastName email role profileImage idVerification manualIDVerification manualIDStatus createdAt')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    console.error('Get manual ID verifications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching manual ID verifications',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Approve a manual ID verification request
+ * @route   PUT /api/admin/users/:id/approve-manual-id
+ * @access  Private (Admin2, Admin1)
+ */
+const approveManualID = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (!user.manualIDVerification) {
+      return res.status(400).json({ success: false, message: 'User did not request manual ID verification' });
+    }
+
+    user.isIDVerified = true;
+    user.manualIDStatus = 'approved';
+    if (user.idVerification) {
+      user.idVerification.verifiedAt = new Date();
+    }
+    await user.save({ validateBeforeSave: false });
+
+    res.json({
+      success: true,
+      message: 'Manual ID verification approved. User ID is now verified.',
+      data: user.getPublicProfile()
+    });
+  } catch (error) {
+    console.error('Approve manual ID error:', error);
+    res.status(500).json({ success: false, message: 'Error approving manual ID', error: error.message });
+  }
+};
+
+/**
+ * @desc    Reject a manual ID verification request
+ * @route   PUT /api/admin/users/:id/reject-manual-id
+ * @access  Private (Admin2, Admin1)
+ */
+const rejectManualID = async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (!user.manualIDVerification) {
+      return res.status(400).json({ success: false, message: 'User did not request manual ID verification' });
+    }
+
+    user.manualIDStatus = 'rejected';
+    user.manualIDRejectionReason = reason || 'ID could not be verified by admin';
+    await user.save({ validateBeforeSave: false });
+
+    res.json({
+      success: true,
+      message: 'Manual ID verification rejected.',
+      data: user.getPublicProfile()
+    });
+  } catch (error) {
+    console.error('Reject manual ID error:', error);
+    res.status(500).json({ success: false, message: 'Error rejecting manual ID', error: error.message });
+  }
+};
+
 module.exports = {
   // Admin1 routes
   getAllUsers,
@@ -981,6 +1077,9 @@ module.exports = {
   flagUser,
   approveUser,
   rejectUser,
+  getManualIDVerifications,
+  approveManualID,
+  rejectManualID,
   // Shared routes
   getUserDetails
 };

@@ -173,11 +173,17 @@ const VerificationPage = () => {
     formData.append('idDocument', idFile);
     
     try {
-      await api.post('/auth/verify-id', formData, {
+      const response = await api.post('/auth/verify-id', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       await refreshUser();
-      setSuccess('ID verified successfully!');
+      
+      // Check if manual verification is required
+      if (response.data.data?.manualVerificationRequired) {
+        setSuccess('ID submitted for manual verification. Admin will review shortly.');
+      } else {
+        setSuccess('ID verified successfully!');
+      }
       setActiveStep(2);
     } catch (err) {
       setError(err.response?.data?.message || 'ID verification failed');

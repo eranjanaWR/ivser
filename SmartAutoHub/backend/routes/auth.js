@@ -8,10 +8,11 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 const { uploadID, uploadSelfie, uploadProfileImage } = require('../middlewares/upload');
-const { validateRegistration, validateLogin, validateOTP } = require('../middlewares/validation');
+const { validateLogin, validateOTP } = require('../middlewares/validation');
 
 // Public routes
-router.post('/register', validateRegistration, authController.register);
+// Registration accepts optional profile image
+router.post('/register', uploadProfileImage, authController.register);
 router.post('/login', validateLogin, authController.login);
 
 // Protected routes (requires authentication)

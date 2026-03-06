@@ -13,10 +13,13 @@ const path = require('path');
  * @desc    Register a new user
  * @route   POST /api/auth/register
  * @access  Public
+ * 
+ * Account creation only - collects basic info + optional profile image.
+ * ID verification is done separately on the Verification page after email is verified.
  */
 const register = async (req, res) => {
   try {
-    const { firstName, lastName, email, password, phone, role } = req.body;
+    const { firstName, lastName, email, password, phone, role, idCardNumber } = req.body;
     
     // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -34,20 +37,37 @@ const register = async (req, res) => {
     // Generate OTP for email verification
     const otp = generateOTP();
     const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-    
-    // Create user
-    const user = await User.create({
+
+    // Handle profile image if uploaded
+    let profileImagePath = '';
+    if (req.file) {
+      profileImagePath = req.file.path;
+    }
+
+    // Build user document
+    const userData = {
       firstName,
       lastName,
       email: email.toLowerCase(),
       password,
       phone,
       role: userRole,
+      profileImage: profileImagePath,
       emailOTP: {
         code: otp,
         expiresAt: otpExpiry
       }
-    });
+    };
+
+    // Store ID card number if provided
+    if (idCardNumber) {
+      userData.idVerification = {
+        idNumber: idCardNumber
+      };
+    }
+    
+    // Create user
+    const user = await User.create(userData);
     
     // Send OTP email
     const emailResult = await sendOTPEmail(email, otp, firstName);
@@ -57,7 +77,7 @@ const register = async (req, res) => {
     
     res.status(201).json({
       success: true,
-      message: 'User registered successfully. Please verify your email.',
+      message: 'Account created successfully. Please verify your email.',
       data: {
         user: user.getPublicProfile(),
         token,
@@ -245,15 +265,23 @@ const resendOTP = async (req, res) => {
 };
 
 /**
- * @desc    Upload and verify ID
+ * @desc    Upload and verify ID using Tesseract.js OCR
  * @route   POST /api/auth/verify-id
  * @access  Private
+ * 
+ * Steps:
+ * 1. Accept uploaded ID image (idFront or idDocument field)
+ * 2. Get the ID number stored during registration (idVerification.idNumber)
+ * 3. Use Tesseract.js to extract text from the uploaded ID image
+ * 4. Compare extracted ID number with the stored ID number
+ * 5. If match: set isIDVerified = true
+ * 6. If no match or OCR fails: set manualIDVerification = true for Admin2 review
  */
 const verifyID = async (req, res) => {
   try {
-    const { idNumber } = req.body;
     const user = await User.findById(req.user._id);
     
+    // Check if already verified
     if (user.isIDVerified) {
       return res.status(400).json({
         success: false,
@@ -261,49 +289,102 @@ const verifyID = async (req, res) => {
       });
     }
     
-    // Check if files were uploaded
-    if (!req.files || !req.files.idFront || req.files.idFront.length === 0) {
+    // Get ID image from either idFront, idDocument, or idImage field
+    let idImagePath = null;
+    if (req.files) {
+      if (req.files.idFront && req.files.idFront[0]) {
+        idImagePath = req.files.idFront[0].path;
+      } else if (req.files.idDocument && req.files.idDocument[0]) {
+        idImagePath = req.files.idDocument[0].path;
+      } else if (req.files.idImage && req.files.idImage[0]) {
+        idImagePath = req.files.idImage[0].path;
+      }
+    }
+    
+    // Check if file was uploaded
+    if (!idImagePath) {
       return res.status(400).json({
         success: false,
-        message: 'ID front image is required'
+        message: 'ID image is required. Please upload your ID document.'
       });
     }
     
-    const idFrontPath = req.files.idFront[0].path;
-    const idBackPath = req.files.idBack ? req.files.idBack[0].path : null;
+    // Get ID number: from request body or from stored registration data
+    let idNumber = req.body.idNumber;
+    if (!idNumber && user.idVerification && user.idVerification.idNumber) {
+      idNumber = user.idVerification.idNumber;
+    }
     
-    // Extract text from ID images using OCR
-    const extractedText = await extractIDText(idFrontPath, idBackPath);
+    if (!idNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID number not found. Please ensure you entered your ID number during registration.'
+      });
+    }
     
-    // Verify ID number against extracted text
-    const verificationResult = verifyIDNumber(idNumber, extractedText.combinedText);
+    // Optional: get back image if provided
+    const idBackPath = req.files && req.files.idBack ? req.files.idBack[0].path : null;
     
-    if (verificationResult.isMatch || verificationResult.confidence >= 70) {
-      // Mark ID as verified
+    // Try to extract text from ID image using Tesseract.js OCR
+    let extractedText = null;
+    let ocrSuccess = false;
+    let verificationResult = null;
+    
+    try {
+      extractedText = await extractIDText(idImagePath, idBackPath);
+      ocrSuccess = true;
+      
+      // Verify ID number against extracted text
+      verificationResult = verifyIDNumber(idNumber, extractedText.combinedText);
+    } catch (ocrError) {
+      console.error('OCR processing error:', ocrError.message);
+      ocrSuccess = false;
+    }
+    
+    // Decision logic
+    if (ocrSuccess && verificationResult && (verificationResult.isMatch || verificationResult.confidence >= 70)) {
+      // ✅ ID verified successfully - OCR matched the ID number
       user.isIDVerified = true;
+      user.manualIDVerification = false;
+      user.manualIDStatus = null;
       user.idVerification = {
         idNumber: idNumber,
-        idFrontImage: idFrontPath,
+        idFrontImage: idImagePath,
         idBackImage: idBackPath,
-        extractedText: extractedText.combinedText,
+        extractedText: extractedText ? extractedText.combinedText : '',
+        ocrConfidence: verificationResult ? verificationResult.confidence : 0,
         verifiedAt: new Date()
       };
       await user.save({ validateBeforeSave: false });
       
-      res.json({
+      return res.json({
         success: true,
-        message: 'ID verified successfully',
+        message: 'ID verified successfully.',
         data: {
           user: user.getPublicProfile(),
           verification: verificationResult
         }
       });
     } else {
-      res.status(400).json({
-        success: false,
-        message: 'ID verification failed. The ID number does not match the uploaded document.',
+      // ❌ OCR failed or numbers don't match - set for manual verification
+      user.manualIDVerification = true;
+      user.manualIDStatus = 'pending';
+      user.idVerification = {
+        idNumber: idNumber,
+        idFrontImage: idImagePath,
+        idBackImage: idBackPath,
+        extractedText: extractedText ? extractedText.combinedText : '',
+        ocrConfidence: verificationResult ? verificationResult.confidence : 0
+      };
+      await user.save({ validateBeforeSave: false });
+      
+      return res.json({
+        success: true,
+        message: 'ID could not be verified automatically. Admin will verify manually.',
         data: {
-          verification: verificationResult
+          user: user.getPublicProfile(),
+          manualVerificationRequired: true,
+          ocrConfidence: verificationResult ? verificationResult.confidence : 0
         }
       });
     }
