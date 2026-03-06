@@ -16,6 +16,9 @@ router.use(protect);
 // Get nearby repairmen
 router.get('/nearby-repairmen', breakdownController.getNearbyRepairmen);
 
+// Calculate ETA between two points
+router.post('/calculate-eta', breakdownController.calculateETA);
+
 // Create breakdown request (verified users)
 router.post(
   '/',
