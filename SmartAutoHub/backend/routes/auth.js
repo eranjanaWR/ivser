@@ -21,8 +21,15 @@ router.use(protect);
 router.get('/me', authController.getMe);
 
 // Email verification
+// POST /api/auth/verify-email  — verify OTP (original route)
+// POST /api/auth/verify-otp    — alias used by frontend VerificationPage
 router.post('/verify-email', validateOTP, authController.verifyEmail);
+router.post('/verify-otp', validateOTP, authController.verifyEmail);
+
+// POST /api/auth/resend-otp  — resend OTP (original route)
+// POST /api/auth/send-otp    — alias used by frontend VerificationPage
 router.post('/resend-otp', authController.resendOTP);
+router.post('/send-otp', authController.resendOTP);
 
 // ID verification (upload front and back of ID)
 router.post('/verify-id', uploadID, authController.verifyID);
