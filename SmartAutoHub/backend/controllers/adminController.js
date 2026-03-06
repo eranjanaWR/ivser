@@ -786,6 +786,181 @@ const getDashboard = async (req, res) => {
   }
 };
 
+// ==================== ADMIN VEHICLE MANAGEMENT ====================
+
+/**
+ * @desc    Create a new vehicle listing (Admin)
+ * @route   POST /api/admin/vehicles
+ * @access  Private (Admin1)
+ */
+const createVehicle = async (req, res) => {
+  try {
+    const {
+      brand, model, year, mileage, price, fuelType, transmission,
+      bodyType, color, engineSize, doors, seats, condition,
+      description, features, vin, location, sellerId
+    } = req.body;
+    
+    // Handle image uploads
+    let images = [];
+    if (req.files && req.files.length > 0) {
+      images = req.files.map(file => file.path);
+    }
+    
+    // Parse features if it's a string
+    let parsedFeatures = features;
+    if (typeof features === 'string') {
+      try {
+        parsedFeatures = JSON.parse(features);
+      } catch {
+        parsedFeatures = features.split(',').map(f => f.trim());
+      }
+    }
+    
+    // Parse location if it's a string
+    let parsedLocation = location;
+    if (typeof location === 'string') {
+      try {
+        parsedLocation = JSON.parse(location);
+      } catch {
+        parsedLocation = undefined;
+      }
+    }
+    
+    // Use provided sellerId or default to admin's ID
+    const vehicleSellerId = sellerId || req.user._id;
+    
+    // Create vehicle
+    const vehicle = await Vehicle.create({
+      sellerId: vehicleSellerId,
+      brand,
+      model,
+      year: Number(year),
+      mileage: Number(mileage),
+      price: Number(price),
+      fuelType,
+      transmission,
+      bodyType,
+      color,
+      engineSize,
+      doors: doors ? Number(doors) : undefined,
+      seats: seats ? Number(seats) : undefined,
+      condition,
+      description,
+      features: parsedFeatures,
+      images,
+      vin,
+      location: parsedLocation,
+      status: 'available'
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: 'Vehicle created successfully by admin',
+      data: vehicle
+    });
+  } catch (error) {
+    console.error('Admin create vehicle error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating vehicle',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Update a vehicle listing (Admin)
+ * @route   PUT /api/admin/vehicles/:id
+ * @access  Private (Admin1)
+ */
+const updateVehicle = async (req, res) => {
+  try {
+    let vehicle = await Vehicle.findById(req.params.id);
+    
+    if (!vehicle) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vehicle not found'
+      });
+    }
+    
+    // Handle image uploads
+    if (req.files && req.files.length > 0) {
+      const newImages = req.files.map(file => file.path);
+      req.body.images = [...(vehicle.images || []), ...newImages];
+    }
+    
+    // Parse features if needed
+    if (req.body.features && typeof req.body.features === 'string') {
+      try {
+        req.body.features = JSON.parse(req.body.features);
+      } catch {
+        req.body.features = req.body.features.split(',').map(f => f.trim());
+      }
+    }
+    
+    // Parse location if needed
+    if (req.body.location && typeof req.body.location === 'string') {
+      req.body.location = JSON.parse(req.body.location);
+    }
+    
+    vehicle = await Vehicle.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    
+    res.json({
+      success: true,
+      message: 'Vehicle updated successfully',
+      data: vehicle
+    });
+  } catch (error) {
+    console.error('Admin update vehicle error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating vehicle',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Delete a vehicle listing (Admin)
+ * @route   DELETE /api/admin/vehicles/:id
+ * @access  Private (Admin1)
+ */
+const deleteVehicle = async (req, res) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    
+    if (!vehicle) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vehicle not found'
+      });
+    }
+    
+    await Vehicle.findByIdAndDelete(req.params.id);
+    
+    // Also delete associated test drives
+    await TestDrive.deleteMany({ vehicleId: req.params.id });
+    
+    res.json({
+      success: true,
+      message: 'Vehicle and associated data deleted successfully'
+    });
+  } catch (error) {
+    console.error('Admin delete vehicle error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting vehicle',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   // Admin1 routes
   getAllUsers,
@@ -796,6 +971,9 @@ module.exports = {
   updateUserStatus,
   deleteUser,
   getDashboard,
+  createVehicle,
+  updateVehicle,
+  deleteVehicle,
   // Admin2 routes
   getUnverifiedUsers,
   getFlaggedUsers,

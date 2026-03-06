@@ -28,6 +28,7 @@ import MyVehiclesPage from './pages/MyVehiclesPage';
 import TestDrivesPage from './pages/TestDrivesPage';
 import BreakdownPage from './pages/BreakdownPage';
 import RepairmanMapPage from './pages/RepairmanMapPage';
+import RepairmanDashboard from './pages/RepairmanDashboard';
 import PredictionPage from './pages/PredictionPage';
 import ProfilePage from './pages/ProfilePage';
 import Admin1Dashboard from './pages/Admin1Dashboard';
@@ -200,6 +201,11 @@ function App() {
                 <Route path="/repairman-map" element={
                   <PrivateRoute>
                     <RepairmanMapPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/repairman-dashboard" element={
+                  <PrivateRoute roles={['repairman']}>
+                    <RepairmanDashboard />
                   </PrivateRoute>
                 } />
                 

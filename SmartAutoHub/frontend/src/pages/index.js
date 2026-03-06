@@ -14,6 +14,7 @@ export { default as MyVehiclesPage } from './MyVehiclesPage';
 export { default as TestDrivesPage } from './TestDrivesPage';
 export { default as BreakdownPage } from './BreakdownPage';
 export { default as RepairmanMapPage } from './RepairmanMapPage';
+export { default as RepairmanDashboard } from './RepairmanDashboard';
 export { default as PredictionPage } from './PredictionPage';
 export { default as ProfilePage } from './ProfilePage';
 export { default as Admin1Dashboard } from './Admin1Dashboard';
