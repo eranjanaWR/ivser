@@ -8,6 +8,13 @@ const nodemailer = require('nodemailer');
 
 /**
  * Create email transporter based on configuration
+ * 
+ * For Gmail:
+ *   1. Enable 2-Step Verification on your Google account
+ *   2. Go to https://myaccount.google.com/apppasswords
+ *   3. Generate an App Password for "Mail"
+ *   4. Set EMAIL_USER = your Gmail address
+ *   5. Set EMAIL_PASS = the 16-character App Password (no spaces)
  */
 const createTransporter = () => {
   if (process.env.EMAIL_SERVICE === 'sendgrid') {
@@ -21,13 +28,17 @@ const createTransporter = () => {
       }
     });
   }
-  
-  // Gmail or other SMTP configuration
+
+  // Gmail SMTP configuration using App Password (free, no paid API needed)
+  // Works with any Gmail or Google Workspace account
   return nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || 'gmail',
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // use SSL
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
+      user: process.env.EMAIL_USER, // e.g. yourname@gmail.com
+      pass: process.env.EMAIL_PASS  // 16-char Google App Password
     }
   });
 };
