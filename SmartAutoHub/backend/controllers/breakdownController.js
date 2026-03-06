@@ -8,6 +8,7 @@ const Breakdown = require('../models/Breakdown');
 const User = require('../models/User');
 const { paginate, formatPaginationResponse, calculateDistance } = require('../utils/helpers');
 const { sendBreakdownNotification } = require('../utils/email');
+const { calculateRoute, reverseGeocode } = require('../utils/geocoding');
 
 /**
  * @desc    Create a breakdown request
@@ -458,14 +459,37 @@ const updateRepairmanLocation = async (req, res) => {
       lastUpdated: new Date()
     };
     
-    // Calculate new ETA based on distance
-    const distance = calculateDistance(
-      latitude, longitude,
-      breakdown.location.coordinates[1],
-      breakdown.location.coordinates[0]
-    );
-    // Estimate 2 minutes per km
-    breakdown.eta = Math.ceil(distance * 2);
+    // Calculate route and ETA using OSRM
+    let etaMinutes = null;
+    let distanceKm = null;
+    let etaText = null;
+    
+    try {
+      const routeData = await calculateRoute(
+        { lat: latitude, lng: longitude }, // repairman location
+        { 
+          lat: breakdown.location.coordinates[1], 
+          lng: breakdown.location.coordinates[0] 
+        } // breakdown location
+      );
+      
+      if (routeData) {
+        etaMinutes = routeData.duration.minutes;
+        distanceKm = parseFloat(routeData.distance.km);
+        etaText = routeData.duration.text;
+        breakdown.eta = etaMinutes;
+      }
+    } catch (routeErr) {
+      // Fallback to simple distance calculation if routing fails
+      const distance = calculateDistance(
+        latitude, longitude,
+        breakdown.location.coordinates[1],
+        breakdown.location.coordinates[0]
+      );
+      etaMinutes = Math.ceil(distance * 2); // Estimate 2 minutes per km
+      distanceKm = distance;
+      breakdown.eta = etaMinutes;
+    }
     
     await breakdown.save({ validateBeforeSave: false });
     
@@ -474,8 +498,11 @@ const updateRepairmanLocation = async (req, res) => {
     if (io) {
       io.to(`breakdown_${breakdown._id}`).emit('repairmanLocationUpdate', {
         breakdownId: breakdown._id,
-        location: { longitude, latitude },
-        eta: breakdown.eta,
+        latitude,
+        longitude,
+        eta: etaMinutes,
+        etaText,
+        distance: distanceKm,
         timestamp: new Date()
       });
     }
@@ -485,7 +512,9 @@ const updateRepairmanLocation = async (req, res) => {
       message: 'Location updated',
       data: {
         location: breakdown.repairmanLiveLocation,
-        eta: breakdown.eta
+        eta: etaMinutes,
+        etaText,
+        distance: distanceKm
       }
     });
   } catch (error) {
@@ -628,6 +657,51 @@ const getBreakdownById = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Calculate ETA between two points
+ * @route   POST /api/breakdowns/calculate-eta
+ * @access  Private
+ */
+const calculateETA = async (req, res) => {
+  try {
+    const { origin, destination } = req.body;
+    
+    if (!origin || !destination || 
+        !origin.lat || !origin.lng || 
+        !destination.lat || !destination.lng) {
+      return res.status(400).json({
+        success: false,
+        message: 'Origin and destination coordinates are required'
+      });
+    }
+    
+    const routeData = await calculateRoute(origin, destination);
+    
+    if (!routeData) {
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to calculate route'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        distance: routeData.distance,
+        duration: routeData.duration,
+        eta: routeData.eta
+      }
+    });
+  } catch (error) {
+    console.error('Calculate ETA error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error calculating ETA',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   createBreakdown,
   getNearbyRepairmen,
@@ -637,5 +711,6 @@ module.exports = {
   updateBreakdownStatus,
   updateRepairmanLocation,
   rateBreakdown,
-  getBreakdownById
+  getBreakdownById,
+  calculateETA
 };
