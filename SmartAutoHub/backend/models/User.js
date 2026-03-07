@@ -73,7 +73,24 @@ const userSchema = new mongoose.Schema({
     idFrontImage: String, // URL or base64
     idBackImage: String,
     extractedText: String, // Text extracted from ID using Tesseract
+    ocrConfidence: Number, // OCR match confidence percentage
     verifiedAt: Date
+  },
+
+  // Manual ID Verification flag
+  // Set to true when OCR fails (damaged/faded ID) and user requests manual review
+  manualIDVerification: {
+    type: Boolean,
+    default: false
+  },
+  manualIDStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected', null],
+    default: null
+  },
+  manualIDRejectionReason: {
+    type: String,
+    default: null
   },
   
   // Face Verification Data
@@ -197,6 +214,14 @@ userSchema.methods.getPublicProfile = function() {
     isIDVerified: this.isIDVerified,
     isFaceVerified: this.isFaceVerified,
     isFullyVerified: this.isFullyVerified(),
+    manualIDVerification: this.manualIDVerification,
+    manualIDStatus: this.manualIDStatus,
+    idVerification: this.idVerification ? {
+      idNumber: this.idVerification.idNumber,
+      idFrontImage: this.idVerification.idFrontImage,
+      ocrConfidence: this.idVerification.ocrConfidence
+    } : null,
+    profileImage: this.profileImage,
     address: this.address,
     ...(this.role === 'repairman' && { repairmanDetails: this.repairmanDetails }),
     createdAt: this.createdAt

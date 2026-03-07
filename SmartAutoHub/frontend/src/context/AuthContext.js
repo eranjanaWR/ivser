@@ -61,23 +61,35 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Signup function
+  // Signup function — accepts FormData (multipart) for file uploads
   const signup = async (userData) => {
     try {
       setError(null);
-      const response = await api.post('/auth/register', userData);
+
+      // Determine headers: if FormData use multipart, else JSON
+      const isFormData = userData instanceof FormData;
+      const config = isFormData
+        ? { headers: { 'Content-Type': 'multipart/form-data' } }
+        : {};
+
+      const response = await api.post('/auth/register', userData, config);
+
       // Defensive: check if response.data.data exists
       if (!response.data || !response.data.data) {
         setError('Route not found or server error');
         return { success: false, message: 'Route not found or server error' };
       }
-      const { user, token } = response.data.data;
+      const { user, token, emailSent } = response.data.data;
       
       localStorage.setItem('token', token);
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       setUser(user);
       
-      return { success: true, user, emailSent: response.data.data.emailSent };
+      return {
+        success: true,
+        user,
+        emailSent,
+      };
     } catch (err) {
       const message = err.response?.data?.message || 'Signup failed';
       setError(message);

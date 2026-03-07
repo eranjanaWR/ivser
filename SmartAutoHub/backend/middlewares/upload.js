@@ -24,7 +24,7 @@ const storage = multer.diskStorage({
     let folder = 'uploads/';
     
     // Determine folder based on fieldname or route
-    if (file.fieldname === 'idFront' || file.fieldname === 'idBack') {
+    if (file.fieldname === 'idFront' || file.fieldname === 'idBack' || file.fieldname === 'idImage' || file.fieldname === 'idDocument') {
       folder = 'uploads/ids/';
     } else if (file.fieldname === 'selfie') {
       folder = 'uploads/selfies/';
@@ -92,10 +92,11 @@ module.exports = {
   // Multiple fields upload
   uploadFields: (fields) => upload.fields(fields),
   
-  // ID verification upload (front and back)
+  // ID verification upload (front and back, or single idDocument)
   uploadID: upload.fields([
     { name: 'idFront', maxCount: 1 },
-    { name: 'idBack', maxCount: 1 }
+    { name: 'idBack', maxCount: 1 },
+    { name: 'idDocument', maxCount: 1 }
   ]),
   
   // Face verification upload
@@ -109,6 +110,12 @@ module.exports = {
   
   // Breakdown images upload
   uploadBreakdownImages: upload.array('breakdownImages', 5),
+  
+  // Registration upload (profile image + ID image)
+  uploadRegistration: upload.fields([
+    { name: 'profileImage', maxCount: 1 },
+    { name: 'idImage', maxCount: 1 }
+  ]),
   
   // Memory storage uploads (for processing without saving)
   uploadIDMemory: uploadMemory.fields([
