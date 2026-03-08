@@ -147,10 +147,10 @@ npm install
 cp .env.example .env
 ```
 
-4. Configure environment variables in `.env`:
+4. Configure environment variables in `.env` (do not change the existing .env file):
 ```
 NODE_ENV=development
-PORT=5000
+PORT=5001
 MONGODB_URI=mongodb+srv://your-connection-string
 JWT_SECRET=your-secret-key
 JWT_EXPIRE=30d
@@ -163,6 +163,8 @@ EMAIL_PASS=your-app-password
 # Google Maps
 GOOGLE_MAPS_API_KEY=your-api-key
 ```
+
+**Important**: Do not modify the existing `.env` file. The port is set to 5001 and should remain unchanged.
 
 5. Download face-api.js models (for face verification):
 ```bash
@@ -189,7 +191,7 @@ npm install
 
 3. Create `.env` file:
 ```
-REACT_APP_API_URL=http://localhost:5000
+REACT_APP_API_URL=http://localhost:5001
 REACT_APP_GOOGLE_MAPS_API_KEY=your-api-key
 ```
 
