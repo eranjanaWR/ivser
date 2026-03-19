@@ -3,7 +3,7 @@
  * Landing page with professional, minimal design
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Box,
@@ -13,6 +13,12 @@ import {
   Grid,
   Card,
   CardContent,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputAdornment,
+  Chip,
 } from '@mui/material';
 import {
   DirectionsCar,
@@ -21,6 +27,8 @@ import {
   VerifiedUser,
   Speed,
   Support,
+  Search,
+  TrendingDown,
 } from '@mui/icons-material';
 
 const features = [
@@ -56,79 +64,198 @@ const features = [
   },
 ];
 
+const trendingSearches = [
+  { name: 'Corolla', status: 'available', availability: 'Available to Sell' },
+  { name: 'Premio', status: 'out-of-stock', availability: 'Out of Stock' },
+  { name: 'BMW', status: 'available', availability: 'Available to Sell' },
+  { name: 'Honda Civic', status: 'out-of-stock', availability: 'Out of Stock' },
+  { name: 'Nissan Skyline', status: 'available', availability: 'Available to Sell' },
+  { name: 'Toyota Aqua', status: 'available', availability: 'Available to Sell' },
+];
+
 const HomePage = () => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [vehicleType, setVehicleType] = useState('all');
+
+  const handleSearch = () => {
+    if (searchQuery.trim()) {
+      // Navigate to vehicles page with search query
+      window.location.href = `/vehicles?q=${encodeURIComponent(searchQuery)}&type=${vehicleType}`;
+    }
+  };
+
   return (
     <Box>
-      {/* Hero Section */}
+      {/* Hero Section with Search */}
       <Box
         sx={{
           bgcolor: '#1a1a1a',
           color: 'white',
-          py: { xs: 8, md: 12 },
+          py: { xs: 6, md: 10 },
           position: 'relative',
           overflow: 'hidden',
+          backgroundImage: 'url(/images/hero-bg.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            bgcolor: 'rgba(0, 0, 0, 0.5)',
+            zIndex: 1,
+          },
         }}
       >
-        <Container maxWidth="lg">
-          <Grid container spacing={4} alignItems="center">
-            <Grid item xs={12} md={6}>
-              <Typography
-                variant="h2"
-                fontWeight="bold"
-                sx={{ mb: 2, fontSize: { xs: '2rem', md: '3rem' } }}
+        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 2 }}>
+          {/* Heading */}
+          <Typography
+            variant="h2"
+            fontWeight="bold"
+            sx={{
+              mb: 2,
+              fontSize: { xs: '2rem', md: '3.5rem' },
+              textShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            }}
+          >
+            Find your next vehicle
+          </Typography>
+
+          {/* Subheading */}
+          <Typography
+            variant="h6"
+            sx={{
+              mb: 4,
+              color: 'rgba(255, 255, 255, 0.8)',
+              fontSize: { xs: '0.95rem', md: '1.1rem' },
+              maxWidth: 600,
+            }}
+          >
+            Search by make, model, year, price and more.
+          </Typography>
+
+          {/* Search Bar */}
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1,
+              mb: 6,
+              flexDirection: { xs: 'column', sm: 'row' },
+            }}
+          >
+            <TextField
+              fullWidth
+              placeholder="Search by model or keyword..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              sx={{
+                flexGrow: 1,
+                bgcolor: 'white',
+                borderRadius: 1,
+                '& .MuiOutlinedInput-root': {
+                  color: '#333',
+                  padding: '0 12px',
+                  height: 56,
+                  fontSize: '0.95rem',
+                },
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start" sx={{ color: '#999', mr: 1 }}>
+                    <Search fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <FormControl sx={{ minWidth: 180, bgcolor: 'white', borderRadius: 1, height: 56 }}>
+              <Select
+                value={vehicleType}
+                onChange={(e) => setVehicleType(e.target.value)}
+                sx={{ height: 56 }}
+                displayEmpty
               >
-                Your Trusted
-                <br />
-                <Box component="span" sx={{ color: 'primary.main' }}>
-                  Auto Marketplace
-                </Box>
-              </Typography>
-              <Typography
-                variant="h6"
-                sx={{ mb: 4, color: 'grey.400', fontWeight: 400 }}
-              >
-                Buy, sell, and repair vehicles with confidence. 
-                Verified users, transparent pricing, and emergency roadside assistance.
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                <Button
-                  component={Link}
-                  to="/vehicles"
-                  variant="contained"
-                  size="large"
-                  sx={{ px: 4, py: 1.5 }}
-                >
-                  Browse Vehicles
-                </Button>
-                <Button
-                  component={Link}
-                  to="/signup"
-                  variant="outlined"
-                  size="large"
-                  sx={{
-                    px: 4,
-                    py: 1.5,
-                    borderColor: 'white',
-                    color: 'white',
-                    '&:hover': { borderColor: 'grey.300', bgcolor: 'rgba(255,255,255,0.1)' },
-                  }}
-                >
-                  Get Started
-                </Button>
-              </Box>
+                <MenuItem value="all">All Vehicle Types</MenuItem>
+                <MenuItem value="sedan">Sedans</MenuItem>
+                <MenuItem value="suv">SUVs</MenuItem>
+                <MenuItem value="truck">Trucks</MenuItem>
+                <MenuItem value="coupe">Coupes</MenuItem>
+                <MenuItem value="hatchback">Hatchbacks</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Button
+              onClick={handleSearch}
+              variant="contained"
+              sx={{
+                px: 4,
+                py: 1.5,
+                height: 56,
+                fontSize: '1rem',
+                fontWeight: 600,
+                bgcolor: '#000',
+                color: 'white',
+                border: 'none',
+                '&:hover': {
+                  bgcolor: '#222',
+                },
+              }}
+            >
+              Search
+            </Button>
+          </Box>
+
+          {/* Trending Searches */}
+          <Box sx={{ mt: 8 }}>
+            <Typography
+              variant="h5"
+              fontWeight="bold"
+              sx={{ mb: 3, textShadow: '0 1px 4px rgba(0,0,0,0.3)' }}
+            >
+              Trending Searches
+            </Typography>
+
+            <Grid container spacing={2}>
+              {trendingSearches.map((vehicle, index) => (
+                <Grid item xs={12} sm={6} md={4} key={index}>
+                  <Card
+                    sx={{
+                      bgcolor: 'white',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s',
+                      '&:hover': {
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                      },
+                    }}
+                  >
+                    <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2.5 }}>
+                      <Box>
+                        <Typography variant="h6" fontWeight="bold" sx={{ color: '#1a1a1a', mb: 1 }}>
+                          {vehicle.name}
+                        </Typography>
+                        <Chip
+                          label={vehicle.availability}
+                          size="small"
+                          sx={{
+                            bgcolor: vehicle.status === 'available' ? '#e8f5e9' : '#fff3e0',
+                            color: vehicle.status === 'available' ? '#2e7d32' : '#e65100',
+                            fontWeight: 500,
+                            fontSize: '0.8rem',
+                          }}
+                        />
+                      </Box>
+                      <Box sx={{ color: '#999', fontSize: '1.5rem' }}>→</Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
             </Grid>
-            <Grid item xs={12} md={6} sx={{ display: { xs: 'none', md: 'block' } }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-              >
-                <DirectionsCar sx={{ fontSize: 300, color: 'grey.800' }} />
-              </Box>
-            </Grid>
-          </Grid>
+          </Box>
         </Container>
       </Box>
 
