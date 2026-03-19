@@ -5,7 +5,6 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
@@ -15,66 +14,45 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
-// User Schema (simplified for this script)
-const userSchema = new mongoose.Schema({
-  firstName: String,
-  lastName: String,
-  email: { type: String, unique: true },
-  password: String,
-  phone: String,
-  role: String,
-  isActive: { type: Boolean, default: true },
-  isEmailVerified: { type: Boolean, default: true },
-  isIDVerified: { type: Boolean, default: true },
-  isFaceVerified: { type: Boolean, default: true },
-  isFlagged: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const User = mongoose.model('User', userSchema);
+// Import the actual User model (includes pre-save password hashing hook)
+const User = require('../models/User');
 
 const createAdminUsers = async () => {
   try {
-    // Hash passwords
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash('admin123', salt);
+    // Delete existing admin users to create fresh
+    await User.deleteMany({ email: { $in: ['admin1@smartautohub.com', 'admin2@smartautohub.com'] } });
+    console.log('Deleted existing admin users');
     
     // Admin1 - Full access admin
-    const admin1 = await User.findOneAndUpdate(
-      { email: 'admin1@smartautohub.com' },
-      {
-        firstName: 'Admin',
-        lastName: 'One',
-        email: 'admin1@smartautohub.com',
-        password: hashedPassword,
-        phone: '1234567890',
-        role: 'admin1',
-        isActive: true,
-        isEmailVerified: true,
-        isIDVerified: true,
-        isFaceVerified: true
-      },
-      { upsert: true, new: true }
-    );
+    const admin1 = new User({
+      firstName: 'Admin',
+      lastName: 'One',
+      email: 'admin1@smartautohub.com',
+      password: 'admin123',
+      phone: '1234567890',
+      role: 'admin1',
+      isActive: true,
+      isEmailVerified: true,
+      isIDVerified: true,
+      isFaceVerified: true
+    });
+    await admin1.save();
     console.log('Admin1 created:', admin1.email);
     
     // Admin2 - Verification management admin
-    const admin2 = await User.findOneAndUpdate(
-      { email: 'admin2@smartautohub.com' },
-      {
-        firstName: 'Admin',
-        lastName: 'Two',
-        email: 'admin2@smartautohub.com',
-        password: hashedPassword,
-        phone: '0987654321',
-        role: 'admin2',
-        isActive: true,
-        isEmailVerified: true,
-        isIDVerified: true,
-        isFaceVerified: true
-      },
-      { upsert: true, new: true }
-    );
+    const admin2 = new User({
+      firstName: 'Admin',
+      lastName: 'Two',
+      email: 'admin2@smartautohub.com',
+      password: 'admin123',
+      phone: '0987654321',
+      role: 'admin2',
+      isActive: true,
+      isEmailVerified: true,
+      isIDVerified: true,
+      isFaceVerified: true
+    });
+    await admin2.save();
     console.log('Admin2 created:', admin2.email);
     
     console.log('\n=== Admin Credentials ===');
