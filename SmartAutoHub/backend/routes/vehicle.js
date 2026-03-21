@@ -27,11 +27,10 @@ router.get('/saved', vehicleController.getSavedVehicles);
 // Save/unsave vehicle
 router.post('/:id/save', validateObjectId(), vehicleController.toggleSaveVehicle);
 
-// Create vehicle (verified sellers only)
+// Create vehicle 
 router.post(
   '/',
-  authorize('seller', 'admin1'),
-  requireFullyVerified,
+  authorize('buyer', 'seller', 'buyer/seller', 'admin1'),
   uploadVehicleImages,
   validateVehicle,
   vehicleController.createVehicle

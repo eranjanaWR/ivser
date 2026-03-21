@@ -110,19 +110,19 @@ const Footer = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Email fontSize="small" sx={{ color: 'grey.400' }} />
                 <Typography variant="body2" color="grey.400">
-                  support@smartautohub.com
+                  itpproject34@gmail.com
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Phone fontSize="small" sx={{ color: 'grey.400' }} />
                 <Typography variant="body2" color="grey.400">
-                  +1 (555) 123-4567
+                  0764518239
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <LocationOn fontSize="small" sx={{ color: 'grey.400' }} />
                 <Typography variant="body2" color="grey.400">
-                  123 Auto Street, Car City, CC 12345
+                  No 667 Kandy road, Malabe, Sri Lanka
                 </Typography>
               </Box>
             </Box>

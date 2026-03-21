@@ -91,8 +91,13 @@ const validateVehicle = [
   
   body('year')
     .notEmpty().withMessage('Year is required')
-    .isInt({ min: 1900, max: new Date().getFullYear() + 1 })
-    .withMessage('Please enter a valid year'),
+    .custom(value => {
+      const yearNum = parseInt(value);
+      if (isNaN(yearNum) || yearNum < 1900 || yearNum > new Date().getFullYear() + 1) {
+        throw new Error('Please enter a valid year between 1900 and ' + (new Date().getFullYear() + 1));
+      }
+      return true;
+    }),
   
   body('mileage')
     .notEmpty().withMessage('Mileage is required')
@@ -104,23 +109,53 @@ const validateVehicle = [
   
   body('fuelType')
     .optional()
-    .isIn(['petrol', 'diesel', 'electric', 'hybrid', 'other'])
-    .withMessage('Invalid fuel type'),
+    .custom(value => {
+      const validFuelTypes = ['petrol', 'diesel', 'electric', 'hybrid', 'other', 'Petrol', 'Diesel', 'Electric', 'Hybrid', 'Other'];
+      if (!validFuelTypes.includes(value)) {
+        throw new Error('Invalid fuel type');
+      }
+      return true;
+    }),
   
   body('transmission')
     .optional()
-    .isIn(['automatic', 'manual', 'cvt', 'other'])
-    .withMessage('Invalid transmission type'),
+    .custom(value => {
+      const validTransmissions = ['automatic', 'manual', 'cvt', 'other', 'Automatic', 'Manual', 'CVT', 'Other'];
+      if (!validTransmissions.includes(value)) {
+        throw new Error('Invalid transmission type');
+      }
+      return true;
+    }),
+  
+  body('type')
+    .optional()
+    .custom(value => {
+      const validBodyTypes = ['sedan', 'suv', 'hatchback', 'coupe', 'truck', 'van', 'wagon', 'convertible', 'other', 'bus', 'three wheeler', 'motorcycle', 'pickup', 'jeep', 'minivan', 'crossover', 'minibus', 'auto rickshaw', 'tempo', 'compact car', 'sports car', 'Sedan', 'SUV', 'Hatchback', 'Coupe', 'Truck', 'Van', 'Wagon', 'Convertible', 'Other', 'Bus', 'Three Wheeler', 'Motorcycle', 'Pickup', 'Jeep', 'Minivan', 'Crossover', 'Minibus', 'Auto Rickshaw', 'Tempo', 'Compact Car', 'Sports Car'];
+      if (!validBodyTypes.includes(value)) {
+        throw new Error('Invalid body type');
+      }
+      return true;
+    }),
   
   body('bodyType')
     .optional()
-    .isIn(['sedan', 'suv', 'hatchback', 'coupe', 'truck', 'van', 'wagon', 'convertible', 'other'])
-    .withMessage('Invalid body type'),
+    .custom(value => {
+      const validBodyTypes = ['sedan', 'suv', 'hatchback', 'coupe', 'truck', 'van', 'wagon', 'convertible', 'other', 'Sedan', 'SUV', 'Hatchback', 'Coupe', 'Truck', 'Van', 'Wagon', 'Convertible', 'Other'];
+      if (!validBodyTypes.includes(value)) {
+        throw new Error('Invalid body type');
+      }
+      return true;
+    }),
   
   body('condition')
     .optional()
-    .isIn(['new', 'excellent', 'good', 'fair', 'poor'])
-    .withMessage('Invalid condition'),
+    .custom(value => {
+      const validConditions = ['new', 'excellent', 'good', 'fair', 'poor', 'used', 'New', 'Excellent', 'Good', 'Fair', 'Poor', 'Used'];
+      if (!validConditions.includes(value)) {
+        throw new Error('Invalid condition');
+      }
+      return true;
+    }),
   
   body('description')
     .optional()

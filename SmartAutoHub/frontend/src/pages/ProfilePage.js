@@ -3,7 +3,7 @@
  * User profile management
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -20,6 +20,9 @@ import {
   Chip,
   Card,
   CardContent,
+  Switch,
+  FormControlLabel,
+  FormGroup,
 } from '@mui/material';
 import {
   Edit,
@@ -31,6 +34,8 @@ import {
   Badge,
   Face,
   Warning,
+  NotificationsActive,
+  Mail,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
@@ -50,6 +55,51 @@ const ProfilePage = () => {
     phone: user?.phone || '',
     address: user?.address || '',
   });
+
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    systemAlerts: true,
+    emailNotifications: true,
+  });
+
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
+
+  useEffect(() => {
+    fetchNotificationPreferences();
+  }, []);
+
+  const fetchNotificationPreferences = async () => {
+    try {
+      setPreferencesLoading(true);
+      const response = await api.get('/notifications/preferences');
+      if (response.data.success) {
+        setNotificationPreferences(response.data.preferences);
+      }
+    } catch (err) {
+      console.error('Failed to fetch notification preferences:', err);
+    } finally {
+      setPreferencesLoading(false);
+    }
+  };
+
+  const handlePreferenceChange = async (event) => {
+    const { name, checked } = event.target;
+    const updatedPreferences = {
+      ...notificationPreferences,
+      [name]: checked,
+    };
+    setNotificationPreferences(updatedPreferences);
+
+    try {
+      await api.put('/notifications/preferences', {
+        [name]: checked,
+      });
+      setSuccess('Notification preferences updated successfully');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update notification preferences');
+      // Revert the change if update fails
+      setNotificationPreferences(notificationPreferences);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -369,6 +419,66 @@ const ProfilePage = () => {
                   {user?.role}
                 </Typography>
               </Box>
+            </Paper>
+
+            {/* Notification Preferences */}
+            <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'grey.200', mt: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <NotificationsActive sx={{ color: 'primary.main' }} />
+                <Typography variant="h6" fontWeight="bold">
+                  Notification Preferences
+                </Typography>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+
+              {preferencesLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                  <CircularProgress size={40} />
+                </Box>
+              ) : (
+                <FormGroup>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="systemAlerts"
+                        checked={notificationPreferences.systemAlerts}
+                        onChange={handlePreferenceChange}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="500">
+                          System Alerts
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Show pop-up notifications when vehicles become available
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ mb: 2, alignItems: 'flex-start' }}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="emailNotifications"
+                        checked={notificationPreferences.emailNotifications}
+                        onChange={handlePreferenceChange}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="500">
+                          Email Notifications
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Receive email alerts about available vehicles
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ alignItems: 'flex-start' }}
+                  />
+                </FormGroup>
+              )}
             </Paper>
           </Grid>
         </Grid>

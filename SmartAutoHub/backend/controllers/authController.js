@@ -103,10 +103,24 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     
+    console.log('\n🔑 LOGIN ATTEMPT');
+    console.log('Email:', email);
+    console.log('Password provided:', !!password);
+    
     // Find user and include password for verification
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
     
+    console.log('✓ User lookup complete');
+    console.log('User found:', !!user);
+    if (user) {
+      console.log('  Email:', user.email);
+      console.log('  Role:', user.role);
+      console.log('  Active:', user.isActive);
+      console.log('  Password hash exists:', !!user.password);
+    }
+    
     if (!user) {
+      console.log('❌ User not found in database');
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -115,6 +129,7 @@ const login = async (req, res) => {
     
     // Check if account is active
     if (!user.isActive) {
+      console.log('❌ Account is inactive');
       return res.status(401).json({
         success: false,
         message: 'Account is deactivated. Please contact support.'
@@ -122,8 +137,13 @@ const login = async (req, res) => {
     }
     
     // Verify password
+    console.log('🔐 Comparing passwords...');
     const isMatch = await user.comparePassword(password);
+    console.log('✓ Password comparison done');
+    console.log('  Password matches:', isMatch);
+    
     if (!isMatch) {
+      console.log('❌ Password mismatch');
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password'
@@ -137,6 +157,8 @@ const login = async (req, res) => {
     // Generate token
     const token = generateToken({ id: user._id });
     
+    console.log('✅ Login successful for:', user.email);
+    
     res.json({
       success: true,
       message: 'Login successful',
@@ -146,7 +168,7 @@ const login = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('❌ Login error:', error);
     res.status(500).json({
       success: false,
       message: 'Error logging in',
