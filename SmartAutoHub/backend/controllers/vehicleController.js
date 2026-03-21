@@ -5,6 +5,7 @@
 
 const Vehicle = require('../models/Vehicle');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
+const notificationController = require('./notificationController');
 
 /**
  * @desc    Get all vehicles with filters
@@ -63,7 +64,7 @@ const getVehicles = async (req, res) => {
     // Execute query
     const [vehicles, total] = await Promise.all([
       Vehicle.find(filter)
-        .populate('sellerId', 'firstName lastName profileImage')
+        .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified isFaceVerified')
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum),
@@ -128,8 +129,8 @@ const createVehicle = async (req, res) => {
   try {
     const {
       brand, model, year, mileage, price, fuelType, transmission,
-      bodyType, color, engineSize, doors, seats, condition,
-      description, features, vin, location
+      type, bodyType, color, engineCapacity, engineSize, doors, seats, condition,
+      description, features, vin, location, manufacturedCountry
     } = req.body;
     
     // Handle image uploads
@@ -138,38 +139,66 @@ const createVehicle = async (req, res) => {
       images = req.files.map(file => file.path);
     }
     
-    // Parse features if it's a string
+    // Parse features if it's a string or array
     let parsedFeatures = features;
     if (typeof features === 'string') {
       try {
         parsedFeatures = JSON.parse(features);
       } catch {
-        parsedFeatures = features.split(',').map(f => f.trim());
+        parsedFeatures = features.split(',').map(f => f.trim()).filter(Boolean);
       }
+    } else if (Array.isArray(features)) {
+      parsedFeatures = features.filter(Boolean);
     }
     
-    // Create vehicle
-    const vehicle = await Vehicle.create({
+    // Convert enum values to lowercase
+    const vehicleData = {
       sellerId: req.user._id,
-      brand,
-      model,
-      year,
-      mileage,
-      price,
-      fuelType,
-      transmission,
-      bodyType,
-      color,
-      engineSize,
-      doors,
-      seats,
-      condition,
-      description,
+      brand: brand?.trim(),
+      model: model?.trim(),
+      year: parseInt(year),
+      mileage: parseInt(mileage),
+      price: parseFloat(price),
+      fuelType: fuelType?.toLowerCase(),
+      transmission: transmission?.toLowerCase(),
+      bodyType: (type || bodyType)?.toLowerCase(),
+      type: (type || bodyType)?.toLowerCase(),
+      color: color?.trim(),
+      engineSize: engineCapacity || engineSize,
+      engineCapacity: engineCapacity || engineSize,
+      doors: doors ? parseInt(doors) : undefined,
+      seats: seats ? parseInt(seats) : undefined,
+      condition: condition?.toLowerCase(),
+      description: description?.trim(),
       features: parsedFeatures,
       images,
-      vin,
-      location: location ? JSON.parse(location) : undefined
-    });
+      vin: vin?.trim(),
+      manufacturedCountry: manufacturedCountry?.trim()
+    };
+    
+    // Parse location if it's a string (JSON)
+    if (location && typeof location === 'string') {
+      try {
+        vehicleData.location = JSON.parse(location);
+      } catch {
+        vehicleData.location = { city: location, country: 'Sri Lanka' };
+      }
+    } else {
+      vehicleData.location = location;
+    }
+    
+    // Remove undefined fields
+    Object.keys(vehicleData).forEach(key => vehicleData[key] === undefined && delete vehicleData[key]);
+    
+    // Create vehicle
+    const vehicle = await Vehicle.create(vehicleData);
+    
+    // Check and send notifications to subscribed users
+    try {
+      await notificationController.checkAndNotify(vehicle);
+    } catch (notifError) {
+      console.error('Error in checkAndNotify:', notifError);
+    }
     
     res.status(201).json({
       success: true,
@@ -230,12 +259,22 @@ const updateVehicle = async (req, res) => {
     if (req.body.location && typeof req.body.location === 'string') {
       req.body.location = JSON.parse(req.body.location);
     }
+
+    // Check if status is changing to 'available' to trigger notifications
+    const wasUnavailable = vehicle.status !== 'available';
+    const isBecomingAvailable = req.body.status === 'available';
     
     vehicle = await Vehicle.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
+    
+    // Trigger notifications if vehicle is now available
+    if (isBecomingAvailable && wasUnavailable) {
+      console.log(`Vehicle ${vehicle._id} is now available. Checking for subscriptions...`);
+      notificationController.checkAndNotify(vehicle);
+    }
     
     res.json({
       success: true,
