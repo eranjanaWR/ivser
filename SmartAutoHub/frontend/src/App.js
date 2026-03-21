@@ -23,6 +23,7 @@ import SignupPage from './pages/SignupPage';
 import VerificationPage from './pages/VerificationPage';
 import VehiclesPage from './pages/VehiclesPage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
+import ComparisonPage from './pages/ComparisonPage';
 import AddVehiclePage from './pages/AddVehiclePage';
 import MyVehiclesPage from './pages/MyVehiclesPage';
 import TestDrivesPage from './pages/TestDrivesPage';
@@ -165,6 +166,7 @@ function App() {
                 <Route path="/signup" element={<SignupPage />} />
                 <Route path="/vehicles" element={<VehiclesPage />} />
                 <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
+                <Route path="/compare/:id" element={<ComparisonPage />} />
                 <Route path="/prediction" element={<PredictionPage />} />
                 
                 {/* Protected Routes */}
@@ -179,12 +181,12 @@ function App() {
                   </PrivateRoute>
                 } />
                 <Route path="/add-vehicle" element={
-                  <PrivateRoute roles={['seller', 'admin1']}>
+                  <PrivateRoute>
                     <AddVehiclePage />
                   </PrivateRoute>
                 } />
                 <Route path="/my-vehicles" element={
-                  <PrivateRoute roles={['seller', 'admin1']}>
+                  <PrivateRoute roles={['seller', 'buyer/seller', 'admin1']}>
                     <MyVehiclesPage />
                   </PrivateRoute>
                 } />
