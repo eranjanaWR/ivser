@@ -3,7 +3,7 @@
  * Browse all vehicle listings with filters
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -43,6 +43,12 @@ import {
   ExpandLess,
   Edit,
   Delete,
+  DirectionsCar,
+  LocalShipping,
+  Agriculture,
+  TwoWheeler,
+  AirportShuttle,
+  RvHookup,
 } from '@mui/icons-material';
 import api from '../services/api';
 import VehicleMap from '../components/VehicleMap';
@@ -54,12 +60,31 @@ const brands = ['Toyota', 'Honda', 'Nissan', 'Suzuki', 'BMW', 'Mercedes', 'Audi'
 const fuelTypes = ['Petrol', 'Diesel', 'Hybrid', 'Electric'];
 const transmissions = ['Manual', 'Automatic'];
 const conditions = ['New', 'Used', 'Certified Pre-Owned'];
+const vehicleTypes = ['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Truck', 'Van', 'Wagon', 'Convertible', 'Bus', 'Three Wheeler', 'Motorcycle', 'Pickup', 'Jeep'];
+
+// Vehicle type icons mapping
+const vehicleTypeIcons = {
+  'Sedan': '🚗',
+  'SUV': '🚙',
+  'Hatchback': '🚗',
+  'Coupe': '🚗',
+  'Truck': '🚚',
+  'Van': '🚐',
+  'Wagon': '🚙',
+  'Convertible': '🏎️',
+  'Bus': '🚌',
+  'Three Wheeler': '🛺',
+  'Motorcycle': '🏍️',
+  'Pickup': '🚚',
+  'Jeep': '🚙',
+};
 
 const VehiclesPage = () => {
   const { user } = useAuth();
   const isAdmin = user && ['admin1', 'admin2'].includes(user.role);
   
   const [searchParams, setSearchParams] = useSearchParams();
+  const vehiclesResultRef = useRef(null);
   
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +98,7 @@ const VehiclesPage = () => {
   const [filters, setFilters] = useState({
     search: searchParams.get('search') || '',
     brand: searchParams.get('brand') || '',
+    vehicleType: searchParams.get('vehicleType') || '',
     fuelType: searchParams.get('fuelType') || '',
     transmission: searchParams.get('transmission') || '',
     condition: searchParams.get('condition') || '',
@@ -111,7 +137,11 @@ const VehiclesPage = () => {
     try {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
+        if (value) {
+          // Map vehicleType to bodyType for backend compatibility
+          const paramKey = key === 'vehicleType' ? 'bodyType' : key;
+          params.append(paramKey, value);
+        }
       });
       
       const { data } = await api.get(`/vehicles?${params.toString()}`);
@@ -139,6 +169,13 @@ const VehiclesPage = () => {
     }
     newParams.set('page', '1');
     setSearchParams(newParams);
+    
+    // Scroll to results after a short delay to ensure filter is applied
+    setTimeout(() => {
+      if (vehiclesResultRef.current) {
+        vehiclesResultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
   };
 
   const handlePageChange = (event, value) => {
@@ -152,6 +189,7 @@ const VehiclesPage = () => {
     setFilters({
       search: '',
       brand: '',
+      vehicleType: '',
       fuelType: '',
       transmission: '',
       condition: '',
@@ -216,6 +254,44 @@ const VehiclesPage = () => {
           </Typography>
         </Box>
 
+        {/* Visual Filter - Vehicle Types */}
+        <Paper elevation={0} sx={{ p: 1.5, mb: 2, border: '1px solid', borderColor: 'grey.200', bgcolor: 'white' }}>
+          <Typography variant="body1" fontWeight="bold" sx={{ mb: 1.5 }}>
+            Discover Vehicles by Type
+          </Typography>
+          <Grid container spacing={1}>
+            {vehicleTypes.map((type) => (
+              <Grid item xs={6} sm={4} md={3} lg={2} key={type}>
+                <Card
+                  onClick={() => handleFilterChange('vehicleType', filters.vehicleType === type ? '' : type)}
+                  sx={{
+                    cursor: 'pointer',
+                    border: filters.vehicleType === type ? '2px solid' : '1px solid',
+                    borderColor: filters.vehicleType === type ? 'primary.main' : 'grey.300',
+                    bgcolor: filters.vehicleType === type ? 'primary.50' : 'white',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      bgcolor: filters.vehicleType === type ? 'primary.50' : 'grey.50',
+                      borderColor: 'primary.main',
+                      transform: 'translateY(-2px)',
+                      boxShadow: 2,
+                    },
+                    textAlign: 'center',
+                    p: 1,
+                  }}
+                >
+                  <Box sx={{ fontSize: 24, mb: 0.5 }}>
+                    {vehicleTypeIcons[type]}
+                  </Box>
+                  <Typography variant="caption" fontWeight={filters.vehicleType === type ? 'bold' : 'normal'}>
+                    {type}
+                  </Typography>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Paper>
+
         {/* Search Bar */}
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: '1px solid', borderColor: 'grey.200' }}>
           <Grid container spacing={2} alignItems="center">
@@ -271,6 +347,21 @@ const VehiclesPage = () => {
               </Grid>
               <Grid item xs={6} md={3}>
                 <FormControl fullWidth size="small">
+                  <InputLabel>Vehicle Type</InputLabel>
+                  <Select
+                    value={filters.vehicleType}
+                    label="Vehicle Type"
+                    onChange={(e) => handleFilterChange('vehicleType', e.target.value)}
+                  >
+                    <MenuItem value="">All Types</MenuItem>
+                    {vehicleTypes.map((v) => (
+                      <MenuItem key={v} value={v}>{v}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <FormControl fullWidth size="small">
                   <InputLabel>Fuel Type</InputLabel>
                   <Select
                     value={filters.fuelType}
@@ -319,10 +410,13 @@ const VehiclesPage = () => {
         </Paper>
 
         {/* Active Filters */}
-        {(filters.brand || filters.fuelType || filters.transmission || filters.condition) && (
+        {(filters.brand || filters.vehicleType || filters.fuelType || filters.transmission || filters.condition) && (
           <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {filters.brand && (
               <Chip label={filters.brand} onDelete={() => handleFilterChange('brand', '')} />
+            )}
+            {filters.vehicleType && (
+              <Chip label={filters.vehicleType} onDelete={() => handleFilterChange('vehicleType', '')} />
             )}
             {filters.fuelType && (
               <Chip label={filters.fuelType} onDelete={() => handleFilterChange('fuelType', '')} />
@@ -368,7 +462,7 @@ const VehiclesPage = () => {
               {/* Left Column - Vehicle Grid */}
               <Grid item xs={12} md={8} lg={8.5}>
                 {/* Vehicle Grid */}
-                <Grid container spacing={3}>
+                <Grid container spacing={3} ref={vehiclesResultRef}>
                   {vehicles.map((vehicle) => (
                     <Grid 
                       item 
