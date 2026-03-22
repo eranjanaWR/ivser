@@ -227,6 +227,7 @@ const sendEmail = async (options) => {
               <div class="criteria">
                 <h3 style="margin-top: 0; color: #1a1a1a;">Your Search Criteria:</h3>
                 ${searchCriteria.brand ? `<p><strong>Brand:</strong> ${searchCriteria.brand}</p>` : ''}
+                ${searchCriteria.vehicleType ? `<p><strong>Vehicle Type:</strong> ${searchCriteria.vehicleType}</p>` : ''}
                 ${searchCriteria.fuelType ? `<p><strong>Fuel Type:</strong> ${searchCriteria.fuelType}</p>` : ''}
                 ${searchCriteria.transmission ? `<p><strong>Transmission:</strong> ${searchCriteria.transmission}</p>` : ''}
                 ${searchCriteria.condition ? `<p><strong>Condition:</strong> ${searchCriteria.condition}</p>` : ''}
