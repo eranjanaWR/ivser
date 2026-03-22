@@ -87,6 +87,7 @@ const HomePage = () => {
   const [loadingTrends, setLoadingTrends] = useState(true);
   const [trendingVehicles, setTrendingVehicles] = useState([]);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
+  const [vehicleAvailability, setVehicleAvailability] = useState({});
   const [unseeAlerts, setUnseenAlerts] = useState([]);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
 
@@ -161,6 +162,7 @@ const HomePage = () => {
       try {
         console.log('🚗 Fetching vehicles for trending models...');
         const allVehicles = [];
+        const availability = {};
         
         // Fetch vehicles for each trending model
         for (const trend of trendingSearches.slice(0, 3)) {
@@ -170,13 +172,20 @@ const HomePage = () => {
             );
             if (data.data && data.data.length > 0) {
               allVehicles.push(...data.data);
+              // Store first vehicle's status for this model
+              availability[trend.model] = data.data[0].status || 'available';
+            } else {
+              // No vehicles found for this model
+              availability[trend.model] = 'unavailable';
             }
           } catch (err) {
             console.error(`Failed to fetch vehicles for ${trend.model}:`, err);
+            availability[trend.model] = 'unavailable';
           }
         }
         
         console.log('✅ Fetched trending vehicles:', allVehicles.length);
+        setVehicleAvailability(availability);
         setTrendingVehicles(allVehicles.slice(0, 6)); // Show max 6 vehicles
       } catch (err) {
         console.error('Failed to fetch trending vehicles:', err);
@@ -385,14 +394,21 @@ const HomePage = () => {
                           {vehicle.model}
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mb: 1 }}>
-                          <TrendingUp 
+                          <Typography 
+                            variant="caption" 
                             sx={{ 
-                              fontSize: '1rem', 
-                              color: '#4caf50'
-                            }} 
-                          />
-                          <Typography variant="caption" sx={{ color: '#4caf50', fontSize: '0.8rem', fontWeight: 600 }}>
-                            Trending
+                              color: vehicleAvailability[vehicle.model] === 'available' 
+                                ? '#4caf50' 
+                                : vehicleAvailability[vehicle.model] === 'pending' 
+                                ? '#ff9800' 
+                                : vehicleAvailability[vehicle.model] === 'unavailable'
+                                ? '#757575'
+                                : '#f44336',
+                              fontSize: '0.8rem', 
+                              fontWeight: 600 
+                            }}
+                          >
+                            {vehicleAvailability[vehicle.model]?.charAt(0).toUpperCase() + vehicleAvailability[vehicle.model]?.slice(1) || 'Loading...'}
                           </Typography>
                         </Box>
                       </CardContent>

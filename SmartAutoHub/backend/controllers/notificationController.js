@@ -17,6 +17,7 @@ exports.subscribe = async (req, res) => {
     const normalizedCriteria = {
       search: (searchCriteria.search || '').trim().toLowerCase(),
       brand: (searchCriteria.brand || '').trim(),
+      vehicleType: (searchCriteria.vehicleType || '').trim().toLowerCase(),
       fuelType: (searchCriteria.fuelType || '').trim(),
       transmission: (searchCriteria.transmission || '').trim(),
       condition: (searchCriteria.condition || '').trim(),
@@ -36,6 +37,7 @@ exports.subscribe = async (req, res) => {
       const existingNormalized = {
         search: (sub.searchCriteria?.search || '').trim().toLowerCase(),
         brand: (sub.searchCriteria?.brand || '').trim(),
+        vehicleType: (sub.searchCriteria?.vehicleType || '').trim().toLowerCase(),
         fuelType: (sub.searchCriteria?.fuelType || '').trim(),
         transmission: (sub.searchCriteria?.transmission || '').trim(),
         condition: (sub.searchCriteria?.condition || '').trim(),
@@ -155,6 +157,7 @@ exports.checkAndNotify = async (vehicle) => {
     const matchingSubscriptions = allSubscriptions.filter((subscription) => {
       const searchTerm = (subscription.searchCriteria?.search || '').trim().toLowerCase();
       const brand = (subscription.searchCriteria?.brand || '').trim().toLowerCase();
+      const vehicleType = (subscription.searchCriteria?.vehicleType || '').trim().toLowerCase();
       const fuelType = (subscription.searchCriteria?.fuelType || '').trim();
       const transmission = (subscription.searchCriteria?.transmission || '').trim();
       const condition = (subscription.searchCriteria?.condition || '').trim();
@@ -175,16 +178,22 @@ exports.checkAndNotify = async (vehicle) => {
       // Check price match
       const priceMatches = vehicle.price >= minPrice && vehicle.price <= maxPrice;
 
-      // Check other criteria
+      // Check other criteria (optional filters - missing criteria means it's satisfied)
       const fuelMatches = !fuelType || vehicle.fuelType === fuelType;
       const transmissionMatches = !transmission || vehicle.transmission === transmission;
       const conditionMatches = !condition || vehicle.condition === condition;
+      const vehicleTypeMatches = !vehicleType || vehicle.bodyType === vehicleType;
 
-      // Match if: (brand OR search term) AND price AND other criteria
-      const isMatch = (brandMatches || searchMatches) && priceMatches && fuelMatches && transmissionMatches && conditionMatches;
+      // If brand or search term is specified, at least one must match
+      // If neither is specified, that filter is satisfied
+      const hasBrandOrSearchCriteria = brand || searchTerm;
+      const brandOrSearchMatches = !hasBrandOrSearchCriteria || brandMatches || searchMatches;
+
+      // Match if: (brand OR search term if specified) AND price AND all optional criteria match
+      const isMatch = brandOrSearchMatches && priceMatches && fuelMatches && transmissionMatches && conditionMatches && vehicleTypeMatches;
 
       if (isMatch) {
-        console.log(`✓ MATCH for ${subscription.email} - Brand: ${brandMatches}, Search: ${searchMatches}, Price: ${priceMatches}`);
+        console.log(`✓ MATCH for ${subscription.email} - Brand: ${brandMatches}, Search: ${searchMatches}, Price: ${priceMatches}, Type: ${vehicleTypeMatches}, Fuel: ${fuelMatches}, Trans: ${transmissionMatches}`);
       }
       return isMatch;
     });
