@@ -20,8 +20,8 @@ const getVehicles = async (req, res) => {
       sortBy, sortOrder, page, limit, search
     } = req.query;
     
-    // Build filter object
-    const filter = { status: 'available' };
+    // Build filter object - only show active vehicles
+    const filter = { status: 'active' };
     
     if (brand) filter.brand = new RegExp(brand, 'i');
     if (model) filter.model = new RegExp(model, 'i');

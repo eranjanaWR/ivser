@@ -36,8 +36,10 @@ import {
 } from '@mui/icons-material';
 import api from '../services/api';
 import AlertsModal from '../components/AlertsModal';
+import CommercialAdsBanner from '../components/CommercialAdsBanner';
 import { useAuth } from '../context/AuthContext';
 import { getImageUrl } from '../utils/imageUrl';
+import WatermarkedImage from '../components/WatermarkedImage';
 
 const features = [
   {
@@ -421,6 +423,9 @@ const HomePage = () => {
         </Container>
       </Box>
 
+      {/* Commercial Ads Banner Section */}
+      <CommercialAdsBanner />
+
       {/* Trending Vehicles Section - Below Hero */}
       {trendingVehicles.length > 0 && !loadingVehicles && (
         <Box sx={{ bgcolor: '#f5f5f5', py: 10 }}>
@@ -468,12 +473,14 @@ const HomePage = () => {
                       position: 'relative',
                     }}
                   >
-                    <CardMedia
-                      component="img"
-                      height="200"
-                      image={getImageUrl(vehicle.images?.[0])}
+                    <WatermarkedImage
+                      src={getImageUrl(vehicle.images?.[0])}
                       alt={`${vehicle.brand} ${vehicle.model}`}
-                      sx={{ objectFit: 'cover' }}
+                      sx={{
+                        height: 200,
+                        objectFit: 'cover',
+                      }}
+                      showLoader={false}
                     />
                     <CardContent sx={{ flexGrow: 1 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -573,7 +580,6 @@ const HomePage = () => {
           </Container>
         </Box>
       )}
-
 
       {/* CTA Section - Only show if user is not logged in */}
       {!user && (
