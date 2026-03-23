@@ -139,8 +139,8 @@ const vehicleSchema = new mongoose.Schema({
   // Status
   status: {
     type: String,
-    enum: ['available', 'pending', 'sold', 'removed'],
-    default: 'available'
+    enum: ['active', 'inactive', 'pending', 'sold', 'removed'],
+    default: 'active'
   },
   
   // Views counter
