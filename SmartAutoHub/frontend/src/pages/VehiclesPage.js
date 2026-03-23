@@ -55,6 +55,7 @@ import VehicleMap from '../components/VehicleMap';
 import NotifyModal from '../components/NotifyModal';
 import { useAuth } from '../context/AuthContext';
 import { getImageUrl } from '../utils/imageUrl';
+import WatermarkedImage from '../components/WatermarkedImage';
 
 const brands = ['Toyota', 'Honda', 'Nissan', 'Suzuki', 'BMW', 'Mercedes', 'Audi', 'Mazda', 'Mitsubishi', 'Hyundai'];
 const fuelTypes = ['Petrol', 'Diesel', 'Hybrid', 'Electric'];
@@ -93,6 +94,8 @@ const VehiclesPage = () => {
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [vehicleToDelete, setVehicleToDelete] = useState(null);
+  const [suggestedVehicles, setSuggestedVehicles] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   
   // Filters
   const [filters, setFilters] = useState({
@@ -152,10 +155,94 @@ const VehiclesPage = () => {
       // Log the search
       const searchQuery = filters.search || filters.brand || 'browse vehicles';
       logSearch(searchQuery, vehiclesData.length);
+      
+      // Fetch featured suggestions if there's a search query
+      if (filters.search) {
+        fetchSuggestedVehicles(filters.search);
+      } else {
+        setSuggestedVehicles([]);
+      }
     } catch (err) {
       console.error('Failed to fetch vehicles:', err);
     }
     setLoading(false);
+  };
+
+  const fetchSuggestedVehicles = async (searchQuery) => {
+    setLoadingSuggestions(true);
+    try {
+      // Get vehicles from current results to understand search context
+      if (vehicles.length === 0) {
+        setSuggestedVehicles([]);
+        setLoadingSuggestions(false);
+        return;
+      }
+
+      // Extract brand/model from search query for filtering
+      const searchLower = searchQuery.toLowerCase();
+      
+      // Calculate average price and get vehicle type from current results
+      const avgPrice = vehicles.length > 0 
+        ? vehicles.reduce((sum, v) => sum + v.price, 0) / vehicles.length 
+        : 0;
+      const priceRange = 0.3; // 30% variance
+
+      // Get similar vehicles with different brands/models
+      // Fetch from a larger pool and filter
+      const params = new URLSearchParams();
+      // Use price-based filtering to get similar vehicles
+      params.append('minPrice', Math.max(0, Math.floor(avgPrice * (1 - priceRange))));
+      params.append('maxPrice', Math.ceil(avgPrice * (1 + priceRange)));
+      params.append('limit', 20); // Get more to filter later
+      
+      const { data } = await api.get(`/vehicles?${params.toString()}`);
+      let allVehicles = data.data || [];
+      
+      // Filter to remove:
+      // 1. Exact matches from main results
+      // 2. Same brand as search query
+      // 3. Same model keyword
+      const mainVehicleIds = vehicles.map(v => v._id);
+      const searchBrand = vehicles[0]?.brand?.toLowerCase() || '';
+      
+      let suggestions = allVehicles.filter(v => {
+        // Don't include main results
+        if (mainVehicleIds.includes(v._id)) return false;
+        
+        // Don't include same brand as the searched vehicle
+        if (v.brand?.toLowerCase() === searchBrand) return false;
+        
+        // Don't include exact model keyword matches
+        if (v.model?.toLowerCase().includes(searchBrand)) return false;
+        
+        return true;
+      }).slice(0, 6);
+
+      // If we don't have enough suggestions, get more diverse options
+      if (suggestions.length < 6) {
+        const diverseParams = new URLSearchParams();
+        diverseParams.append('limit', 12);
+        
+        const { data: diverseData } = await api.get(`/vehicles?${diverseParams.toString()}`);
+        const diverseVehicles = diverseData.data || [];
+        
+        const additionalSuggestions = diverseVehicles.filter(v => {
+          if (mainVehicleIds.includes(v._id)) return false;
+          if (suggestions.find(s => s._id === v._id)) return false;
+          if (v.brand?.toLowerCase() === searchBrand) return false;
+          if (v.model?.toLowerCase().includes(searchBrand)) return false;
+          return true;
+        });
+        
+        suggestions = [...suggestions, ...additionalSuggestions].slice(0, 6);
+      }
+      
+      setSuggestedVehicles(suggestions);
+    } catch (err) {
+      console.error('Failed to fetch suggested vehicles:', err);
+      setSuggestedVehicles([]);
+    }
+    setLoadingSuggestions(false);
   };
 
   const handleFilterChange = (name, value) => {
@@ -482,12 +569,14 @@ const VehiclesPage = () => {
                       position: 'relative',
                     }}
                   >
-                    <CardMedia
-                      component="img"
-                      height="200"
-                      image={getImageUrl(vehicle.images?.[0])}
+                    <WatermarkedImage
+                      src={getImageUrl(vehicle.images?.[0])}
                       alt={`${vehicle.brand} ${vehicle.model}`}
-                      sx={{ objectFit: 'cover' }}
+                      sx={{
+                        height: 200,
+                        objectFit: 'cover',
+                      }}
+                      showLoader={false}
                     />
                     <CardContent sx={{ flexGrow: 1 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -591,6 +680,118 @@ const VehiclesPage = () => {
                   color="primary"
                   size="large"
                 />
+              </Box>
+            )}
+
+            {/* Featured Suggestions Section */}
+            {filters.search && suggestedVehicles.length > 0 && (
+              <Box sx={{ mt: 6, mb: 4 }}>
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                    ✨ Featured Suggestions Related to "{filters.search}"
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    You might also be interested in these featured vehicles
+                  </Typography>
+                </Box>
+
+                {loadingSuggestions ? (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <Grid container spacing={2}>
+                    {suggestedVehicles.map((vehicle) => (
+                      <Grid item xs={12} sm={6} md={4} lg={2} key={vehicle._id}>
+                        <Card
+                          sx={{
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            transition: 'all 0.3s ease',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            border: '2px solid',
+                            borderColor: 'primary.light',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: 'white',
+                            '&:hover': {
+                              transform: 'translateY(-8px)',
+                              boxShadow: '0 8px 16px rgba(102, 126, 234, 0.4)',
+                            },
+                          }}
+                        >
+                          <WatermarkedImage
+                            src={getImageUrl(vehicle.images?.[0])}
+                            alt={`${vehicle.brand} ${vehicle.model}`}
+                            sx={{
+                              height: 140,
+                              objectFit: 'cover',
+                            }}
+                            showLoader={false}
+                          />
+                          <CardContent sx={{ flexGrow: 1, p: 1.5 }}>
+                            <Box sx={{ display: 'flex', gap: 0.5, mb: 1, alignItems: 'center' }}>
+                              <Chip
+                                label={vehicle.condition}
+                                size="small"
+                                sx={{
+                                  bgcolor: vehicle.condition === 'New' ? 'success.main' : 'warning.main',
+                                  color: 'white',
+                                  fontWeight: 'bold',
+                                }}
+                              />
+                              <Chip
+                                label="Featured"
+                                size="small"
+                                sx={{
+                                  bgcolor: 'rgba(255,255,255,0.3)',
+                                  color: 'white',
+                                  fontWeight: 'bold',
+                                  border: '1px solid white',
+                                }}
+                                icon={<Typography sx={{ fontSize: '12px' }}>⭐</Typography>}
+                              />
+                            </Box>
+                            <Typography variant="subtitle2" fontWeight="bold" noWrap>
+                              {vehicle.brand} {vehicle.model}
+                            </Typography>
+                            <Typography variant="subtitle1" fontWeight="bold" sx={{ mt: 0.5 }}>
+                              {formatPrice(vehicle.price)}
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1, mt: 1, fontSize: '12px' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
+                                <CalendarToday fontSize="small" />
+                                {vehicle.year}
+                              </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
+                                <Speed fontSize="small" />
+                                {vehicle.mileage?.toLocaleString()} km
+                              </Box>
+                            </Box>
+                          </CardContent>
+                          <CardActions sx={{ p: 1.5, pt: 1 }}>
+                            <Button
+                              component={Link}
+                              to={`/vehicles/${vehicle._id}`}
+                              onClick={() => handleVehicleClick(vehicle._id)}
+                              variant="contained"
+                              size="small"
+                              fullWidth
+                              sx={{
+                                bgcolor: 'white',
+                                color: 'primary.main',
+                                fontWeight: 'bold',
+                                '&:hover': { bgcolor: 'grey.100' },
+                              }}
+                            >
+                              View
+                            </Button>
+                          </CardActions>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                )}
               </Box>
             )}
           </>

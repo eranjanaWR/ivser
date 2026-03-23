@@ -61,6 +61,13 @@ router.get(
   adminController.getDashboard
 );
 
+// Migrate vehicle status (for updates/maintenance)
+router.post(
+  '/migrate-vehicle-status',
+  authorize('admin1'),
+  adminController.migrateVehicleStatus
+);
+
 // Update user status (activate/deactivate)
 router.put(
   '/users/:id/status',

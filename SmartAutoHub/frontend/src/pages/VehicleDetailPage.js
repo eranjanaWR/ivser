@@ -47,6 +47,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import EditVehicleModal from '../components/EditVehicleModal';
 import { getImageUrl } from '../utils/imageUrl';
+import { getWatermarkedImage } from '../utils/watermark';
 
 const VehicleDetailPage = () => {
   const { id } = useParams();
@@ -57,6 +58,8 @@ const VehicleDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentImage, setCurrentImage] = useState(0);
+  const [watermarkedImageUrl, setWatermarkedImageUrl] = useState(null);
+  const [watermarkLoading, setWatermarkLoading] = useState(false);
   
   // Test drive dialog
   const [testDriveOpen, setTestDriveOpen] = useState(false);
@@ -74,6 +77,24 @@ const VehicleDetailPage = () => {
   useEffect(() => {
     fetchVehicle();
   }, [id]);
+
+  // Apply watermark to current image
+  useEffect(() => {
+    if (vehicle && vehicle.images && vehicle.images[currentImage]) {
+      setWatermarkLoading(true);
+      const originalImageUrl = getImageUrl(vehicle.images[currentImage]);
+      getWatermarkedImage(originalImageUrl)
+        .then(watermarkedUrl => {
+          setWatermarkedImageUrl(watermarkedUrl);
+          setWatermarkLoading(false);
+        })
+        .catch(error => {
+          console.error('Failed to apply watermark:', error);
+          setWatermarkedImageUrl(originalImageUrl);
+          setWatermarkLoading(false);
+        });
+    }
+  }, [vehicle, currentImage]);
 
   const fetchVehicle = async () => {
     setLoading(true);
@@ -235,9 +256,22 @@ const VehicleDetailPage = () => {
                 borderColor: 'grey.200',
               }}
             >
+              {watermarkLoading && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 10,
+                  }}
+                >
+                  <CircularProgress />
+                </Box>
+              )}
               <Box
                 component="img"
-                src={getImageUrl(vehicle.images?.[currentImage])}
+                src={watermarkedImageUrl || getImageUrl(vehicle.images?.[currentImage])}
                 alt={`${vehicle.brand} ${vehicle.model}`}
                 sx={{
                   width: '100%',
@@ -325,6 +359,25 @@ const VehicleDetailPage = () => {
                 ))}
               </Box>
             )}
+
+            {/* Boost Ad Button */}
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="contained"
+                sx={{
+                  bgcolor: '#d32f2f',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  px: 3,
+                  py: 1.5,
+                  '&:hover': {
+                    bgcolor: '#b71c1c',
+                  },
+                }}
+              >
+                Boost Ad
+              </Button>
+            </Box>
           </Grid>
 
           {/* Vehicle Details */}

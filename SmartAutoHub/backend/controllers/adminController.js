@@ -1057,6 +1057,59 @@ const rejectManualID = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Migrate vehicle status from 'available' to 'active'
+ * @route   POST /api/admin/migrate-vehicle-status
+ * @access  Private (Admin1 only)
+ */
+const migrateVehicleStatus = async (req, res) => {
+  try {
+    console.log('🔄 Starting vehicle status migration...');
+    
+    // Update all vehicles with old 'available' status to 'active'
+    const updateResult = await Vehicle.updateMany(
+      {
+        $or: [
+          { status: 'available' },
+          { status: { $exists: false } }
+        ]
+      },
+      { $set: { status: 'active' } }
+    );
+    
+    // Count vehicles by status for reporting
+    const activeVehicles = await Vehicle.countDocuments({ status: 'active' });
+    const inactiveVehicles = await Vehicle.countDocuments({ status: 'inactive' });
+    const pendingVehicles = await Vehicle.countDocuments({ status: 'pending' });
+    const soldVehicles = await Vehicle.countDocuments({ status: 'sold' });
+    const removedVehicles = await Vehicle.countDocuments({ status: 'removed' });
+    
+    res.json({
+      success: true,
+      message: 'Vehicle status migration completed',
+      migrationResult: {
+        matched: updateResult.matchedCount,
+        modified: updateResult.modifiedCount
+      },
+      vehiclesByStatus: {
+        active: activeVehicles,
+        inactive: inactiveVehicles,
+        pending: pendingVehicles,
+        sold: soldVehicles,
+        removed: removedVehicles,
+        total: activeVehicles + inactiveVehicles + pendingVehicles + soldVehicles + removedVehicles
+      }
+    });
+  } catch (error) {
+    console.error('Migration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error migrating vehicle status',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   // Admin1 routes
   getAllUsers,
@@ -1067,6 +1120,7 @@ module.exports = {
   updateUserStatus,
   deleteUser,
   getDashboard,
+  migrateVehicleStatus,
   createVehicle,
   updateVehicle,
   deleteVehicle,

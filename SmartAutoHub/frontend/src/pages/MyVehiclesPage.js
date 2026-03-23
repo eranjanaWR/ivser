@@ -37,6 +37,8 @@ import {
   CalendarToday,
 } from '@mui/icons-material';
 import api from '../services/api';
+import WatermarkedImage from '../components/WatermarkedImage';
+import { getImageUrl } from '../utils/imageUrl';
 
 const MyVehiclesPage = () => {
   const [vehicles, setVehicles] = useState([]);
@@ -222,12 +224,14 @@ const MyVehiclesPage = () => {
                     <MoreVert />
                   </IconButton>
 
-                  <CardMedia
-                    component="img"
-                    height="180"
-                    image={vehicle.images?.[0] || '/placeholder-car.jpg'}
+                  <WatermarkedImage
+                    src={getImageUrl(vehicle.images?.[0])}
                     alt={`${vehicle.brand} ${vehicle.model}`}
-                    sx={{ objectFit: 'cover' }}
+                    sx={{
+                      height: 180,
+                      objectFit: 'cover',
+                    }}
+                    showLoader={false}
                   />
                   
                   <CardContent sx={{ flexGrow: 1 }}>

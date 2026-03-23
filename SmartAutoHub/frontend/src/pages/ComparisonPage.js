@@ -35,6 +35,7 @@ import {
 } from '@mui/icons-material';
 import api from '../services/api';
 import { getImageUrl } from '../utils/imageUrl';
+import WatermarkedImage from '../components/WatermarkedImage';
 
 export default function ComparisonPage() {
   const navigate = useNavigate();
@@ -176,12 +177,16 @@ export default function ComparisonPage() {
                   Base Vehicle
                 </Typography>
               </Box>
-              <CardMedia
-                component="img"
-                height="250"
-                image={getImageUrl(baseVehicle.images?.[0])}
+              <WatermarkedImage
+                src={getImageUrl(baseVehicle.images?.[0])}
                 alt={`${baseVehicle.brand} ${baseVehicle.model}`}
-                sx={{ borderRadius: 1, mb: 2, objectFit: 'cover' }}
+                sx={{
+                  borderRadius: 1,
+                  mb: 2,
+                  objectFit: 'cover',
+                  height: 250,
+                }}
+                showLoader={false}
               />
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                 {baseVehicle.year} {baseVehicle.brand} {baseVehicle.model}
@@ -221,12 +226,16 @@ export default function ComparisonPage() {
               >
                 <Close fontSize="small" />
               </IconButton>
-              <CardMedia
-                component="img"
-                height="250"
-                image={getImageUrl(vehicle.images?.[0])}
+              <WatermarkedImage
+                src={getImageUrl(vehicle.images?.[0])}
                 alt={`${vehicle.brand} ${vehicle.model}`}
-                sx={{ borderRadius: 1, mb: 2, objectFit: 'cover' }}
+                sx={{
+                  borderRadius: 1,
+                  mb: 2,
+                  objectFit: 'cover',
+                  height: 250,
+                }}
+                showLoader={false}
               />
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
                 {vehicle.year} {vehicle.brand} {vehicle.model}
@@ -292,12 +301,14 @@ export default function ComparisonPage() {
             {filteredVehicles.length > 0 ? (
               filteredVehicles.map((vehicle) => (
                 <Card key={vehicle._id} sx={{ cursor: 'pointer', transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-5px)', boxShadow: 3 } }}>
-                  <CardMedia
-                    component="img"
-                    height="150"
-                    image={getImageUrl(vehicle.images?.[0])}
+                  <WatermarkedImage
+                    src={getImageUrl(vehicle.images?.[0])}
                     alt={`${vehicle.brand} ${vehicle.model}`}
-                    sx={{ objectFit: 'cover' }}
+                    sx={{
+                      height: 150,
+                      objectFit: 'cover',
+                    }}
+                    showLoader={false}
                   />
                   <CardContent sx={{ p: 2 }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
