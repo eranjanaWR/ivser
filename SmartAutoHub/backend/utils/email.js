@@ -189,10 +189,160 @@ const sendBreakdownNotification = async (repairmanEmail, repairmanName, location
   return await sendNotificationEmail(repairmanEmail, subject, message, repairmanName);
 };
 
+/**
+ * Send generic email with template support
+ */
+const sendEmail = async (options) => {
+  try {
+    const { to, subject, template, data } = options;
+    const transporter = createTransporter();
+
+    let html = '';
+
+    if (template === 'notification-subscription') {
+      const { email, searchCriteria } = data;
+      html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .criteria { background: white; border-left: 4px solid #0066ff; padding: 15px; margin: 20px 0; }
+            .criteria p { margin: 5px 0; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>SmartAuto Hub</h1>
+            </div>
+            <div class="content">
+              <h2>Subscription Confirmed! 🎉</h2>
+              <p>Thank you for subscribing to vehicle notifications. We'll send you an email as soon as a matching vehicle is added to our system.</p>
+              
+              <div class="criteria">
+                <h3 style="margin-top: 0; color: #1a1a1a;">Your Search Criteria:</h3>
+                ${searchCriteria.brand ? `<p><strong>Brand:</strong> ${searchCriteria.brand}</p>` : ''}
+                ${searchCriteria.vehicleType ? `<p><strong>Vehicle Type:</strong> ${searchCriteria.vehicleType}</p>` : ''}
+                ${searchCriteria.fuelType ? `<p><strong>Fuel Type:</strong> ${searchCriteria.fuelType}</p>` : ''}
+                ${searchCriteria.transmission ? `<p><strong>Transmission:</strong> ${searchCriteria.transmission}</p>` : ''}
+                ${searchCriteria.condition ? `<p><strong>Condition:</strong> ${searchCriteria.condition}</p>` : ''}
+                <p><strong>Price Range:</strong> LKR ${searchCriteria.minPrice?.toLocaleString()} - LKR ${searchCriteria.maxPrice?.toLocaleString()}</p>
+              </div>
+              
+              <p>You can manage your notifications anytime from your account dashboard.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} SmartAuto Hub. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+    } else if (template === 'vehicle-notification') {
+      const { vehicle } = data;
+      const formatPrice = (price) =>
+        new Intl.NumberFormat('en-LK', {
+          style: 'currency',
+          currency: 'LKR',
+          maximumFractionDigits: 0,
+        }).format(price);
+
+      html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .vehicle-card { background: white; border-radius: 8px; overflow: hidden; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .vehicle-image { width: 100%; height: 300px; object-fit: cover; }
+            .vehicle-details { padding: 20px; }
+            .vehicle-title { font-size: 24px; font-weight: bold; color: #1a1a1a; margin: 10px 0; }
+            .vehicle-price { font-size: 20px; color: #0066ff; font-weight: bold; margin: 10px 0; }
+            .vehicle-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+            .spec { background: #f0f0f0; padding: 10px; border-radius: 4px; font-size: 14px; }
+            .spec-label { font-weight: bold; color: #666; }
+            .cta-button { background: #0066ff; color: white; padding: 12px 30px; border-radius: 4px; text-align: center; text-decoration: none; display: inline-block; margin: 20px 0; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🚗 New Vehicle Available!</h1>
+            </div>
+            <div class="content">
+              <h2>Great News!</h2>
+              <p>A vehicle matching your search criteria has been added to SmartAuto Hub.</p>
+              
+              <div class="vehicle-card">
+                ${vehicle.image ? `<img src="${vehicle.image}" alt="${vehicle.brand} ${vehicle.model}" class="vehicle-image">` : ''}
+                <div class="vehicle-details">
+                  <div class="vehicle-title">${vehicle.brand} ${vehicle.model}</div>
+                  <div class="vehicle-price">${formatPrice(vehicle.price)}</div>
+                  
+                  <div class="vehicle-specs">
+                    <div class="spec">
+                      <div class="spec-label">Year</div>
+                      <div>${vehicle.year}</div>
+                    </div>
+                    <div class="spec">
+                      <div class="spec-label">Condition</div>
+                      <div>${vehicle.condition}</div>
+                    </div>
+                    <div class="spec">
+                      <div class="spec-label">Fuel Type</div>
+                      <div>${vehicle.fuelType}</div>
+                    </div>
+                    <div class="spec">
+                      <div class="spec-label">Location</div>
+                      <div>${vehicle.city}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <a href="${process.env.FRONTEND_URL}/vehicles/${vehicle._id}" class="cta-button">View Vehicle Details →</a>
+              
+              <p>Contact the seller directly to arrange a test drive or get more information about this vehicle.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} SmartAuto Hub. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+    }
+
+    const mailOptions = {
+      from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
+      to: to,
+      subject: subject,
+      html: html,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Email sent:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('Error sending email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   generateOTP,
   sendOTPEmail,
   sendNotificationEmail,
   sendTestDriveNotification,
-  sendBreakdownNotification
+  sendBreakdownNotification,
+  sendEmail
 };

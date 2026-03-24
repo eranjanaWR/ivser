@@ -45,23 +45,31 @@ const vehicleSchema = new mongoose.Schema({
   fuelType: {
     type: String,
     enum: ['petrol', 'diesel', 'electric', 'hybrid', 'other'],
-    default: 'petrol'
+    default: 'petrol',
+    lowercase: true
   },
   transmission: {
     type: String,
     enum: ['automatic', 'manual', 'cvt', 'other'],
-    default: 'automatic'
+    default: 'automatic',
+    lowercase: true
   },
   bodyType: {
     type: String,
-    enum: ['sedan', 'suv', 'hatchback', 'coupe', 'truck', 'van', 'wagon', 'convertible', 'other'],
-    default: 'sedan'
+    enum: ['sedan', 'suv', 'hatchback', 'coupe', 'truck', 'van', 'wagon', 'convertible', 'other', 'bus', 'three wheeler', 'motorcycle', 'pickup', 'jeep'],
+    default: 'sedan',
+    lowercase: true
+  },
+  type: {
+    type: String,
+    enum: ['sedan', 'suv', 'hatchback', 'coupe', 'truck', 'van', 'wagon', 'convertible', 'other', 'bus', 'three wheeler', 'motorcycle', 'pickup', 'jeep'],
+    lowercase: true
   },
   color: {
     type: String,
     trim: true
   },
-  engineSize: {
+  engineCapacity: {
     type: String,
     trim: true
   },
@@ -79,8 +87,9 @@ const vehicleSchema = new mongoose.Schema({
   // Vehicle Condition
   condition: {
     type: String,
-    enum: ['new', 'excellent', 'good', 'fair', 'poor'],
-    default: 'good'
+    enum: ['new', 'used', 'excellent', 'good', 'fair', 'poor'],
+    default: 'good',
+    lowercase: true
   },
   
   // Description
@@ -130,8 +139,8 @@ const vehicleSchema = new mongoose.Schema({
   // Status
   status: {
     type: String,
-    enum: ['available', 'pending', 'sold', 'removed'],
-    default: 'available'
+    enum: ['active', 'inactive', 'pending', 'sold', 'removed'],
+    default: 'active'
   },
   
   // Views counter
@@ -140,7 +149,13 @@ const vehicleSchema = new mongoose.Schema({
     default: 0
   },
   
-  // Favorites/Saves
+  // Search count (tracked from vehicle search/click)
+  searchCount: {
+    type: Number,
+    default: 0,
+    index: true
+  },
+  
   savedBy: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

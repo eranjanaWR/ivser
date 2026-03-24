@@ -122,6 +122,17 @@ const Navbar = () => {
             <ListItemText primary={item.label} />
           </ListItem>
         ))}
+        {isAuthenticated && (
+          <ListItem 
+            button 
+            component={Link} 
+            to="/add-vehicle"
+            onClick={handleDrawerToggle}
+          >
+            <ListItemIcon><DirectionsCar /></ListItemIcon>
+            <ListItemText primary="Sell Vehicle" sx={{ fontWeight: 600 }} />
+          </ListItem>
+        )}
         {isAuthenticated && (user?.role === 'seller' || user?.role === 'admin1') && 
           sellerNavItems.map((item) => (
             <ListItem 
@@ -236,6 +247,17 @@ const Navbar = () => {
                   {item.label}
                 </Button>
               ))}
+              {isAuthenticated && (
+                <Button
+                  component={Link}
+                  to="/add-vehicle"
+                  color="inherit"
+                  startIcon={<DirectionsCar />}
+                  sx={{ fontWeight: 600 }}
+                >
+                  Sell Vehicle
+                </Button>
+              )}
             </Box>
           )}
 

@@ -49,6 +49,8 @@ const testDriveRoutes = require('./routes/testDrive');
 const breakdownRoutes = require('./routes/breakdown');
 const adminRoutes = require('./routes/admin');
 const predictionRoutes = require('./routes/prediction');
+const searchRoutes = require('./routes/search');
+const notificationRoutes = require('./routes/notification');
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -58,6 +60,8 @@ app.use('/api/test-drives', testDriveRoutes);
 app.use('/api/breakdowns', breakdownRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/prediction', predictionRoutes);
+app.use('/api/search', searchRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
