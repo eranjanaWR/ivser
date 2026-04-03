@@ -45,8 +45,10 @@ import {
   Delete,
   Refresh,
   Search,
+  NewReleases,
 } from '@mui/icons-material';
 import api from '../services/api';
+import BoostRequestsManagement from '../components/BoostRequestsManagement';
 
 const Admin1Dashboard = () => {
   const [tab, setTab] = useState(0);
@@ -66,6 +68,7 @@ const Admin1Dashboard = () => {
   const [users, setUsers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [breakdowns, setBreakdowns] = useState([]);
+  const [advertisingRequests, setAdvertisingRequests] = useState([]);
   
   // Menu
   const [anchorEl, setAnchorEl] = useState(null);
@@ -128,6 +131,18 @@ const Admin1Dashboard = () => {
             { _id: '2', issueType: 'Engine Problem', status: 'in_progress', user: { name: 'User 2' }, repairman: { name: 'Mike Mechanic' }, createdAt: new Date() },
           ]);
         }
+      } else if (tab === 4) {
+        try {
+          console.log('📋 Fetching advertising requests...');
+          const { data } = await api.get('/admin/advertising-requests');
+          console.log('✓ Advertising requests fetched:', data);
+          setAdvertisingRequests(data.data || []);
+        } catch (e) {
+          console.error('❌ Failed to fetch advertising requests:', e);
+          console.error('Error response:', e.response?.data);
+          console.error('Error status:', e.response?.status);
+          setAdvertisingRequests([]);
+        }
       }
     } catch (err) {
       setError('Failed to fetch data');
@@ -176,6 +191,27 @@ const Admin1Dashboard = () => {
           await api.delete(`/admin/vehicles/${selectedItem._id}`);
           setSuccess('Vehicle deleted successfully');
         }
+      } else if (tab === 4) {
+        // Advertising request actions
+        if (dialogAction === 'approve') {
+          await api.put(`/admin/advertising-requests/${selectedItem._id}/status`, {
+            status: 'approved',
+            adminMessage: 'Request approved by admin'
+          });
+          setSuccess('Advertising request approved successfully');
+        } else if (dialogAction === 'reject') {
+          await api.put(`/admin/advertising-requests/${selectedItem._id}/status`, {
+            status: 'rejected',
+            adminMessage: 'Request rejected by admin'
+          });
+          setSuccess('Advertising request rejected successfully');
+        } else if (dialogAction === 'deactivate') {
+          await api.put(`/admin/advertising-requests/${selectedItem._id}/status`, {
+            status: 'deactivated',
+            adminMessage: 'Ad deactivated by admin'
+          });
+          setSuccess('Advertising request deactivated successfully');
+        }
       }
       fetchData();
     } catch (err) {
@@ -190,6 +226,21 @@ const Admin1Dashboard = () => {
       currency: 'LKR',
       maximumFractionDigits: 0,
     }).format(price);
+  };
+
+  const calculateDueDate = (submittedAt, packageName) => {
+    const submitted = new Date(submittedAt);
+    let daysToAdd = 30; // default to 30 days
+    
+    if (packageName === 'Free Trial') {
+      daysToAdd = 28; // 4 weeks
+    } else if (packageName === 'Starter' || packageName === 'Professional' || packageName === 'Premium') {
+      daysToAdd = 30; // 1 month
+    }
+    
+    const dueDate = new Date(submitted);
+    dueDate.setDate(dueDate.getDate() + daysToAdd);
+    return dueDate.toLocaleDateString();
   };
 
   const statCards = [
@@ -273,11 +324,17 @@ const Admin1Dashboard = () => {
             <Tab label="Users" icon={<People />} iconPosition="start" />
             <Tab label="Vehicles" icon={<DirectionsCar />} iconPosition="start" />
             <Tab label="Breakdowns" icon={<Build />} iconPosition="start" />
+            <Tab label="Boost Ads" icon={<NewReleases />} iconPosition="start" />
+            <Tab label="Advertising Requests" icon={<NewReleases />} iconPosition="start" />
           </Tabs>
 
           {loading ? (
             <Box sx={{ p: 4, textAlign: 'center' }}>
               <CircularProgress />
+            </Box>
+          ) : tab === 3 ? (
+            <Box sx={{ p: 2 }}>
+              <BoostRequestsManagement />
             </Box>
           ) : (
             <TableContainer>
@@ -434,6 +491,95 @@ const Admin1Dashboard = () => {
                   </TableBody>
                 </Table>
               )}
+
+              {tab === 4 && (
+                <Table>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'grey.50' }}>
+                      <TableCell>Company</TableCell>
+                      <TableCell>Contact</TableCell>
+                      <TableCell>Package</TableCell>
+                      <TableCell>Placement</TableCell>
+                      <TableCell>Submitted Date</TableCell>
+                      <TableCell>Due Date</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {advertisingRequests.map((request) => (
+                      <TableRow key={request._id} hover>
+                        <TableCell>
+                          <Box>
+                            <Typography fontWeight="medium">
+                              {request.company}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {request.name}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box>
+                            <Typography variant="body2">{request.email}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {request.phone}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {request.packageName}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={
+                              request.placement === 'home'
+                                ? 'Home Page'
+                                : request.placement === 'browse'
+                                ? 'Browse Page'
+                                : 'Not Specified'
+                            }
+                            size="small"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          {new Date(request.submittedAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          {calculateDueDate(request.submittedAt, request.packageName)}
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={request.status}
+                            size="small"
+                            color={
+                              request.status === 'approved'
+                                ? 'success'
+                                : request.status === 'rejected'
+                                ? 'error'
+                                : request.status === 'completed'
+                                ? 'success'
+                                : request.status === 'deactivated'
+                                ? 'error'
+                                : 'warning'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <IconButton
+                            onClick={(e) => handleMenuOpen(e, request)}
+                            disabled={request.status === 'completed' || request.status === 'deactivated'}
+                          >
+                            <MoreVert />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </TableContainer>
           )}
         </Paper>
@@ -480,6 +626,26 @@ const Admin1Dashboard = () => {
               Delete Vehicle
             </MenuItem>,
           ]}
+          {tab === 4 && [
+            selectedItem?.status === 'pending' && (
+              <MenuItem key="approve" onClick={() => handleAction('approve')}>
+                <CheckCircle sx={{ mr: 1 }} fontSize="small" />
+                Approve Request
+              </MenuItem>
+            ),
+            selectedItem?.status === 'pending' && (
+              <MenuItem key="reject" onClick={() => handleAction('reject')}>
+                <Block sx={{ mr: 1 }} fontSize="small" />
+                Reject Request
+              </MenuItem>
+            ),
+            selectedItem?.status === 'approved' && (
+              <MenuItem key="deactivate" onClick={() => handleAction('deactivate')}>
+                <Block sx={{ mr: 1 }} fontSize="small" />
+                Deactivate Ad
+              </MenuItem>
+            ),
+          ]}
         </Menu>
 
         {/* Confirmation Dialog */}
@@ -487,7 +653,15 @@ const Admin1Dashboard = () => {
           <DialogTitle>Confirm Action</DialogTitle>
           <DialogContent>
             <Typography>
-              Are you sure you want to {dialogAction} this {tab === 0 ? 'user' : 'vehicle'}?
+              Are you sure you want to {dialogAction} this{' '}
+              {tab === 0
+                ? 'user'
+                : tab === 1
+                ? 'vehicle'
+                : tab === 4
+                ? 'advertising request'
+                : 'item'}
+              ?
             </Typography>
           </DialogContent>
           <DialogActions>

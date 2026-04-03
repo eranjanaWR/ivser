@@ -42,6 +42,8 @@ import {
   Edit,
   Delete,
   CompareArrows,
+  Favorite,
+  FavoriteBorder,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -60,6 +62,8 @@ const VehicleDetailPage = () => {
   const [currentImage, setCurrentImage] = useState(0);
   const [watermarkedImageUrl, setWatermarkedImageUrl] = useState(null);
   const [watermarkLoading, setWatermarkLoading] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savingWishlist, setSavingWishlist] = useState(false);
   
   // Test drive dialog
   const [testDriveOpen, setTestDriveOpen] = useState(false);
@@ -101,6 +105,15 @@ const VehicleDetailPage = () => {
     try {
       const { data } = await api.get(`/vehicles/${id}`);
       setVehicle(data.data);
+      
+      // Check if vehicle is saved by current user
+      if (user && data.data.savedBy && Array.isArray(data.data.savedBy)) {
+        const userIdStr = String(user._id || user.id);
+        const isSavedByUser = data.data.savedBy.some(savedUserId => 
+          String(savedUserId) === userIdStr
+        );
+        setIsSaved(isSavedByUser);
+      }
       
       // Log vehicle search
       try {
@@ -174,6 +187,25 @@ const VehicleDetailPage = () => {
       setError(err.response?.data?.message || 'Failed to book test drive');
     }
     setSubmitting(false);
+  };
+
+  const handleToggleSaveVehicle = async () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    setSavingWishlist(true);
+    try {
+      await api.post(`/vehicles/${id}/save`);
+      setIsSaved(!isSaved);
+      setSuccess(isSaved ? 'Removed from wishlist' : 'Added to wishlist');
+      // Fetch updated vehicle to sync savedBy list
+      fetchVehicle();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update wishlist');
+    }
+    setSavingWishlist(false);
   };
 
   const formatPrice = (price) => {
@@ -360,24 +392,65 @@ const VehicleDetailPage = () => {
               </Box>
             )}
 
-            {/* Boost Ad Button */}
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
-              <Button
-                variant="contained"
-                sx={{
-                  bgcolor: '#d32f2f',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  px: 3,
-                  py: 1.5,
-                  '&:hover': {
-                    bgcolor: '#b71c1c',
-                  },
-                }}
-              >
-                Boost Ad
-              </Button>
-            </Box>
+            {/* Boost Ad Button - Only for Admin and Seller */}
+            {(isAdmin || isOwner) && (
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+                <Button
+                  onClick={() => navigate(`/vehicles/${id}/boost`)}
+                  variant="contained"
+                  sx={{
+                    bgcolor: '#d32f2f',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    px: 3,
+                    py: 1.5,
+                    '&:hover': {
+                      bgcolor: '#b71c1c',
+                    },
+                  }}
+                >
+                  Boost Ad
+                </Button>
+              </Box>
+            )}
+
+            {/* Action Buttons */}
+            {!isOwner && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 3 }}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  startIcon={<Event />}
+                  onClick={() => setTestDriveOpen(true)}
+                >
+                  Book Vehicle for Test Drive
+                </Button>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  startIcon={<CompareArrows />}
+                  onClick={() => navigate(`/compare/${id}`)}
+                >
+                  Compare Vehicles
+                </Button>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  startIcon={isSaved ? <Favorite /> : <FavoriteBorder />}
+                  onClick={handleToggleSaveVehicle}
+                  disabled={savingWishlist}
+                  sx={{
+                    color: isSaved ? 'error.main' : 'inherit',
+                    borderColor: isSaved ? 'error.main' : 'inherit'
+                  }}
+                >
+                  {isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                </Button>
+              </Box>
+            )}
           </Grid>
 
           {/* Vehicle Details */}
@@ -566,68 +639,10 @@ const VehicleDetailPage = () => {
               )}
 
               <Divider sx={{ my: 2 }} />
-              {/* Actions */}
-              {!isOwner && (
+              
+              {/* Owner/Admin Actions (Edit, Delete, Mark as Sold) */}
+              {(isOwner || isAdmin) && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    startIcon={<Event />}
-                    onClick={() => setTestDriveOpen(true)}
-                  >
-                    Book Vehicle for Test Drive
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    size="large"
-                    startIcon={<CompareArrows />}
-                    onClick={() => navigate(`/compare/${id}`)}
-                  >
-                    Compare Vehicles
-                  </Button>
-                </Box>
-              )}
-
-              {isOwner && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Button
-                      variant="contained"
-                      color="info"
-                      fullWidth
-                      size="large"
-                      startIcon={<Edit />}
-                      onClick={() => setEditModalOpen(true)}
-                    >
-                      Edit Vehicle
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="error"
-                      fullWidth
-                      size="large"
-                      startIcon={<Delete />}
-                      onClick={() => setDeleteConfirmOpen(true)}
-                    >
-                      Delete Vehicle
-                    </Button>
-                  </Box>
-                  <Button
-                    variant="outlined"
-                    color={vehicle.status === 'available' ? 'error' : 'success'}
-                    fullWidth
-                    size="large"
-                    onClick={handleToggleSold}
-                  >
-                    {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
-                  </Button>
-                </Box>
-              )}
-
-              {isAdmin && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
                   <Box sx={{ display: 'flex', gap: 2 }}>
                     <Button
                       variant="contained"

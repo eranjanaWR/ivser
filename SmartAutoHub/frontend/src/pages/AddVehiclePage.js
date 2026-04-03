@@ -33,6 +33,7 @@ const transmissions = ['Manual', 'Automatic'];
 const conditions = ['New', 'Used'];
 const colors = ['White', 'Black', 'Silver', 'Gray', 'Red', 'Blue', 'Green', 'Yellow', 'Brown', 'Beige'];
 
+
 const AddVehiclePage = () => {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();

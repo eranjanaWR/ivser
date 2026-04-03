@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -56,6 +56,7 @@ import NotifyModal from '../components/NotifyModal';
 import { useAuth } from '../context/AuthContext';
 import { getImageUrl } from '../utils/imageUrl';
 import WatermarkedImage from '../components/WatermarkedImage';
+import ListImage from '../components/ListImage';
 
 const brands = ['Toyota', 'Honda', 'Nissan', 'Suzuki', 'BMW', 'Mercedes', 'Audi', 'Mazda', 'Mitsubishi', 'Hyundai'];
 const fuelTypes = ['Petrol', 'Diesel', 'Hybrid', 'Electric'];
@@ -82,6 +83,7 @@ const vehicleTypeIcons = {
 
 const VehiclesPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user && ['admin1', 'admin2'].includes(user.role);
   
   const [searchParams, setSearchParams] = useSearchParams();
@@ -96,8 +98,15 @@ const VehiclesPage = () => {
   const [vehicleToDelete, setVehicleToDelete] = useState(null);
   const [suggestedVehicles, setSuggestedVehicles] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [approvedAds, setApprovedAds] = useState([]);
+  const [loadingAds, setLoadingAds] = useState(false);
+  const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  const [currentAdImageLoading, setCurrentAdImageLoading] = useState(true);
+  const [preloadedImages, setPreloadedImages] = useState({});
   
   // Filters
+  const [sort, setSort] = useState(searchParams.get('sort') || '');
+  
   const [filters, setFilters] = useState({
     search: searchParams.get('search') || '',
     brand: searchParams.get('brand') || '',
@@ -112,7 +121,12 @@ const VehiclesPage = () => {
 
   useEffect(() => {
     fetchVehicles();
-  }, [filters]);
+  }, [filters, sort]);
+
+  useEffect(() => {
+    console.log('🎯 VehiclesPage mounted - fetching approved ads');
+    fetchApprovedAds();
+  }, []);
 
   const logSearch = async (searchQuery, resultsCount) => {
     try {
@@ -148,7 +162,15 @@ const VehiclesPage = () => {
       });
       
       const { data } = await api.get(`/vehicles?${params.toString()}`);
-      const vehiclesData = data.data || [];
+      let vehiclesData = data.data || [];
+      
+      // Apply sorting
+      if (sort === 'priceLow') {
+        vehiclesData.sort((a, b) => a.price - b.price);
+      } else if (sort === 'priceHigh') {
+        vehiclesData.sort((a, b) => b.price - a.price);
+      }
+      
       setVehicles(vehiclesData);
       setTotalPages(data.pagination?.pages || 1);
       
@@ -178,7 +200,7 @@ const VehiclesPage = () => {
         return;
       }
 
-      // Extract brand/model from search query for filtering
+      // Extract brand/model and vehicle type from search query for filtering
       const searchLower = searchQuery.toLowerCase();
       
       // Calculate average price and get vehicle type from current results
@@ -186,13 +208,20 @@ const VehiclesPage = () => {
         ? vehicles.reduce((sum, v) => sum + v.price, 0) / vehicles.length 
         : 0;
       const priceRange = 0.3; // 30% variance
+      
+      // Get the vehicle type from the first search result
+      const searchVehicleType = vehicles[0]?.bodyType || vehicles[0]?.vehicleType || '';
 
-      // Get similar vehicles with different brands/models
+      // Get similar vehicles with different brands/models but same type
       // Fetch from a larger pool and filter
       const params = new URLSearchParams();
       // Use price-based filtering to get similar vehicles
       params.append('minPrice', Math.max(0, Math.floor(avgPrice * (1 - priceRange))));
       params.append('maxPrice', Math.ceil(avgPrice * (1 + priceRange)));
+      // Filter by same vehicle type
+      if (searchVehicleType) {
+        params.append('bodyType', searchVehicleType);
+      }
       params.append('limit', 20); // Get more to filter later
       
       const { data } = await api.get(`/vehicles?${params.toString()}`);
@@ -209,6 +238,9 @@ const VehiclesPage = () => {
         // Don't include main results
         if (mainVehicleIds.includes(v._id)) return false;
         
+        // Ensure same vehicle type
+        if (searchVehicleType && (v.bodyType || v.vehicleType) !== searchVehicleType) return false;
+        
         // Don't include same brand as the searched vehicle
         if (v.brand?.toLowerCase() === searchBrand) return false;
         
@@ -218,9 +250,13 @@ const VehiclesPage = () => {
         return true;
       }).slice(0, 6);
 
-      // If we don't have enough suggestions, get more diverse options
+      // If we don't have enough suggestions, get more diverse options (same type)
       if (suggestions.length < 6) {
         const diverseParams = new URLSearchParams();
+        // Filter by same vehicle type to get more same-type vehicles
+        if (searchVehicleType) {
+          diverseParams.append('bodyType', searchVehicleType);
+        }
         diverseParams.append('limit', 12);
         
         const { data: diverseData } = await api.get(`/vehicles?${diverseParams.toString()}`);
@@ -229,6 +265,8 @@ const VehiclesPage = () => {
         const additionalSuggestions = diverseVehicles.filter(v => {
           if (mainVehicleIds.includes(v._id)) return false;
           if (suggestions.find(s => s._id === v._id)) return false;
+          // Ensure same vehicle type
+          if (searchVehicleType && (v.bodyType || v.vehicleType) !== searchVehicleType) return false;
           if (v.brand?.toLowerCase() === searchBrand) return false;
           if (v.model?.toLowerCase().includes(searchBrand)) return false;
           return true;
@@ -244,6 +282,130 @@ const VehiclesPage = () => {
     }
     setLoadingSuggestions(false);
   };
+
+  const fetchApprovedAds = async () => {
+    console.log('🎯 fetchApprovedAds called - setting loadingAds to true');
+    setLoadingAds(true);
+    try {
+      console.log('🎯 Making API call to /api/advertising/approved');
+      const response = await api.get('/advertising/approved');
+      console.log('✅ API Response received:', response);
+      const { data } = response;
+      console.log('✅ Response data:', data);
+      console.log('✅ Data array length:', data?.data?.length);
+      // Filter out deactivated ads
+      const activeAds = (data?.data || []).filter(ad => ad.status !== 'deactivated');
+      console.log('✅ Active ads (excluding deactivated):', activeAds.length);
+      console.log('✅ Setting approvedAds state to:', activeAds);
+      setApprovedAds(activeAds);
+      console.log('✅ approvedAds state updated');
+      
+      // Preload the first ad image
+      if (activeAds.length > 0) {
+        await preloadAdImage(activeAds[0]._id);
+      }
+    } catch (err) {
+      console.error('❌ Failed to fetch approved ads:', err);
+      console.error('❌ Error message:', err.message);
+      console.error('❌ Error response:', err.response);
+      setApprovedAds([]);
+    }
+    console.log('🎯 Setting loadingAds to false');
+    setLoadingAds(false);
+  };
+
+  // Fetch lightweight image from new endpoint
+  const preloadAdImage = async (adId) => {
+    try {
+      if (preloadedImages[adId]) {
+        console.log('⚡ Image already preloaded for ad:', adId);
+        return;
+      }
+      
+      console.log('📸 Preloading image for ad:', adId);
+      const response = await api.get(`/advertising/image/${adId}`);
+      const imageData = response.data?.data?.adPhotoBase64;
+      
+      if (imageData) {
+        setPreloadedImages(prev => {
+          // Double-check not already cached to avoid redundant state updates
+          if (prev[adId]) {
+            console.log('⚡ Image already cached, skipping duplicate', adId);
+            return prev;
+          }
+          console.log('✅ Image preloaded successfully for ad:', adId, `(${(imageData.length / 1024).toFixed(1)}KB)`);
+          return {
+            ...prev,
+            [adId]: imageData
+          };
+        });
+      }
+    } catch (err) {
+      console.error('❌ Failed to preload image for ad:', adId, err);
+    }
+  };
+
+  // Debug: Log approvedAds and loadingAds whenever they change
+  useEffect(() => {
+    console.log('📌 DEBUG: approvedAds changed', approvedAds);
+    console.log('📌 DEBUG: loadingAds changed', loadingAds);
+  }, [approvedAds, loadingAds]);
+
+  // Ad carousel: rotate through ads every 3 seconds
+  useEffect(() => {
+    if (approvedAds.length <= 1) {
+      // No need for carousel with 0 or 1 ad
+      setCurrentAdIndex(0);
+      setCurrentAdImageLoading(false);
+      return;
+    }
+
+    console.log('🎠 Setting up ad carousel - total ads:', approvedAds.length);
+    const interval = setInterval(() => {
+      setCurrentAdIndex((prevIndex) => {
+        const nextIndex = (prevIndex + 1) % approvedAds.length;
+        
+        // Only show loading if image NOT already preloaded
+        const nextAd = approvedAds[nextIndex];
+        if (!preloadedImages[nextAd._id]) {
+          setCurrentAdImageLoading(true);
+        }
+        
+        // Preload the next image after this one
+        const upcomingIndex = (nextIndex + 1) % approvedAds.length;
+        preloadAdImage(approvedAds[upcomingIndex]._id);
+        
+        return nextIndex;
+      });
+    }, 3000); // Change ad every 3 seconds
+
+    return () => {
+      clearInterval(interval);
+      console.log('🎠 Cleaned up ad carousel interval');
+    };
+  }, [approvedAds, preloadedImages]);
+
+  // Preload next ad image when current index changes
+  useEffect(() => {
+    if (approvedAds.length > currentAdIndex) {
+      const currentAd = approvedAds[currentAdIndex];
+      
+      // If image already preloaded, hide loading state immediately
+      if (preloadedImages[currentAd._id]) {
+        console.log('⚡ Image already cached for ad:', currentAd._id);
+        setCurrentAdImageLoading(false);
+      } else {
+        console.log('⏳ Image not cached yet for ad:', currentAd._id);
+      }
+      
+      // Preload images for current and next ad
+      preloadAdImage(currentAd._id);
+      if (approvedAds.length > 1) {
+        const nextIndex = (currentAdIndex + 1) % approvedAds.length;
+        preloadAdImage(approvedAds[nextIndex]._id);
+      }
+    }
+  }, [currentAdIndex, approvedAds, preloadedImages]);
 
   const handleFilterChange = (name, value) => {
     setFilters({ ...filters, [name]: value, page: 1 });
@@ -263,6 +425,18 @@ const VehiclesPage = () => {
         vehiclesResultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
+  };
+
+  const handleSortChange = (value) => {
+    setSort(value);
+    
+    const newParams = new URLSearchParams(searchParams);
+    if (value) {
+      newParams.set('sort', value);
+    } else {
+      newParams.delete('sort');
+    }
+    setSearchParams(newParams);
   };
 
   const handlePageChange = (event, value) => {
@@ -382,7 +556,7 @@ const VehiclesPage = () => {
         {/* Search Bar */}
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: '1px solid', borderColor: 'grey.200' }}>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={8}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 placeholder="Search by brand, model, or keywords..."
@@ -397,7 +571,21 @@ const VehiclesPage = () => {
                 }}
               />
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={4} md={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Sort By</InputLabel>
+                <Select
+                  value={sort}
+                  label="Sort By"
+                  onChange={(e) => handleSortChange(e.target.value)}
+                >
+                  <MenuItem value="">Default</MenuItem>
+                  <MenuItem value="priceLow">💰 Price: Low to High</MenuItem>
+                  <MenuItem value="priceHigh">💸 Price: High to Low</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={4} md={2}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -407,7 +595,7 @@ const VehiclesPage = () => {
                 Filters
               </Button>
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={4} md={2}>
               <Button fullWidth variant="text" onClick={clearFilters}>
                 Clear All
               </Button>
@@ -569,14 +757,13 @@ const VehiclesPage = () => {
                       position: 'relative',
                     }}
                   >
-                    <WatermarkedImage
+                    <ListImage
                       src={getImageUrl(vehicle.images?.[0])}
                       alt={`${vehicle.brand} ${vehicle.model}`}
                       sx={{
                         height: 200,
                         objectFit: 'cover',
                       }}
-                      showLoader={false}
                     />
                     <CardContent sx={{ flexGrow: 1 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -652,25 +839,195 @@ const VehiclesPage = () => {
                 </Grid>
               </Grid>
 
-              {/* Right Column - Map */}
+              {/* Right Column - Ads Section (Only show when NOT searching) */}
+              {!filters.search && (
+              <Grid item xs={12} md={4} lg={3.5}>
+                {/* SECTION 1: Ad Banner Card */}
+                <Card 
+                  sx={{ 
+                    position: 'sticky', 
+                    top: 20,
+                    overflow: 'hidden',
+                    border: '2px solid #9e9e9e',
+                    m: 0
+                  }}
+                >
+                  <CardContent sx={{ p: 0, m: 0, '&:last-child': { pb: 0 } }}>
+                    {/* Ad Banner */}
+                    <Box 
+                      sx={{ 
+                        p: 2.5, 
+                        bgcolor: '#000000', 
+                        textAlign: 'center',
+                        m: 0,
+                        width: '100%'
+                      }}
+                    >
+                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: 'white' }}>
+                        Your Ad Here
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 1.5, color: 'white' }}>
+                        Reach thousands of car buyers daily
+                      </Typography>
+                      <Button 
+                        fullWidth 
+                        variant="contained" 
+                        sx={{ 
+                          bgcolor: '#424242', 
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: '#FFD700',
+                            color: '#000000'
+                          }
+                        }}
+                        size="small"
+                        onClick={() => navigate('/advertise-packages')}
+                      >
+                        Advertise Today
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+
+                {/* SECTION 2: Ad Carousel Card */}
+                <Card 
+                  sx={{ 
+                    position: 'sticky', 
+                    top: 280,
+                    overflow: 'hidden',
+                    border: '2px solid #9e9e9e',
+                    mt: 2,
+                    m: 0
+                  }}
+                >
+                  <CardContent sx={{ p: 0, m: 0, '&:last-child': { pb: 0 } }}>
+                    {/* Ad Spaces Below */}
+                    {loadingAds ? (
+                      <Box 
+                        sx={{ 
+                          p: 0, 
+                          bgcolor: '#e8e8e8', 
+                          textAlign: 'center',
+                          minHeight: 480,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          width: '100%'
+                        }}
+                      >
+                        <CircularProgress />
+                      </Box>
+                    ) : approvedAds.length > 0 ? (
+                      <Box 
+                        sx={{ 
+                          p: 0, 
+                          minHeight: 320,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          overflow: 'hidden',
+                          width: '100%',
+                          position: 'relative',
+                          bgcolor: '#f0f0f0'
+                        }}
+                      >
+                        {/* Current Ad Image - Always visible */}
+                        {approvedAds.length > 0 && approvedAds[currentAdIndex] && (
+                          <Box
+                            component="img"
+                            src={preloadedImages[approvedAds[currentAdIndex]._id] || approvedAds[currentAdIndex].adPhotoBase64}
+                            alt={approvedAds[currentAdIndex].company}
+                            onLoad={() => {
+                              console.log('✅ Carousel image loaded and rendered');
+                              setCurrentAdImageLoading(false);
+                            }}
+                            sx={{
+                              width: '100%',
+                              height: '100%',
+                              minHeight: 320,
+                              objectFit: 'cover',
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s ease, opacity 0.3s ease',
+                              opacity: currentAdImageLoading ? 0.6 : 1,
+                              '&:hover': {
+                                transform: 'scale(1.02)'
+                              }
+                            }}
+                            onClick={() => navigate('/advertise-packages', { state: { companyName: approvedAds[currentAdIndex].company } })}
+                          />
+                        )}
+                        
+                        {/* Loading Skeleton - Only show if image not cached and still loading */}
+                        {currentAdImageLoading && !preloadedImages[approvedAds[currentAdIndex]?._id] && (
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              minHeight: 320,
+                              bgcolor: '#e0e0e0',
+                              zIndex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              animation: 'pulse 1.5s ease-in-out infinite',
+                              '@keyframes pulse': {
+                                '0%': { opacity: 1 },
+                                '50%': { opacity: 0.7 },
+                                '100%': { opacity: 1 }
+                              }
+                            }}
+                          >
+                            <CircularProgress size={40} />
+                          </Box>
+                        )}
+                      </Box>
+                    ) : (
+                      <Box 
+                        sx={{ 
+                          p: 0, 
+                          textAlign: 'center',
+                          minHeight: 480,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          width: '100%'
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ color: '#999', fontWeight: 500 }}>
+                          Ad Space
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#bbb', mt: 0.5 }}>
+                          300x480 px
+                        </Typography>
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+              )}
+
+              {/* Map Below Vehicles (Show when searching or has filters) */}
               {hasActiveFilter && (
-                <Grid item xs={12} md={4} lg={3.5}>
-                  <Card 
-                    sx={{ 
-                      position: 'sticky', 
-                      top: 20,
-                      overflow: 'hidden'
-                    }}
-                  >
-                    <CardContent sx={{ p: 2, pb: 2 }}>
-                      <VehicleMap vehicles={vehicles} />
-                    </CardContent>
-                  </Card>
-                </Grid>
+              <Grid item xs={12} md={4} lg={3.5}>
+                <Card 
+                  sx={{ 
+                    position: 'sticky', 
+                    top: 20,
+                    overflow: 'hidden',
+                    mt: 3
+                  }}
+                >
+                  <CardContent sx={{ p: 2, pb: 2 }}>
+                    <VehicleMap vehicles={vehicles} />
+                  </CardContent>
+                </Card>
+              </Grid>
               )}
             </Grid>
-
-            {/* Pagination */}
             {totalPages > 1 && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
                 <Pagination
@@ -720,14 +1077,13 @@ const VehiclesPage = () => {
                             },
                           }}
                         >
-                          <WatermarkedImage
+                          <ListImage
                             src={getImageUrl(vehicle.images?.[0])}
                             alt={`${vehicle.brand} ${vehicle.model}`}
                             sx={{
                               height: 140,
                               objectFit: 'cover',
                             }}
-                            showLoader={false}
                           />
                           <CardContent sx={{ flexGrow: 1, p: 1.5 }}>
                             <Box sx={{ display: 'flex', gap: 0.5, mb: 1, alignItems: 'center' }}>

@@ -9,7 +9,9 @@ const User = require('../models/User');
 const Vehicle = require('../models/Vehicle');
 const Breakdown = require('../models/Breakdown');
 const TestDrive = require('../models/TestDrive');
+const Advertising = require('../models/Advertising');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
+const { sendEmail } = require('../utils/email');
 
 // ==================== ADMIN1 ROUTES ====================
 
@@ -1110,6 +1112,306 @@ const migrateVehicleStatus = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Get all advertising requests
+ * @route   GET /api/admin/advertising-requests
+ * @query   status, search, page, limit
+ * @access  Private (Admin1)
+ */
+const getAllAdvertisingRequests = async (req, res) => {
+  try {
+    console.log('📋 getAllAdvertisingRequests called');
+    const { status, search, page, limit } = req.query;
+    const { skip, limit: limitNum, page: pageNum } = paginate(page, limit);
+
+    console.log('Filters:', { status, search, page, limit });
+
+    const filter = {};
+    if (status) filter.status = status;
+
+    if (search) {
+      filter.$or = [
+        { name: new RegExp(search, 'i') },
+        { email: new RegExp(search, 'i') },
+        { phone: new RegExp(search, 'i') },
+        { company: new RegExp(search, 'i') }
+      ];
+    }
+
+    console.log('Query filter:', JSON.stringify(filter, null, 2));
+
+    const [requests, total] = await Promise.all([
+      Advertising.find(filter)
+        .sort({ submittedAt: -1 })
+        .skip(skip)
+        .limit(limitNum),
+      Advertising.countDocuments(filter)
+    ]);
+
+    console.log(`✓ Found ${requests.length} advertising requests out of ${total} total`);
+
+    res.json({
+      success: true,
+      ...formatPaginationResponse(requests, total, pageNum, limitNum)
+    });
+  } catch (error) {
+    console.error('❌ Get advertising requests error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching advertising requests',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Update advertising request status (approve/reject)
+ * @route   PUT /api/admin/advertising-requests/:id/status
+ * @access  Private (Admin1)
+ */
+const updateAdvertisingRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminMessage } = req.body;
+
+    if (!['approved', 'rejected', 'completed', 'deactivated'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status'
+      });
+    }
+
+    const request = await Advertising.findByIdAndUpdate(
+      id,
+      {
+        status,
+        adminMessage,
+        respondedAt: new Date()
+      },
+      { new: true }
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: 'Advertising request not found'
+      });
+    }
+
+    // Send email notification based on status
+    console.log(`\n🔔 [ADVERTISING] Status changed to: ${status}`);
+    console.log(`📧 [ADVERTISING] Email field exists: ${!!request.email}`);
+    console.log(`📧 [ADVERTISING] Email value: ${request.email}`);
+    
+    if (status === 'approved') {
+      try {
+        console.log(`\n📤 [EMAIL] Attempting to send approval email to: ${request.email}`);
+        // Calculate due date based on package
+        const packageDays = request.packageName === 'Free Trial' ? 28 : 30;
+        const dueDate = new Date(request.submittedAt);
+        dueDate.setDate(dueDate.getDate() + packageDays);
+        const dueDateFormatted = dueDate.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+
+        const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #000000; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0;">Your Ad is Live! 🎉</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 0 0 8px 8px;">
+            <p style="font-size: 16px; color: #333;">Hi <strong>${request.company}</strong>,</p>
+            
+            <p style="font-size: 16px; color: #333; line-height: 1.6;">
+              Congratulations! Your advertising request has been <span style="color: #4caf50; font-weight: bold;">APPROVED</span> and your ad is now live on SmartAuto Hub!
+            </p>
+
+            <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; padding: 15px; margin: 20px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 10px 0; color: #2e7d32;">Ad Details</h3>
+              <p style="margin: 8px 0; color: #333;">
+                <strong>Company:</strong> ${request.company}
+              </p>
+              <p style="margin: 8px 0; color: #333;">
+                <strong>Package:</strong> ${request.packageName}
+              </p>
+              <p style="margin: 8px 0; color: #333;">
+                <strong>Placement:</strong> ${request.placement}
+              </p>
+              <p style="margin: 8px 0; color: #333;">
+                <strong>Status:</strong> <span style="color: #4caf50; font-weight: bold;">ACTIVE</span>
+              </p>
+              <p style="margin: 8px 0; color: #333;">
+                <strong>Due Date:</strong> ${dueDateFormatted}
+              </p>
+            </div>
+
+            <p style="font-size: 16px; color: #333; line-height: 1.6;">
+              Your ad will be displayed on the SmartAuto Hub platform and will reach thousands of car buyers daily. You can view your ad live on the platform now!
+            </p>
+
+            <p style="font-size: 14px; color: #666; line-height: 1.6;">
+              <strong>Next Steps:</strong>
+              <ul>
+                <li>Monitor your ad performance</li>
+                <li>Contact us if you need any changes</li>
+                <li>Renew your subscription before the due date</li>
+              </ul>
+            </p>
+
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+              <p style="font-size: 14px; color: #666;">
+                Questions? Contact us at support@smartautohub.com or reply to this email.
+              </p>
+              <p style="font-size: 12px; color: #999;">
+                SmartAuto Hub | The Complete Vehicle Marketplace
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+        const emailResult = await sendEmail({
+          to: request.email,
+          subject: `✅ Your Ad is Live! - ${request.company}`,
+          html: emailHtml
+        });
+
+        if (emailResult.success) {
+          console.log(`✅ [EMAIL] Approval email sent to ${request.email}`);
+        } else {
+          console.error(`❌ [EMAIL] Failed to send approval email to ${request.email}:`, emailResult.error);
+        }
+      } catch (emailError) {
+        console.error(`❌ [EMAIL] Error sending approval email:`, emailError);
+      }
+    } 
+    else if (status === 'rejected') {
+      try {
+        // Send rejection email
+        const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #d32f2f; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0;">Ad Request Decision</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 0 0 8px 8px;">
+            <p style="font-size: 16px; color: #333;">Hi <strong>${request.company}</strong>,</p>
+            
+            <p style="font-size: 16px; color: #333; line-height: 1.6;">
+              Your advertising request has been <span style="color: #d32f2f; font-weight: bold;">REJECTED</span>.
+            </p>
+
+            <div style="background-color: #ffebee; border-left: 4px solid #d32f2f; padding: 15px; margin: 20px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 10px 0; color: #c62828;">Reason</h3>
+              <p style="margin: 0; color: #333;">
+                ${adminMessage || 'No specific reason provided. Please contact us for more details.'}
+              </p>
+            </div>
+
+            <p style="font-size: 16px; color: #333; line-height: 1.6;">
+              If you have any questions or would like to resubmit your ad with modifications, please feel free to contact us.
+            </p>
+
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+              <p style="font-size: 14px; color: #666;">
+                Questions? Contact us at support@smartautohub.com or reply to this email.
+              </p>
+              <p style="font-size: 12px; color: #999;">
+                SmartAuto Hub | The Complete Vehicle Marketplace
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+        const emailResult = await sendEmail({
+          to: request.email,
+          subject: `❌ Ad Request Decision - ${request.company}`,
+          html: emailHtml
+        });
+
+        if (emailResult.success) {
+          console.log(`✅ [EMAIL] Rejection email sent to ${request.email}`);
+        } else {
+          console.error(`❌ [EMAIL] Failed to send rejection email to ${request.email}:`, emailResult.error);
+        }
+      } catch (emailError) {
+        console.error(`❌ [EMAIL] Error sending rejection email:`, emailError);
+      }
+    }
+    else if (status === 'deactivated') {
+      try {
+        // Send deactivation email
+        const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #ff9800; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0;">Ad Deactivated</h1>
+          </div>
+          
+          <div style="padding: 30px; background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 0 0 8px 8px;">
+            <p style="font-size: 16px; color: #333;">Hi <strong>${request.company}</strong>,</p>
+            
+            <p style="font-size: 16px; color: #333; line-height: 1.6;">
+              Your advertising has been <span style="color: #ff9800; font-weight: bold;">DEACTIVATED</span>.
+            </p>
+
+            <div style="background-color: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; margin: 20px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 10px 0; color: #e65100;">Reason</h3>
+              <p style="margin: 0; color: #333;">
+                ${adminMessage || 'Your ad has been deactivated. Please contact us for more information.'}
+              </p>
+            </div>
+
+            <p style="font-size: 16px; color: #333; line-height: 1.6;">
+              If you would like to reactivate your ad or have any questions, please reach out to our support team.
+            </p>
+
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+              <p style="font-size: 14px; color: #666;">
+                Questions? Contact us at support@smartautohub.com or reply to this email.
+              </p>
+              <p style="font-size: 12px; color: #999;">
+                SmartAuto Hub | The Complete Vehicle Marketplace
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+        const emailResult = await sendEmail({
+          to: request.email,
+          subject: `⚠️ Ad Deactivated - ${request.company}`,
+          html: emailHtml
+        });
+
+        if (emailResult.success) {
+          console.log(`✅ [EMAIL] Deactivation email sent to ${request.email}`);
+        } else {
+          console.error(`❌ [EMAIL] Failed to send deactivation email to ${request.email}:`, emailResult.error);
+        }
+      } catch (emailError) {
+        console.error(`❌ [EMAIL] Error sending deactivation email:`, emailError);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Advertising request ${status}`,
+      data: request
+    });
+  } catch (error) {
+    console.error('Update advertising request error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating advertising request',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   // Admin1 routes
   getAllUsers,
@@ -1124,6 +1426,8 @@ module.exports = {
   createVehicle,
   updateVehicle,
   deleteVehicle,
+  getAllAdvertisingRequests,
+  updateAdvertisingRequestStatus,
   // Admin2 routes
   getUnverifiedUsers,
   getFlaggedUsers,

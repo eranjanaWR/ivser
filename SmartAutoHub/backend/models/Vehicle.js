@@ -104,9 +104,10 @@ const vehicleSchema = new mongoose.Schema({
     trim: true
   }],
   
-  // Images (URLs or paths)
+  // Images (References to Image documents in database)
   images: [{
-    type: String
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Image'
   }],
   
   // VIN Number (optional)

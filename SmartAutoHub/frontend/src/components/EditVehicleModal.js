@@ -13,8 +13,16 @@ import {
   Grid,
   Box,
   Alert,
+  Paper,
+  IconButton,
+  CircularProgress,
+  Typography,
+  Divider,
 } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const fuelTypes = ['petrol', 'diesel', 'electric', 'hybrid', 'other'];
 const transmissions = ['automatic', 'manual', 'cvt', 'other'];
@@ -22,6 +30,9 @@ const bodyTypes = ['sedan', 'suv', 'hatchback', 'coupe', 'truck', 'van', 'wagon'
 const conditions = ['new', 'used', 'excellent', 'good', 'fair', 'poor'];
 
 const EditVehicleModal = ({ open, vehicle, onClose, onSuccess }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin1' || user?.role === 'admin2';
+
   const [formData, setFormData] = useState({
     brand: '',
     model: '',
@@ -39,9 +50,14 @@ const EditVehicleModal = ({ open, vehicle, onClose, onSuccess }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [images, setImages] = useState([]);
+  const [loadingImages, setLoadingImages] = useState(false);
+  const [deletingImageId, setDeletingImageId] = useState(null);
+  const fileInputRef = React.useRef(null);
 
+  // Fetch vehicle images on mount
   useEffect(() => {
-    if (vehicle) {
+    if (vehicle && open) {
       setFormData({
         brand: vehicle.brand || '',
         model: vehicle.model || '',
@@ -58,8 +74,27 @@ const EditVehicleModal = ({ open, vehicle, onClose, onSuccess }) => {
         description: vehicle.description || '',
       });
       setError(null);
+      
+      // Fetch vehicle images if admin
+      if (isAdmin) {
+        fetchVehicleImages();
+      }
     }
-  }, [vehicle, open]);
+  }, [vehicle, open, isAdmin]);
+
+  const fetchVehicleImages = async () => {
+    try {
+      setLoadingImages(true);
+      const response = await api.get(`/vehicles/${vehicle._id}/images`);
+      if (response.data.success) {
+        setImages(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error fetching images:', err);
+    } finally {
+      setLoadingImages(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -67,6 +102,67 @@ const EditVehicleModal = ({ open, vehicle, onClose, onSuccess }) => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleDeleteImage = async (imageId) => {
+    if (!window.confirm('Are you sure you want to delete this image?')) {
+      return;
+    }
+
+    try {
+      setDeletingImageId(imageId);
+      const response = await api.delete(`/vehicles/${vehicle._id}/images/${imageId}`);
+      
+      if (response.data.success) {
+        setImages(prevImages => prevImages.filter(img => img._id !== imageId));
+        // Call onSuccess to update parent component with new vehicle data
+        onSuccess && onSuccess(response.data.data);
+        setError(null);
+      } else {
+        setError(response.data.message || 'Failed to delete image');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Error deleting image');
+      console.error('Delete image error:', err);
+    } finally {
+      setDeletingImageId(null);
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    const formDataUpload = new FormData();
+    files.forEach(file => {
+      formDataUpload.append('images', file);
+    });
+
+    try {
+      setLoading(true);
+      const response = await api.post(`/vehicles/${vehicle._id}/images`, formDataUpload, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      if (response.data.success) {
+        // Refresh images list
+        await fetchVehicleImages();
+        // Call onSuccess to update parent component with new vehicle data
+        onSuccess && onSuccess(response.data.data);
+        setError(null);
+      } else {
+        setError(response.data.message || 'Failed to upload images');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Error uploading images');
+      console.error('Upload error:', err);
+    } finally {
+      setLoading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const handleSubmit = async () => {
@@ -95,12 +191,20 @@ const EditVehicleModal = ({ open, vehicle, onClose, onSuccess }) => {
     }
   };
 
+  const getImageUrl = (imageObj) => {
+    if (!imageObj) return '';
+    if (imageObj.imageData) {
+      return `data:${imageObj.mimeType};base64,${imageObj.imageData}`;
+    }
+    return `/api/images/${imageObj._id}`;
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
         Edit Vehicle - {vehicle?.brand} {vehicle?.model}
       </DialogTitle>
-      <DialogContent sx={{ pt: 3 }}>
+      <DialogContent sx={{ pt: 3, maxHeight: '70vh', overflow: 'auto' }}>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
@@ -305,6 +409,102 @@ const EditVehicleModal = ({ open, vehicle, onClose, onSuccess }) => {
               placeholder="Add any additional details about the vehicle..."
             />
           </Grid>
+
+          {/* Admin-only Photo Management Section */}
+          {isAdmin && (
+            <>
+              <Grid item xs={12}>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2, mb: 1 }}>
+                  📷 Photo Management (Admin Only)
+                </Typography>
+              </Grid>
+
+              {/* Current Images */}
+              {loadingImages ? (
+                <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                  <CircularProgress size={30} />
+                </Grid>
+              ) : images.length > 0 ? (
+                <Grid item xs={12}>
+                  <Typography variant="body2" sx={{ mb: 1, color: '#666' }}>
+                    Current Images ({images.length})
+                  </Typography>
+                  <Grid container spacing={1}>
+                    {images.map((image) => (
+                      <Grid item xs={6} sm={4} key={image._id}>
+                        <Paper sx={{ position: 'relative', overflow: 'hidden', pt: '100%' }}>
+                          <Box
+                            component="img"
+                            src={getImageUrl(image)}
+                            alt={image.filename}
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                            }}
+                          />
+                          <IconButton
+                            size="small"
+                            onClick={() => handleDeleteImage(image._id)}
+                            disabled={deletingImageId === image._id}
+                            sx={{
+                              position: 'absolute',
+                              bottom: 0,
+                              right: 0,
+                              backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                              color: 'white',
+                              borderRadius: 0,
+                              '&:hover': {
+                                backgroundColor: 'rgba(211, 47, 47, 0.8)',
+                              },
+                            }}
+                          >
+                            {deletingImageId === image._id ? (
+                              <CircularProgress size={20} sx={{ color: 'white' }} />
+                            ) : (
+                              <DeleteIcon sx={{ fontSize: 18 }} />
+                            )}
+                          </IconButton>
+                        </Paper>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Grid>
+              ) : (
+                <Grid item xs={12}>
+                  <Typography variant="body2" sx={{ color: '#999' }}>
+                    No images uploaded yet
+                  </Typography>
+                </Grid>
+              )}
+
+              {/* Add Photos Button */}
+              <Grid item xs={12}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  style={{ display: 'none' }}
+                />
+                <Button
+                  variant="outlined"
+                  startIcon={<AddPhotoAlternateIcon />}
+                  onClick={() => fileInputRef.current?.click()}
+                  fullWidth
+                  disabled={loading}
+                  sx={{ mt: 1 }}
+                >
+                  Add Photos
+                </Button>
+              </Grid>
+            </>
+          )}
         </Grid>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>

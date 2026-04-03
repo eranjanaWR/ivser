@@ -12,7 +12,11 @@ const mongoose = require('mongoose');
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      // Mongoose 8+ uses these options by default
+      retryWrites: true,
+      w: 'majority',
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4
     });
     
     console.log(`MongoDB Connected: ${conn.connection.host}`);
@@ -24,6 +28,10 @@ const connectDB = async () => {
     
     mongoose.connection.on('disconnected', () => {
       console.log('MongoDB disconnected');
+    });
+    
+    mongoose.connection.on('reconnected', () => {
+      console.log('MongoDB reconnected');
     });
     
   } catch (error) {
