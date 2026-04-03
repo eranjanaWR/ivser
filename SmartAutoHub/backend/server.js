@@ -18,7 +18,12 @@ const server = http.createServer(app);
 // Initialize Socket.io with CORS
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:3003'
+    ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
   }
@@ -29,7 +34,12 @@ connectDB();
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: [
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+    'http://localhost:3003'
+  ],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
@@ -45,23 +55,27 @@ app.set('io', io);
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const vehicleRoutes = require('./routes/vehicle');
+const imageRoutes = require('./routes/image');
 const testDriveRoutes = require('./routes/testDrive');
 const breakdownRoutes = require('./routes/breakdown');
 const adminRoutes = require('./routes/admin');
 const predictionRoutes = require('./routes/prediction');
 const searchRoutes = require('./routes/search');
 const notificationRoutes = require('./routes/notification');
+const advertisingRoutes = require('./routes/advertising');
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/images', imageRoutes);
 app.use('/api/test-drives', testDriveRoutes);
 app.use('/api/breakdowns', breakdownRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/prediction', predictionRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/advertising', advertisingRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

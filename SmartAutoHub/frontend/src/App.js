@@ -32,8 +32,12 @@ import RepairmanMapPage from './pages/RepairmanMapPage';
 import RepairmanDashboard from './pages/RepairmanDashboard';
 import PredictionPage from './pages/PredictionPage';
 import ProfilePage from './pages/ProfilePage';
+import WishlistPage from './pages/WishlistPage';
 import Admin1Dashboard from './pages/Admin1Dashboard';
 import Admin2Dashboard from './pages/Admin2Dashboard';
+import BoostAdPage from './pages/BoostAdPage';
+import PremiumPostsPage from './pages/PremiumPostsPage';
+import AdvertisePackagesPage from './pages/AdvertisePackagesPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Professional, minimal theme similar to Uber
@@ -166,8 +170,12 @@ function App() {
                 <Route path="/signup" element={<SignupPage />} />
                 <Route path="/vehicles" element={<VehiclesPage />} />
                 <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
+                <Route path="/vehicles/:vehicleId/boost" element={<BoostAdPage />} />
+                <Route path="/compare-vehicles" element={<ComparisonPage />} />
                 <Route path="/compare/:id" element={<ComparisonPage />} />
                 <Route path="/prediction" element={<PredictionPage />} />
+                <Route path="/premium-posts" element={<PremiumPostsPage />} />
+                <Route path="/advertise-packages" element={<AdvertisePackagesPage />} />
                 
                 {/* Protected Routes */}
                 <Route path="/verification" element={
@@ -178,6 +186,11 @@ function App() {
                 <Route path="/profile" element={
                   <PrivateRoute>
                     <ProfilePage />
+                  </PrivateRoute>
+                } />
+                <Route path="/vehicles/saved" element={
+                  <PrivateRoute>
+                    <WishlistPage />
                   </PrivateRoute>
                 } />
                 <Route path="/add-vehicle" element={

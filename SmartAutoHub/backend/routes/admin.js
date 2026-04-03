@@ -186,6 +186,24 @@ router.put(
   adminController.rejectManualID
 );
 
+// ==================== ADVERTISING REQUESTS (Admin1) ====================
+
+// Get all advertising requests
+router.get(
+  '/advertising-requests',
+  authorize('admin1'),
+  validatePagination,
+  adminController.getAllAdvertisingRequests
+);
+
+// Update advertising request status (approve/reject)
+router.put(
+  '/advertising-requests/:id/status',
+  authorize('admin1'),
+  validateObjectId(),
+  adminController.updateAdvertisingRequestStatus
+);
+
 // ==================== SHARED ROUTES ====================
 
 // Get user details (for verification review)

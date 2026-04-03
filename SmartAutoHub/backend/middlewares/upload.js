@@ -9,7 +9,7 @@ const fs = require('fs');
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, '../uploads');
-const subdirs = ['vehicles', 'ids', 'selfies', 'profiles', 'breakdowns'];
+const subdirs = ['vehicles', 'ids', 'selfies', 'profiles', 'breakdowns', 'bank_slips'];
 
 subdirs.forEach(dir => {
   const dirPath = path.join(uploadsDir, dir);
@@ -34,6 +34,8 @@ const storage = multer.diskStorage({
       folder = 'uploads/vehicles/';
     } else if (file.fieldname === 'breakdownImages') {
       folder = 'uploads/breakdowns/';
+    } else if (file.fieldname === 'bankSlip') {
+      folder = 'uploads/bank_slips/';
     }
     
     cb(null, folder);

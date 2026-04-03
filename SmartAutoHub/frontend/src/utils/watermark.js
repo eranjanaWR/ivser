@@ -4,10 +4,27 @@
 
 export const applyWatermarkToImage = (imageSrc) => {
   return new Promise((resolve, reject) => {
+    // Skip watermarking for very large base64 strings to avoid performance issues
+    if (typeof imageSrc === 'string' && imageSrc.startsWith('data:') && imageSrc.length > 2000000) {
+      console.warn('Image too large for watermarking, skipping');
+      resolve(imageSrc);
+      return;
+    }
+
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    
+    // Only set CORS for non-data URLs
+    if (!imageSrc.startsWith('data:')) {
+      img.crossOrigin = 'anonymous';
+    }
+    
+    // Add timeout
+    const timeout = setTimeout(() => {
+      reject(new Error('Image watermarking timeout'));
+    }, 5000);
     
     img.onload = () => {
+      clearTimeout(timeout);
       try {
         const canvas = document.createElement('canvas');
         canvas.width = img.width;
@@ -44,8 +61,8 @@ export const applyWatermarkToImage = (imageSrc) => {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
         ctx.fillText('takgaala.lk', x + 2, y + 2);
         
-        // Convert canvas to data URL
-        const watermarkedImageUrl = canvas.toDataURL('image/jpeg', 0.95);
+        // Convert canvas to data URL with lower quality for performance
+        const watermarkedImageUrl = canvas.toDataURL('image/jpeg', 0.85);
         resolve(watermarkedImageUrl);
       } catch (error) {
         reject(error);
@@ -53,6 +70,7 @@ export const applyWatermarkToImage = (imageSrc) => {
     };
     
     img.onerror = () => {
+      clearTimeout(timeout);
       reject(new Error('Failed to load image for watermarking'));
     };
     

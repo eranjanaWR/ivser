@@ -112,131 +112,59 @@ const logVehicleSearch = async (req, res) => {
  */
 const getTrendingSearches = async (req, res) => {
   try {
-    const { limit = 6, status = 'available' } = req.query;
+    const { limit = 6 } = req.query;
     const parsedLimit = parseInt(limit);
     
-    // Step 1: Get all unique models and their search counts from Search collection
-    const modelSearchCounts = await Search.aggregate([
+    console.log(`📊 Fetching ${parsedLimit} trending vehicles from system...`);
+
+    // Simply get the most viewed vehicles grouped by model
+    const trendingVehicles = await Vehicle.aggregate([
       {
-        $facet: {
-          // Count by searchQuery (direct searches)
-          bySearchQuery: [
-            { $match: { searchQuery: { $exists: true, $ne: '' } } },
-            { $group: { _id: '$searchQuery', count: { $sum: 1 } } },
-            { $sort: { count: -1 } }
-          ],
-          // Count by model field if available
-          byModel: [
-            { $match: { 'filters.model': { $exists: true, $ne: '' } } },
-            { $group: { _id: { $toLower: '$filters.model' }, count: { $sum: 1 } } },
-            { $sort: { count: -1 } }
-          ]
-        }
+        $sort: { views: -1 } // Sort by most viewed first
       },
-      {
-        $project: {
-          merged: {
-            $concatArrays: ['$bySearchQuery', '$byModel']
-          }
-        }
-      },
-      { $unwind: '$merged' },
       {
         $group: {
-          _id: '$merged._id',
-          totalCount: { $sum: '$merged.count' }
+          _id: '$model', // Group by model name
+          brand: { $first: '$brand' },
+          model: { $first: '$model' },
+          year: { $first: '$year' },
+          price: { $first: '$price' },
+          images: { $first: '$images' },
+          condition: { $first: '$condition' },
+          fuelType: { $first: '$fuelType' },
+          status: { $first: '$status' },
+          totalViews: { $sum: '$views' }
         }
       },
-      { $sort: { totalCount: -1 } }
+      {
+        $sort: { totalViews: -1 } // Sort by total views descending
+      },
+      {
+        $limit: parsedLimit // Limit to requested count
+      }
     ]);
 
-    console.log(`📊 Raw aggregation results (search counts in DB):`);
-    modelSearchCounts.slice(0, 10).forEach(m => {
-      console.log(`   - "${m._id}": ${m.totalCount} searches`);
-    });
+    console.log(`🚗 Database returned ${trendingVehicles.length} trending vehicles:`, trendingVehicles.map((v, i) => `${i + 1}. ${v.brand} ${v.model} (${v.totalViews} views, status: ${v.status})`));
 
-    // Step 2: For each trending model, find a representative vehicle
-    const trendingVehicles = [];
-    const seenModels = new Set();
+    const responseData = trendingVehicles.map(vehicle => ({
+      _id: vehicle._id,
+      searchQuery: `${vehicle.brand} ${vehicle.model}`,
+      brand: vehicle.brand,
+      model: vehicle.model,
+      year: vehicle.year,
+      price: vehicle.price,
+      count: vehicle.totalViews || 0,
+      image: vehicle.images?.[0] || null,
+      condition: vehicle.condition,
+      fuelType: vehicle.fuelType,
+      status: 'available' // If it's in the system, it's available
+    }));
 
-    for (const modelData of modelSearchCounts) {
-      if (seenModels.size >= parsedLimit) break;
-
-      const modelName = modelData._id;
-
-      // Find a vehicle matching this model
-      const vehicle = await Vehicle.findOne({ model: { $regex: modelName, $options: 'i' } })
-        .select('_id brand model year price images condition fuelType status')
-        .lean();
-
-      if (vehicle && !seenModels.has(vehicle.model)) {
-        seenModels.add(vehicle.model);
-
-        // Check if there's an available variant of this model
-        const availableVehicle = await Vehicle.findOne({
-          status: 'available',
-          model: { $regex: modelName, $options: 'i' }
-        }).lean();
-
-        // Use available vehicle if exists, otherwise use found vehicle
-        const vehicleToDisplay = availableVehicle || vehicle;
-
-        trendingVehicles.push({
-          ...vehicleToDisplay,
-          searchCount: modelData.totalCount,
-          isAvailable: !!availableVehicle
-        });
-      }
-    }
-
-    // Step 3: If not enough vehicles, fill with highest searchCount vehicles
-    if (trendingVehicles.length < parsedLimit) {
-      const topVehicles = await Vehicle.find({ searchCount: { $gt: 0 } })
-        .select('_id brand model year price images condition fuelType status searchCount')
-        .sort({ searchCount: -1 })
-        .limit(parsedLimit * 2)
-        .lean();
-
-      for (const vehicle of topVehicles) {
-        if (seenModels.size >= parsedLimit) break;
-        if (!seenModels.has(vehicle.model)) {
-          seenModels.add(vehicle.model);
-
-          const availableVehicle = await Vehicle.findOne({
-            status: 'available',
-            model: vehicle.model
-          }).lean();
-
-          trendingVehicles.push({
-            ...vehicle,
-            isAvailable: !!availableVehicle
-          });
-        }
-      }
-    }
-
-    // Step 4: Sort by search count (descending - most searched first)
-    const sorted = trendingVehicles
-      .sort((a, b) => (b.searchCount || 0) - (a.searchCount || 0))
-      .slice(0, parsedLimit);
-
-    console.log(`🚗 Returning ${sorted.length} trending vehicles in order:`, sorted.map((v, i) => `${i + 1}. ${v.brand} ${v.model} (${v.searchCount} searches)`));
+    console.log(`✅ Returning ${responseData.length} vehicles to frontend:`, responseData.map((v, i) => `${i + 1}. ${v.brand} ${v.model}`));
 
     res.json({
       success: true,
-      data: sorted.map(vehicle => ({
-        _id: vehicle._id,
-        searchQuery: `${vehicle.brand} ${vehicle.model}`,
-        brand: vehicle.brand,
-        model: vehicle.model,
-        year: vehicle.year,
-        price: vehicle.price,
-        count: vehicle.searchCount || 0,
-        image: vehicle.images?.[0] || null,
-        condition: vehicle.condition,
-        fuelType: vehicle.fuelType,
-        status: vehicle.isAvailable ? 'available' : 'out-of-stock'
-      }))
+      data: responseData
     });
   } catch (error) {
     console.error('❌ Get trending searches error:', error);

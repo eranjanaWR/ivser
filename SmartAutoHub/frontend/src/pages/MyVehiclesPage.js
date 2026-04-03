@@ -38,6 +38,7 @@ import {
 } from '@mui/icons-material';
 import api from '../services/api';
 import WatermarkedImage from '../components/WatermarkedImage';
+import ListImage from '../components/ListImage';
 import { getImageUrl } from '../utils/imageUrl';
 
 const MyVehiclesPage = () => {
@@ -224,14 +225,13 @@ const MyVehiclesPage = () => {
                     <MoreVert />
                   </IconButton>
 
-                  <WatermarkedImage
+                  <ListImage
                     src={getImageUrl(vehicle.images?.[0])}
                     alt={`${vehicle.brand} ${vehicle.model}`}
                     sx={{
                       height: 180,
                       objectFit: 'cover',
                     }}
-                    showLoader={false}
                   />
                   
                   <CardContent sx={{ flexGrow: 1 }}>

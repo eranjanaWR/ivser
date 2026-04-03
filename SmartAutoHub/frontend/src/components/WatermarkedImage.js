@@ -18,6 +18,7 @@ const WatermarkedImage = ({
   const [watermarkedUrl, setWatermarkedUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [useOriginal, setUseOriginal] = useState(false);
 
   useEffect(() => {
     if (!src) {
@@ -28,6 +29,7 @@ const WatermarkedImage = ({
 
     setLoading(true);
     setError(false);
+    setUseOriginal(false);
 
     getWatermarkedImage(src)
       .then(url => {
@@ -36,10 +38,10 @@ const WatermarkedImage = ({
       })
       .catch(err => {
         console.error('Failed to watermark image:', err);
-        // Fallback to original image if watermarking fails
+        // Use original image without watermark if watermarking fails
         setWatermarkedUrl(src);
+        setUseOriginal(true);
         setLoading(false);
-        setError(true);
       });
   }, [src]);
 

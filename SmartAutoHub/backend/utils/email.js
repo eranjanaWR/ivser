@@ -17,6 +17,12 @@ const nodemailer = require('nodemailer');
  *   5. Set EMAIL_PASS = the 16-character App Password (no spaces)
  */
 const createTransporter = () => {
+  // Check if email credentials are configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('⚠ Email credentials not configured. Set EMAIL_USER and EMAIL_PASS in .env file.');
+    return null; // Return null if credentials missing
+  }
+
   if (process.env.EMAIL_SERVICE === 'sendgrid') {
     // SendGrid configuration
     return nodemailer.createTransport({
@@ -194,14 +200,34 @@ const sendBreakdownNotification = async (repairmanEmail, repairmanName, location
  */
 const sendEmail = async (options) => {
   try {
-    const { to, subject, template, data } = options;
+    const { to, email, subject, template, data, html } = options;
     const transporter = createTransporter();
 
-    let html = '';
+    // If transporter is null (no credentials), return error message
+    if (!transporter) {
+      console.warn('⚠ Transporter not initialized - email credentials missing');
+      return { success: false, error: 'Email service not configured' };
+    }
 
+    let emailHtml = html || '';
+
+    // If HTML is provided directly, use it
+    if (html) {
+      const mailOptions = {
+        from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
+        to: to || email,
+        subject: subject,
+        html: html,
+      };
+      const result = await transporter.sendMail(mailOptions);
+      console.log('Email sent:', result.messageId);
+      return { success: true, messageId: result.messageId };
+    }
+
+    // Otherwise, use template-based approach
     if (template === 'notification-subscription') {
-      const { email, searchCriteria } = data;
-      html = `
+      const { searchCriteria } = data;
+      emailHtml = `
         <!DOCTYPE html>
         <html>
         <head>
@@ -252,7 +278,7 @@ const sendEmail = async (options) => {
           maximumFractionDigits: 0,
         }).format(price);
 
-      html = `
+      emailHtml = `
         <!DOCTYPE html>
         <html>
         <head>
@@ -324,9 +350,9 @@ const sendEmail = async (options) => {
 
     const mailOptions = {
       from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
-      to: to,
+      to: to || email,
       subject: subject,
-      html: html,
+      html: emailHtml,
     };
 
     const result = await transporter.sendMail(mailOptions);
