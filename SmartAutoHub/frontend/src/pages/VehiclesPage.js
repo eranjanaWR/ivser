@@ -293,16 +293,16 @@ const VehiclesPage = () => {
       const { data } = response;
       console.log('✅ Response data:', data);
       console.log('✅ Data array length:', data?.data?.length);
-      // Filter out deactivated ads
-      const activeAds = (data?.data || []).filter(ad => ad.status !== 'deactivated');
-      console.log('✅ Active ads (excluding deactivated):', activeAds.length);
-      console.log('✅ Setting approvedAds state to:', activeAds);
-      setApprovedAds(activeAds);
+      // Filter only Browse Page placement ads and exclude deactivated ads
+      const browseAds = (data?.data || []).filter(ad => ad.placement === 'browse' && ad.status !== 'deactivated');
+      console.log('✅ Browse Page ads:', browseAds.length);
+      console.log('✅ Setting approvedAds state to:', browseAds);
+      setApprovedAds(browseAds);
       console.log('✅ approvedAds state updated');
       
       // Preload the first ad image
-      if (activeAds.length > 0) {
-        await preloadAdImage(activeAds[0]._id);
+      if (browseAds.length > 0) {
+        await preloadAdImage(browseAds[0]._id);
       }
     } catch (err) {
       console.error('❌ Failed to fetch approved ads:', err);
