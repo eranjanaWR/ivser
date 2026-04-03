@@ -47,6 +47,7 @@ const AdvertisePackagesPage = () => {
   const [openPlacementDialog, setOpenPlacementDialog] = useState(false);
   const [selectedPlacement, setSelectedPlacement] = useState('home');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -149,6 +150,7 @@ const AdvertisePackagesPage = () => {
     setOpenDialog(false);
     setSelectedPackage(null);
     setSelectedPlacement('home');
+    setPreviewImage(null);
     setFormData({
       name: '',
       email: '',
@@ -170,6 +172,13 @@ const AdvertisePackagesPage = () => {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewImage(reader.result);
+      };
+      reader.readAsDataURL(file);
+      
       setFormData({
         ...formData,
         adPhoto: file,
@@ -665,6 +674,54 @@ const AdvertisePackagesPage = () => {
               </Typography>
             )}
           </Box>
+
+          {/* Preview Section - Show how ad will look in carousel */}
+          {previewImage && (
+            <Box sx={{ mt: 3 }}>
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: 600,
+                  color: '#000000',
+                  mb: 1.5,
+                }}
+              >
+                Preview: How Your Ad Will Appear
+              </Typography>
+              <Box
+                sx={{
+                  border: '2px solid #000000',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                  maxWidth: '100%',
+                }}
+              >
+                <Box
+                  component="img"
+                  src={previewImage}
+                  alt="Ad Preview"
+                  sx={{
+                    width: '100%',
+                    height: 'auto',
+                    maxHeight: 280,
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              </Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: '#666',
+                  mt: 1,
+                  display: 'block',
+                }}
+              >
+                Image will be optimized to 90% quality for best balance of file size and visual quality
+              </Typography>
+            </Box>
+          )}
         </DialogContent>
 
         <DialogActions sx={{ p: 2 }}>
