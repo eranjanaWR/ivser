@@ -1025,8 +1025,8 @@ const approveBoostRequest = async (req, res) => {
       });
     }
     
-    // Update boost status
-    boost.status = 'approved';
+    // Update boost status to 'active' (not 'approved') so it displays in featured vehicles
+    boost.status = 'active';
     boost.approvedBy = adminId;
     boost.approvalDate = new Date();
     if (adminNotes) boost.adminNotes = adminNotes;
