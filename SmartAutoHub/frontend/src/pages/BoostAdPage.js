@@ -45,10 +45,10 @@ const boostPackages = [
   {
     id: 'free',
     name: 'Free Boost',
-    duration: 1,
+    duration: 28,
     price: 0,
     icon: <Bolt sx={{ fontSize: 32, color: '#9e9e9e' }} />,
-    features: ['1 day featured listing', 'Basic listing visibility', 'Email alert to seller'],
+    features: ['28 days featured listing', 'Basic listing visibility', 'Email alert to seller', '⭐ One time redeemable'],
     isFree: true,
   },
   {
@@ -87,7 +87,7 @@ const BoostAdPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [selectedPackage, setSelectedPackage] = useState('premium');
+  const [selectedPackage, setSelectedPackage] = useState('free'); // Default to FREE not PREMIUM
   const [activeStep, setActiveStep] = useState(0);
   const [bankSlipPreview, setBankSlipPreview] = useState(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -170,18 +170,32 @@ const BoostAdPage = () => {
         setError('Please select a boost package');
         return;
       }
-    }
-    
-    // Skip payment step for free packages
-    if (activeStep === 1 && selectedPackage === 'free') {
-      setActiveStep(3);
+      setActiveStep(1);
       setError('');
       return;
     }
     
-    if (activeStep < 2 || (activeStep === 2 && selectedPackage !== 'free')) {
-      setActiveStep(activeStep + 1);
+    // From Contact Details to Payment/Confirmation
+    if (activeStep === 1) {
+      if (!formData.contactPerson || !formData.contactPhone || !formData.startDate) {
+        setError('Please fill in all contact details');
+        return;
+      }
+      // Skip payment step for free packages and go straight to confirmation
+      if (selectedPackage === 'free') {
+        setActiveStep(3);
+      } else {
+        setActiveStep(2);
+      }
       setError('');
+      return;
+    }
+    
+    // From Payment to Confirmation
+    if (activeStep === 2) {
+      setActiveStep(3);
+      setError('');
+      return;
     }
   };
 
@@ -240,6 +254,13 @@ const BoostAdPage = () => {
 
       setSubmitting(true);
       const selectedPkg = boostPackages.find(p => p.id === selectedPackage);
+
+      console.log('🚀 [BOOST FORM] Submitting boost request');
+      console.log('  - Selected Package ID:', selectedPackage);
+      console.log('  - Package Name:', selectedPkg.name);
+      console.log('  - Duration:', selectedPkg.duration);
+      console.log('  - Price:', selectedPkg.price);
+      console.log('  - Is Free:', selectedPackage === 'free');
 
       // Create FormData for multipart upload
       const submitData = new FormData();
@@ -352,6 +373,11 @@ const BoostAdPage = () => {
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
               Choose Your Boost Package
             </Typography>
+            {selectedPackage && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                ✅ Selected: <strong>{boostPackages.find(p => p.id === selectedPackage)?.name}</strong>
+              </Alert>
+            )}
             <Grid container spacing={3}>
               {boostPackages.map((pkg) => (
                 <Grid item xs={12} sm={6} md={3} lg={3} key={pkg.id}>
@@ -371,28 +397,6 @@ const BoostAdPage = () => {
                       position: 'relative',
                     }}
                   >
-                    {pkg.popular && (
-                      <Chip
-                        label="Most Popular"
-                        color="primary"
-                        sx={{
-                          position: 'absolute',
-                          top: -12,
-                          right: 12,
-                        }}
-                      />
-                    )}
-                    {pkg.isFree && (
-                      <Chip
-                        label="FREE"
-                        color="success"
-                        sx={{
-                          position: 'absolute',
-                          top: -12,
-                          right: 12,
-                        }}
-                      />
-                    )}
                     <CardContent>
                       <Box sx={{ textAlign: 'center', mb: 2 }}>
                         {pkg.icon}
@@ -430,6 +434,28 @@ const BoostAdPage = () => {
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
               Contact Details
             </Typography>
+
+            {/* Package Summary */}
+            <Alert severity="success" sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+                <Box>
+                  <Typography variant="body2" fontWeight="bold">
+                    Package: {selectedPkg.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {selectedPkg.duration} days • {selectedPackage === 'free' ? 'FREE' : `LKR ${selectedPkg.price.toLocaleString()}`}
+                  </Typography>
+                </Box>
+                <Button 
+                  size="small" 
+                  variant="outlined"
+                  onClick={() => setActiveStep(0)}
+                >
+                  Change Package
+                </Button>
+              </Box>
+            </Alert>
+
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <TextField
@@ -731,7 +757,7 @@ const BoostAdPage = () => {
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
               {selectedPackage === 'free' 
-                ? 'Your vehicle will be featured for 1 day starting today. Thank you for using SmartAuto Hub!'
+                ? `Your vehicle will be featured for ${selectedPkg.duration} days starting today. Thank you for using SmartAuto Hub!`
                 : `Our team will contact you at ${formData.contactPhone} within 2 hours to confirm the booking and process your payment.`}
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>

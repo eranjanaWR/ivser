@@ -5,6 +5,7 @@
 
 const Search = require('../models/Search');
 const Vehicle = require('../models/Vehicle');
+const ViewHistory = require('../models/ViewHistory');
 
 /**
  * @desc    Log a search query
@@ -115,59 +116,138 @@ const getTrendingSearches = async (req, res) => {
     const { limit = 6 } = req.query;
     const parsedLimit = parseInt(limit);
     
-    console.log(`📊 Fetching ${parsedLimit} trending vehicles from system...`);
+    console.log(`📊 Fetching ${parsedLimit} trending vehicles using searchCount...`);
 
-    // Simply get the most viewed vehicles grouped by model
-    const trendingVehicles = await Vehicle.aggregate([
+    // Step 1: Get all models from Search collection with their total searches
+    const searchModels = await Search.aggregate([
       {
-        $sort: { views: -1 } // Sort by most viewed first
+        $match: {
+          'filters.model': { $exists: true, $ne: '', $ne: null }
+        }
       },
       {
         $group: {
-          _id: '$model', // Group by model name
-          brand: { $first: '$brand' },
-          model: { $first: '$model' },
+          _id: '$filters.model', // Keep original case
+          searchBrand: { $first: '$filters.brand' },
+          searchCount: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { searchCount: -1 }
+      }
+    ]);
+
+    console.log(`📚 Found ${searchModels.length} models from searches`);
+
+    // Step 2: Get vehicle counts per model (active vehicles only)
+    const vehicleModels = await Vehicle.aggregate([
+      {
+        $match: { status: 'active' }
+      },
+      {
+        $group: {
+          _id: '$model', // Keep original case
+          vehicleBrand: { $first: '$brand' },
+          vehicleCount: { $sum: 1 },
           year: { $first: '$year' },
           price: { $first: '$price' },
           images: { $first: '$images' },
           condition: { $first: '$condition' },
-          fuelType: { $first: '$fuelType' },
-          status: { $first: '$status' },
-          totalViews: { $sum: '$views' }
+          fuelType: { $first: '$fuelType' }
         }
-      },
-      {
-        $sort: { totalViews: -1 } // Sort by total views descending
-      },
-      {
-        $limit: parsedLimit // Limit to requested count
       }
     ]);
 
-    console.log(`🚗 Database returned ${trendingVehicles.length} trending vehicles:`, trendingVehicles.map((v, i) => `${i + 1}. ${v.brand} ${v.model} (${v.totalViews} views, status: ${v.status})`));
+    console.log(`🚙 Found ${vehicleModels.length} available vehicle models`);
 
-    const responseData = trendingVehicles.map(vehicle => ({
-      _id: vehicle._id,
-      searchQuery: `${vehicle.brand} ${vehicle.model}`,
-      brand: vehicle.brand,
-      model: vehicle.model,
-      year: vehicle.year,
-      price: vehicle.price,
-      count: vehicle.totalViews || 0,
-      image: vehicle.images?.[0] || null,
-      condition: vehicle.condition,
-      fuelType: vehicle.fuelType,
-      status: 'available' // If it's in the system, it's available
+    // Step 3: Create maps (case-sensitive, preserve original)
+    const searchMap = {};
+    searchModels.forEach(s => {
+      searchMap[s._id] = {
+        searchCount: s.searchCount,
+        brand: s.searchBrand,
+        model: s._id
+      };
+    });
+
+    const vehicleMap = {};
+    vehicleModels.forEach(v => {
+      vehicleMap[v._id] = v;
+    });
+
+    // Step 4: Get unique model names from both sources
+    const allModelNames = new Set([
+      ...Object.keys(searchMap),
+      ...Object.keys(vehicleMap)
+    ]);
+
+    console.log(`🔍 Total unique models: ${allModelNames.size}`);
+
+    // Step 5: Build trending list using searchCount + vehicleCount
+    const trendingList = Array.from(allModelNames).map(modelName => {
+      const searchData = searchMap[modelName] || { searchCount: 0, brand: null, model: modelName };
+      const vehicleData = vehicleMap[modelName] || null;
+      
+      const searchCount = searchData.searchCount || 0;
+      const vehicleCount = vehicleData?.vehicleCount || 0;
+      const score = searchCount + vehicleCount;
+      
+      const brand = vehicleData?.vehicleBrand || searchData.brand || modelName.split(' ')[0] || 'Unknown';
+      
+      return {
+        model: modelName,
+        brand: brand,
+        year: vehicleData?.year || null,
+        price: vehicleData?.price || null,
+        images: vehicleData?.images || [],
+        condition: vehicleData?.condition || null,
+        fuelType: vehicleData?.fuelType || null,
+        status: vehicleData ? 'active' : 'inactive',
+        searchCount,
+        vehicleCount,
+        score
+      };
+    });
+
+    // Step 6: Filter to ONLY show models that have actual active vehicles
+    // Must have vehicleCount > 0 AND status must be 'active'
+    const withVehicles = trendingList.filter(m => m.vehicleCount > 0 && m.status === 'active');
+
+    console.log(`✅ Models with actual active vehicles: ${withVehicles.length}`);
+
+    // Step 7: Sort by score (searchCount + vehicleCount)
+    withVehicles.sort((a, b) => b.score - a.score);
+
+    // Step 8: Limit
+    const trending = withVehicles.slice(0, parsedLimit);
+
+    // Step 9: Log details
+    console.log(`🏆 Top ${trending.length} trending:`,
+      trending.map((m, i) => `${i + 1}. ${m.brand} ${m.model} (${m.vehicleCount} vehicles available, ${m.searchCount} searches)`));;
+
+    // Step 10: Response
+    const response = trending.map(m => ({
+      _id: m.model,
+      searchQuery: `${m.brand} ${m.model}`,
+      brand: m.brand,
+      model: m.model,
+      year: m.year,
+      price: m.price,
+      count: m.score,
+      searches: m.searchCount,
+      vehicleCount: m.vehicleCount,
+      image: m.images?.[0] || null,
+      condition: m.condition,
+      fuelType: m.fuelType,
+      status: m.status
     }));
-
-    console.log(`✅ Returning ${responseData.length} vehicles to frontend:`, responseData.map((v, i) => `${i + 1}. ${v.brand} ${v.model}`));
 
     res.json({
       success: true,
-      data: responseData
+      data: response
     });
   } catch (error) {
-    console.error('❌ Get trending searches error:', error);
+    console.error('❌ Error:', error);
     res.status(500).json({
       success: false,
       message: 'Error fetching trending searches',

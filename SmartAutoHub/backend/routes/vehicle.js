@@ -44,6 +44,30 @@ router.get('/featured/active', vehicleController.getFeaturedVehicles);
 // DEBUG: Get all boosts (PUBLIC - for testing)
 router.get('/debug/boosts', vehicleController.getAllBoosts);
 
+// DEBUG: Test endpoint to verify boost creation
+router.get('/debug/test-boosts', async (req, res) => {
+  try {
+    const Boost = require('../models/Boost');
+    const boosts = await Boost.find().limit(10);
+    res.json({
+      success: true,
+      message: `Found ${boosts.length} boosts in database`,
+      boosts: boosts.map(b => ({
+        _id: b._id,
+        vehicleId: b.vehicleId,
+        status: b.status,
+        packageType: b.packageType,
+        createdAt: b.createdAt
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Get vehicles by seller (PUBLIC - specific path segment before generic :id)
 router.get('/seller/:sellerId', validateObjectId('sellerId'), validatePagination, vehicleController.getVehiclesBySeller);
 
@@ -68,17 +92,11 @@ router.post(
   vehicleController.uploadVehicleImages
 );
 
-// Boost vehicle ad (PROTECTED - multi-segment route before generic :id)
-router.post(
-  '/:vehicleId/boost',
-  protect,
-  validateObjectId('vehicleId'),
-  uploadSingle('bankSlip'),
-  vehicleController.boostVehicleAd
-);
+// ============================================
+// BOOST ROUTES (MUST come before /:vehicleId/... routes)
+// ============================================
 
-// Boost management routes (MUST come before generic /:id routes)
-// Get all boost requests (ADMIN ONLY - literal route)
+// Get all boost requests (ADMIN ONLY - literal route, MUST come first)
 router.get(
   '/boost/all',
   protect,
@@ -110,6 +128,15 @@ router.put(
   authorize('admin1', 'admin2'),
   validateObjectId('boostId'),
   vehicleController.rejectBoostRequest
+);
+
+// Boost vehicle ad (PROTECTED - multi-segment route, comes after /boost/* routes)
+router.post(
+  '/:vehicleId/boost',
+  protect,
+  validateObjectId('vehicleId'),
+  uploadSingle('bankSlip'),
+  vehicleController.boostVehicleAd
 );
 
 // Save/unsave vehicle (PROTECTED)

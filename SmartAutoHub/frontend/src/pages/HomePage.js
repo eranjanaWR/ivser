@@ -187,23 +187,54 @@ const HomePage = () => {
         console.log(' Fetching vehicles for trending models...');
         const allVehicles = [];
         
-        // Fetch vehicles for each trending model (including unavailable ones)
-        for (const trend of trendingSearches.slice(0, 6)) {
+        // Fetch vehicles for each trending model
+        for (let i = 0; i < trendingSearches.length && i < 6; i++) {
+          const trend = trendingSearches[i];
+          console.log(`🔍 Processing trending item ${i + 1}:`, {
+            model: trend.model,
+            brand: trend.brand,
+            searchQuery: trend.searchQuery
+          });
+          
           try {
-            // Fetch vehicles regardless of status to show complete list
-            const { data } = await api.get(
-              `/vehicles?search=${encodeURIComponent(trend.model)}&limit=5&status=all`
-            );
-            if (data.data && data.data.length > 0) {
-              allVehicles.push(...data.data);
+            // Method 1: Try with model parameter
+            let queryUrl = `/vehicles?model=${encodeURIComponent(trend.model)}&limit=100`;
+            console.log(`   Attempting query: ${queryUrl}`);
+            let response = await api.get(queryUrl);
+            
+            if (response.data.data && response.data.data.length > 0) {
+              console.log(`✅ Method 1 success: Found ${response.data.data.length} vehicles for model: ${trend.model}`);
+              // Push ALL vehicles for this model, not just the first one
+              allVehicles.push(...response.data.data);
+            } else {
+              console.log(`⚠️ Method 1: No vehicles found for model: ${trend.model}, trying with brand...`);
+              
+              // Method 2: Try with both brand and model
+              if (trend.brand) {
+                queryUrl = `/vehicles?brand=${encodeURIComponent(trend.brand)}&model=${encodeURIComponent(trend.model)}&limit=100`;
+                console.log(`   Attempting query: ${queryUrl}`);
+                response = await api.get(queryUrl);
+                
+                if (response.data.data && response.data.data.length > 0) {
+                  console.log(`✅ Method 2 success: Found ${response.data.data.length} vehicles for ${trend.brand} ${trend.model}`);
+                  // Push ALL vehicles for this model, not just the first one
+                  allVehicles.push(...response.data.data);
+                } else {
+                  console.log(`⚠️ Method 2: No vehicles found for ${trend.brand} ${trend.model}`);
+                }
+              }
             }
           } catch (err) {
-            console.error(`Failed to fetch vehicles for ${trend.model}:`, err);
+            console.error(`❌ Failed to fetch vehicles for ${trend.model}:`, err.message);
           }
         }
         
-        console.log(' Fetched trending vehicles:', allVehicles.length);
-        setTrendingVehicles(allVehicles.slice(0, 6)); // Show max 6 vehicles
+        console.log(` Final trending vehicles collected: ${allVehicles.length}`);
+        allVehicles.forEach((v, i) => {
+          console.log(`  ${i + 1}. ${v.brand} ${v.model} - ${v._id}`);
+        });
+        // Display all collected vehicles (not limited to 6)
+        setTrendingVehicles(allVehicles);
       } catch (err) {
         console.error('Failed to fetch trending vehicles:', err);
         setTrendingVehicles([]);
@@ -220,7 +251,7 @@ const HomePage = () => {
       setLoadingFeatured(true);
       try {
         console.log('🎯 Fetching featured vehicles...');
-        const response = await api.get('/vehicles/featured/active?limit=6');
+        const response = await api.get('/vehicles/featured/active');
         console.log('📊 Featured vehicles response:', response.data);
         const vehicles = response.data.data || [];
         console.log(`✅ Fetched ${vehicles.length} featured vehicles`);
@@ -425,25 +456,28 @@ const HomePage = () => {
                         },
                       }}
                       onClick={() => {
-                        window.location.href = `/vehicles?search=${encodeURIComponent(vehicle.model)}`;
+                        window.location.href = `/vehicles?model=${encodeURIComponent(vehicle.model)}`;
                       }}
                     >
                       <CardContent sx={{ p: 1.5, textAlign: 'center', '&:last-child': { pb: 1.5 } }}>
-                        <Typography variant="h6" fontWeight="700" sx={{ color: '#1a1a1a', fontSize: '1.1rem', mb: 0.5 }}>
+                        <Typography variant="h6" fontWeight="700" sx={{ color: '#1a1a1a', fontSize: '1rem', mb: 0.5 }}>
                           {vehicle.model}
                         </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mb: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mb: 0.5 }}>
                           <Typography 
                             variant="caption" 
                             sx={{ 
                               color: '#4caf50',
-                              fontSize: '0.8rem', 
+                              fontSize: '0.75rem', 
                               fontWeight: 600 
                             }}
                           >
-                            {vehicleAvailability[vehicle.model] || 'Available'}
+                            Available
                           </Typography>
                         </Box>
+                        <Typography variant="caption" sx={{ color: '#999', fontSize: '0.7rem', display: 'block' }}>
+                          {vehicle.vehicleCount || 0} available
+                        </Typography>
                       </CardContent>
                     </Card>
                   </Grid>
@@ -478,26 +512,9 @@ const HomePage = () => {
               </Box>
             ) : (
               <>
-                <Box 
-                  sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 3,
-                    justifyContent: 'flex-start',
-                  }}
-                >
-                  {featuredVehicles.slice(0, 6).map((vehicle) => (
-                    <Box
-                      key={vehicle._id}
-                      sx={{
-                        width: {
-                          xs: '100%',
-                          sm: 'calc(50% - 12px)',
-                          md: 'calc(33.333% - 12px)',
-                          lg: 'calc(20% - 12px)',
-                        },
-                      }}
-                    >
+                <Grid container spacing={3}>
+                  {featuredVehicles.map((vehicle) => (
+                    <Grid item xs={12} sm={6} md={4} lg={2.4} key={vehicle._id}>
                       <Card
                         sx={{
                           height: '100%',
@@ -506,7 +523,7 @@ const HomePage = () => {
                           cursor: 'pointer',
                           transition: 'all 0.3s ease',
                           border: '2px solid',
-                          borderColor: 'primary.main',
+                          borderColor: '#000000',
                           boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
                           '&:hover': {
                             transform: 'translateY(-8px)',
@@ -604,9 +621,9 @@ const HomePage = () => {
                           </Button>
                         </CardActions>
                       </Card>
-                    </Box>
+                    </Grid>
                   ))}
-                </Box>
+                </Grid>
 
                 {/* See All Featured Button */}
                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
@@ -633,22 +650,14 @@ const HomePage = () => {
 
       {/* Trending Vehicles Section - Below Hero */}
       {trendingVehicles.length > 0 && !loadingVehicles && (
-        <Box sx={{ bgcolor: '#f5f5f5', py: 3 }}>
+        <Box sx={{ bgcolor: '#fafafa', py: 6 }}>
           <Container maxWidth="lg">
-            <Box sx={{ mb: 8 }}>
-              <Typography
-                variant="h3"
-                fontWeight="bold"
-                sx={{ mb: 2, color: '#1a1a1a' }}
-              >
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h5" fontWeight="bold" gutterBottom>
                 Trending Vehicles
               </Typography>
-              <Typography
-                variant="h6"
-                color="text.secondary"
-                sx={{ mb: 2 }}
-              >
-                
+              <Typography variant="body2" color="text.secondary">
+                Check out the latest vehicles added to our platform
               </Typography>
             </Box>
 
@@ -661,20 +670,21 @@ const HomePage = () => {
                   md={4}
                   lg={2.4}
                   key={vehicle._id}
-                  sx={{
-                    '@media (min-width: 1280px)': {
-                      flexBasis: 'calc(20% - 12px)',
-                      maxWidth: 'calc(20% - 12px)',
-                    },
-                  }}
                 >
                   <Card
                     sx={{
                       height: '100%',
-                      display: 'flex',
+                      display: 'flex !important',
                       flexDirection: 'column',
-                      transition: 'transform 0.2s',
-                      '&:hover': { transform: 'translateY(-4px)' },
+                      cursor: 'pointer',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      border: '2px solid #000000 !important',
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.1) !important',
+                      outline: 'none',
+                      '&:hover': {
+                        transform: 'translateY(-8px)',
+                        boxShadow: '0 12px 24px rgba(25,118,210,0.2) !important',
+                      },
                       position: 'relative',
                     }}
                   >
@@ -682,38 +692,33 @@ const HomePage = () => {
                       src={getImageUrl(vehicle.images?.[0])}
                       alt={`${vehicle.brand} ${vehicle.model}`}
                       sx={{
-                        height: 200,
+                        height: 280,
+                        width: '100%',
                         objectFit: 'cover',
                       }}
                     />
-                    <CardContent sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Chip
-                          label={vehicle.condition}
-                          size="small"
-                          color={vehicle.condition === 'New' ? 'success' : 'default'}
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          {vehicle.fuelType}
-                        </Typography>
+                    <CardContent sx={{ flex: 1, pb: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1, gap: 1 }}>
+                        <Box>
+                          <Typography variant="h6" fontWeight="bold" gutterBottom>
+                            {vehicle.brand} {vehicle.model}
+                          </Typography>
+                          <Typography variant="h6" color="primary.main" fontWeight="bold">
+                            LKR {vehicle.price?.toLocaleString('en-LK', { maximumFractionDigits: 0 }) || 'N/A'}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Typography variant="h6" fontWeight="bold" gutterBottom>
-                        {vehicle.brand} {vehicle.model}
-                      </Typography>
-                      <Typography variant="h6" color="primary.main" fontWeight="bold">
-                        LKR {vehicle.price?.toLocaleString('en-LK', { maximumFractionDigits: 0 }) || 'N/A'}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                      <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <CalendarToday fontSize="small" color="action" />
-                          <Typography variant="body2" color="text.secondary">
+                          <CalendarToday fontSize="small" color="primary" />
+                          <Typography variant="body2" fontWeight="500">
                             {vehicle.year}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Speed fontSize="small" color="action" />
-                          <Typography variant="body2" color="text.secondary">
-                            {vehicle.mileage?.toLocaleString() || 'N/A'} km
+                          <Speed fontSize="small" color="primary" />
+                          <Typography variant="body2" fontWeight="500">
+                            {vehicle.mileage?.toLocaleString()} km
                           </Typography>
                         </Box>
                       </Box>
@@ -734,19 +739,16 @@ const HomePage = () => {
                     </CardContent>
                     <CardActions sx={{ 
                       p: 2, 
-                      pt: 1, 
+                      pt: 0, 
                       display: 'flex', 
-                      gap: 1, 
                       justifyContent: 'center',
-                      flexWrap: 'wrap',
-                      backgroundColor: '#fafafa'
                     }}>
                       <Button
                         component={Link}
                         to={`/vehicles/${vehicle._id}`}
                         variant="contained"
+                        fullWidth
                         size="small"
-                        sx={{ flex: 1, minWidth: '100px' }}
                       >
                         View Details
                       </Button>
@@ -755,32 +757,6 @@ const HomePage = () => {
                 </Grid>
               ))}
             </Grid>
-
-            {/* See All Vehicles Button */}
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
-              <Button
-                component={Link}
-                to="/vehicles"
-                variant="contained"
-                size="large"
-                endIcon={<ArrowForward />}
-                sx={{
-                  backgroundColor: '#9E9E9E',
-                  color: 'white',
-                  px: 4,
-                  py: 1.5,
-                  fontSize: '1.1rem',
-                  fontWeight: 600,
-                  '&:hover': {
-                    backgroundColor: '#616161',
-                    transform: 'translateX(4px)',
-                    transition: 'all 0.3s ease'
-                  }
-                }}
-              >
-                See All Vehicles
-              </Button>
-            </Box>
           </Container>
         </Box>
       )}
