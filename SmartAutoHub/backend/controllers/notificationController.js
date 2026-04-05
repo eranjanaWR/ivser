@@ -128,14 +128,15 @@ exports.checkAndNotify = async (vehicle) => {
     console.log(`Price: ${vehicle.price}`);
     console.log(`Location: ${vehicle.location?.city || 'N/A'}`);
     
-    if (!vehicle || !vehicle.location || !vehicle.location.city) {
-      console.log('❌ Vehicle missing location info for notifications');
+    // Validate vehicle has minimum required data
+    if (!vehicle || !vehicle.brand || !vehicle.model) {
+      console.log('❌ Vehicle missing required fields (brand/model)');
       return;
     }
 
     const vehicleBrand = (vehicle.brand || '').toLowerCase();
     const vehicleModel = (vehicle.model || '').toLowerCase();
-    const vehicleCity = (vehicle.location.city || '').toLowerCase();
+    const vehicleCity = (vehicle.location?.city || 'Not specified').toLowerCase();
 
     console.log(`\nSearching for subscriptions matching: ${vehicleBrand} ${vehicleModel}`);
 
@@ -228,7 +229,7 @@ exports.checkAndNotify = async (vehicle) => {
                   image: vehicle.images?.[0],
                   condition: vehicle.condition,
                   fuelType: vehicle.fuelType,
-                  city: vehicle.location.city,
+                  city: vehicle.location?.city || 'Not specified',
                 },
               },
             });
@@ -250,9 +251,9 @@ exports.checkAndNotify = async (vehicle) => {
               vehicleModel: vehicle.model,
               vehiclePrice: vehicle.price,
               vehicleImage: vehicle.images?.[0] || null,
-              sellerName: vehicle.sellerName || 'Not specified',
+              sellerName: 'Not specified',
               alertType: 'available',
-              message: `🎉 ${vehicle.brand} ${vehicle.model} is now available for ₹${vehicle.price}! Seller: ${vehicle.sellerName || 'Not specified'}`,
+              message: `🎉 ${vehicle.brand} ${vehicle.model} is now available for ₹${vehicle.price}!`,
               isSeen: false
             });
             console.log(`✓ In-app alert created for user ${user._id}`);
