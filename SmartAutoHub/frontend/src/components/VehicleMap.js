@@ -1,4 +1,3 @@
-// Force map to recalculate size after results are loaded
 import { useState, useEffect, useRef } from 'react'
 import L from 'leaflet'
 import styles from './VehicleMap.module.css'
@@ -95,6 +94,7 @@ export default function VehicleMap({ vehicles }) {
     const userMarkerRef = useRef(null)
     const [userLoc, setUserLoc] = useState(null)
     const [isLocating, setIsLocating] = useState(false)
+    const [showLocationPrompt, setShowLocationPrompt] = useState(false)
 
     // Build city → count map
     const cityGroups = {}
@@ -134,6 +134,56 @@ export default function VehicleMap({ vehicles }) {
         }
     }, [])
 
+    // Automatically request location when component mounts
+    useEffect(() => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const { latitude, longitude } = pos.coords
+                    const loc = [latitude, longitude]
+                    setUserLoc(loc)
+                    setShowLocationPrompt(false) // Hide prompt if we got location
+
+                    const map = mapInstanceRef.current
+                    if (map) {
+                        if (userMarkerRef.current) userMarkerRef.current.remove()
+
+                        const userIcon = L.divIcon({
+                            className: '',
+                            html: `<div style="
+                                width:18px;height:18px;
+                                background:#3b82f6;
+                                border:3px solid #fff;
+                                border-radius:50%;
+                                box-shadow:0 0 10px rgba(59,130,246,0.6);
+                            "></div>`,
+                            iconSize: [18, 18],
+                            iconAnchor: [9, 9],
+                        })
+
+                        userMarkerRef.current = L.marker(loc, { icon: userIcon })
+                            .addTo(map)
+                            .bindTooltip('<b>Your Current Location</b>', { direction: 'top', className: 'slm-tooltip' })
+
+                        map.setView(loc, 9)
+                    }
+                    console.log('Auto-location successful:', latitude, longitude)
+                },
+                (err) => {
+                    setIsLocating(false)
+                    console.log('Auto-location permission/error:', err.code)
+                    // Show prompt if permission was denied or not yet given
+                    setShowLocationPrompt(true)
+                },
+                {
+                    enableHighAccuracy: false,
+                    timeout: 8000,
+                    maximumAge: 0
+                }
+            )
+        }
+    }, [])
+
     const handleGetLocation = () => {
         setIsLocating(true)
         navigator.geolocation.getCurrentPosition(
@@ -168,9 +218,25 @@ export default function VehicleMap({ vehicles }) {
                 }
             },
             (err) => {
-                console.error(err)
+                console.error('Location error:', err)
                 setIsLocating(false)
-                alert("Could not access your location. Please enable location services.")
+                
+                let errorMsg = "Could not access your location."
+                
+                if (err.code === 1) {
+                    errorMsg = "Location permission denied. Please enable location access in your browser settings and try again."
+                } else if (err.code === 2) {
+                    errorMsg = "Location is unavailable. Please check your internet connection and try again."
+                } else if (err.code === 3) {
+                    errorMsg = "Request timed out. Please try again."
+                }
+                
+                alert(errorMsg)
+            },
+            {
+                enableHighAccuracy: false,
+                timeout: 10000,
+                maximumAge: 0
             }
         )
     }
@@ -252,6 +318,34 @@ export default function VehicleMap({ vehicles }) {
                     </button>
                 )}
             </div>
+
+            {showLocationPrompt && !userLoc && (
+                <div style={{
+                    padding: '12px',
+                    backgroundColor: '#fffacd',
+                    borderLeft: '4px solid #f59e0b',
+                    marginBottom: '12px',
+                    fontSize: '0.85rem',
+                    color: '#7c3606',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                }}>
+                    <span>📍 <strong>Enable location</strong> to see distances to vehicles</span>
+                    <button
+                        onClick={() => setShowLocationPrompt(false)}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontSize: '16px',
+                            color: '#7c3606'
+                        }}
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
 
             {!hasResults ? (
                 <div className={styles.empty}>

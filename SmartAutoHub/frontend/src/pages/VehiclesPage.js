@@ -22,7 +22,6 @@ import {
   MenuItem,
   Slider,
   Chip,
-  Pagination,
   CircularProgress,
   InputAdornment,
   Paper,
@@ -91,7 +90,7 @@ const VehiclesPage = () => {
   
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [totalPages, setTotalPages] = useState(1);
+
   const [showFilters, setShowFilters] = useState(false);
   const [notifyModalOpen, setNotifyModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -172,7 +171,6 @@ const VehiclesPage = () => {
       }
       
       setVehicles(vehiclesData);
-      setTotalPages(data.pagination?.pages || 1);
       
       // Log the search
       const searchQuery = filters.search || filters.brand || 'browse vehicles';
@@ -222,7 +220,7 @@ const VehiclesPage = () => {
       if (searchVehicleType) {
         params.append('bodyType', searchVehicleType);
       }
-      params.append('limit', 20); // Get more to filter later
+
       
       const { data } = await api.get(`/vehicles?${params.toString()}`);
       let allVehicles = data.data || [];
@@ -257,7 +255,6 @@ const VehiclesPage = () => {
         if (searchVehicleType) {
           diverseParams.append('bodyType', searchVehicleType);
         }
-        diverseParams.append('limit', 12);
         
         const { data: diverseData } = await api.get(`/vehicles?${diverseParams.toString()}`);
         const diverseVehicles = diverseData.data || [];
@@ -408,7 +405,7 @@ const VehiclesPage = () => {
   }, [currentAdIndex, approvedAds, preloadedImages]);
 
   const handleFilterChange = (name, value) => {
-    setFilters({ ...filters, [name]: value, page: 1 });
+    setFilters({ ...filters, [name]: value });
     
     const newParams = new URLSearchParams(searchParams);
     if (value) {
@@ -416,7 +413,6 @@ const VehiclesPage = () => {
     } else {
       newParams.delete(name);
     }
-    newParams.set('page', '1');
     setSearchParams(newParams);
     
     // Scroll to results after a short delay to ensure filter is applied
@@ -439,12 +435,7 @@ const VehiclesPage = () => {
     setSearchParams(newParams);
   };
 
-  const handlePageChange = (event, value) => {
-    setFilters({ ...filters, page: value });
-    searchParams.set('page', value);
-    setSearchParams(searchParams);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+
 
   const clearFilters = () => {
     setFilters({
@@ -734,17 +725,17 @@ const VehiclesPage = () => {
         ) : (
           <>
             <Grid container spacing={3}>
-              {/* Left Column - Vehicle Grid */}
-              <Grid item xs={12} md={8} lg={8.5}>
+              {/* Middle/Left Column - Vehicle Grid */}
+              <Grid item xs={12} md={12} lg={filters.search ? 8 : 8.5}>
                 {/* Vehicle Grid */}
-                <Grid container spacing={3} ref={vehiclesResultRef}>
+                <Grid container spacing={3} ref={vehiclesResultRef} sx={{ justifyContent: 'flex-start' }}>
                   {vehicles.map((vehicle) => (
                     <Grid 
                       item 
                       xs={12} 
                       sm={6} 
-                      md={6}
-                      lg={3}
+                      md={filters.search ? 4 : 4}
+                      lg={filters.search ? 4 : 4}
                       key={vehicle._id}
                 >
                   <Card
@@ -752,8 +743,15 @@ const VehiclesPage = () => {
                       height: '100%',
                       display: 'flex',
                       flexDirection: 'column',
-                      transition: 'transform 0.2s',
-                      '&:hover': { transform: 'translateY(-4px)' },
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      outline: '2px solid #000000',
+                      outlineOffset: '-2px',
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                      '&:hover': {
+                        transform: 'translateY(-8px)',
+                        boxShadow: '0 12px 24px rgba(25,118,210,0.2)',
+                      },
                       position: 'relative',
                     }}
                   >
@@ -761,37 +759,32 @@ const VehiclesPage = () => {
                       src={getImageUrl(vehicle.images?.[0])}
                       alt={`${vehicle.brand} ${vehicle.model}`}
                       sx={{
-                        height: 200,
+                        height: 280,
+                        width: '100%',
                         objectFit: 'cover',
                       }}
                     />
-                    <CardContent sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Chip
-                          label={vehicle.condition}
-                          size="small"
-                          color={vehicle.condition === 'New' ? 'success' : 'default'}
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          {vehicle.fuelType}
-                        </Typography>
+                    <CardContent sx={{ flex: 1, pb: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1, gap: 1 }}>
+                        <Box>
+                          <Typography variant="h6" fontWeight="bold" gutterBottom>
+                            {vehicle.brand} {vehicle.model}
+                          </Typography>
+                          <Typography variant="h6" color="primary.main" fontWeight="bold">
+                            {formatPrice(vehicle.price)}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Typography variant="h6" fontWeight="bold" gutterBottom>
-                        {vehicle.brand} {vehicle.model}
-                      </Typography>
-                      <Typography variant="h6" color="primary.main" fontWeight="bold">
-                        {formatPrice(vehicle.price)}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                      <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <CalendarToday fontSize="small" color="action" />
-                          <Typography variant="body2" color="text.secondary">
+                          <CalendarToday fontSize="small" color="primary" />
+                          <Typography variant="body2" fontWeight="500">
                             {vehicle.year}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Speed fontSize="small" color="action" />
-                          <Typography variant="body2" color="text.secondary">
+                          <Speed fontSize="small" color="primary" />
+                          <Typography variant="body2" fontWeight="500">
                             {vehicle.mileage?.toLocaleString()} km
                           </Typography>
                         </Box>
@@ -810,25 +803,20 @@ const VehiclesPage = () => {
                           </Typography>
                         </Box>
                       )}
-
-
                     </CardContent>
                     <CardActions sx={{ 
                       p: 2, 
-                      pt: 1, 
+                      pt: 0, 
                       display: 'flex', 
-                      gap: 1, 
                       justifyContent: 'center',
-                      flexWrap: 'wrap',
-                      backgroundColor: '#fafafa'
                     }}>
                       <Button
                         component={Link}
                         to={`/vehicles/${vehicle._id}`}
                         onClick={() => handleVehicleClick(vehicle._id)}
                         variant="contained"
+                        fullWidth
                         size="small"
-                        sx={{ flex: 1, minWidth: '100px' }}
                       >
                         View Details
                       </Button>
@@ -841,7 +829,7 @@ const VehiclesPage = () => {
 
               {/* Right Column - Ads Section (Only show when NOT searching) */}
               {!filters.search && (
-              <Grid item xs={12} md={4} lg={3.5}>
+              <Grid item xs={12} md={12} lg={3.5}>
                 {/* SECTION 1: Ad Banner Card */}
                 <Card 
                   sx={{ 
@@ -1009,16 +997,13 @@ const VehiclesPage = () => {
                 </Card>
               </Grid>
               )}
-
-              {/* Map Below Vehicles (Show when searching or has filters) */}
-              {hasActiveFilter && (
-              <Grid item xs={12} md={4} lg={3.5}>
+              {filters.search && (
+              <Grid item xs={12} md={12} lg={4}>
                 <Card 
                   sx={{ 
                     position: 'sticky', 
                     top: 20,
                     overflow: 'hidden',
-                    mt: 3
                   }}
                 >
                   <CardContent sx={{ p: 2, pb: 2 }}>
@@ -1028,17 +1013,7 @@ const VehiclesPage = () => {
               </Grid>
               )}
             </Grid>
-            {totalPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                <Pagination
-                  count={totalPages}
-                  page={filters.page}
-                  onChange={handlePageChange}
-                  color="primary"
-                  size="large"
-                />
-              </Box>
-            )}
+
 
             {/* Featured Suggestions Section */}
             {filters.search && suggestedVehicles.length > 0 && (

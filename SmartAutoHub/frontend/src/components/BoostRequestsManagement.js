@@ -6,7 +6,7 @@ const BoostRequestsManagement = () => {
   const [boostRequests, setBoostRequests] = useState([]);
   const [filteredRequests, setFilteredRequests] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('pending');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [adminNotes, setAdminNotes] = useState('');
@@ -19,20 +19,34 @@ const BoostRequestsManagement = () => {
 
   // Filter requests based on status
   useEffect(() => {
-    const filtered = boostRequests.filter(req => req.status === statusFilter);
-    setFilteredRequests(filtered);
+    if (statusFilter === 'all') {
+      setFilteredRequests(boostRequests);
+    } else {
+      const filtered = boostRequests.filter(req => req.status === statusFilter);
+      setFilteredRequests(filtered);
+    }
   }, [boostRequests, statusFilter]);
 
   const fetchBoostRequests = async () => {
     try {
       setLoading(true);
+      console.log('📢 Fetching boost requests from /api/vehicles/boost/all');
       const response = await axios.get('/api/vehicles/boost/all', {
         params: { status: 'all', limit: 50, page: 1 }
       });
+      console.log('✅ Response received:', response);
+      console.log('✅ Response data:', response.data);
+      console.log('✅ Boosts:', response.data.boosts);
       setBoostRequests(response.data.boosts || []);
     } catch (error) {
-      console.error('Error fetching boost requests:', error);
-      alert('Failed to fetch boost requests');
+      console.error('❌ Error fetching boost requests:', error);
+      console.error('❌ Error response:', error.response);
+      console.error('❌ Error message:', error.message);
+      if (error.response?.data?.message) {
+        alert('Failed to fetch boost requests: ' + error.response.data.message);
+      } else {
+        alert('Failed to fetch boost requests: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -130,14 +144,14 @@ const BoostRequestsManagement = () => {
 
       {/* Filter Tabs */}
       <div className="filter-tabs">
-        {['pending', 'approved', 'rejected', 'completed'].map(status => (
+        {['all', 'pending', 'approved', 'rejected', 'completed'].map(status => (
           <button
             key={status}
             className={`filter-tab ${statusFilter === status ? 'active' : ''}`}
             onClick={() => setStatusFilter(status)}
           >
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-            <span className="count">({boostRequests.filter(r => r.status === status).length})</span>
+            {status === 'all' ? 'All' : status.charAt(0).toUpperCase() + status.slice(1)}
+            <span className="count">({status === 'all' ? boostRequests.length : boostRequests.filter(r => r.status === status).length})</span>
           </button>
         ))}
       </div>

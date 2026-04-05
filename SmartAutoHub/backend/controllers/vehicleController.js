@@ -8,6 +8,7 @@ const path = require('path');
 const Vehicle = require('../models/Vehicle');
 const Image = require('../models/Image');
 const Boost = require('../models/Boost');
+const ViewHistory = require('../models/ViewHistory');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const notificationController = require('./notificationController');
 
@@ -21,11 +22,15 @@ const getVehicles = async (req, res) => {
     const { 
       brand, model, minPrice, maxPrice, minYear, maxYear,
       fuelType, transmission, bodyType, condition, city,
-      sortBy, sortOrder, page, limit, search
+      sortBy, sortOrder, page, limit, search, status
     } = req.query;
     
-    // Build filter object - only show active vehicles
-    const filter = { status: 'active' };
+    // Build filter object - default to active vehicles unless status=all is specified
+    const filter = {};
+    if (status !== 'all') {
+      filter.status = 'active'; // Default: only show active vehicles
+    }
+    // If status === 'all', don't add status filter - show all statuses
     
     if (brand) filter.brand = new RegExp(brand, 'i');
     if (model) filter.model = new RegExp(model, 'i');
@@ -34,6 +39,14 @@ const getVehicles = async (req, res) => {
     if (bodyType) filter.bodyType = bodyType;
     if (condition) filter.condition = condition;
     if (city) filter['location.city'] = new RegExp(city, 'i');
+    
+    // Debug logging for trending vehicles queries
+    if (model) {
+      console.log(`🔍 Vehicle filter for model "${model}":`, {
+        filter: filter,
+        regex: filter.model?.toString?.() || 'N/A'
+      });
+    }
     
     // Price range
     if (minPrice || maxPrice) {
@@ -71,13 +84,18 @@ const getVehicles = async (req, res) => {
         .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified isFaceVerified')
         .populate({
           path: 'images',
-          select: 'filename mimeType order'  // Exclude imageData for list views (performance)
+          select: '_id filename mimeType order'  // Exclude imageData for list views (performance)
         })
         .sort(sortOptions)
         .skip(skip)
         .limit(limitNum),
       Vehicle.countDocuments(filter)
     ]);
+    
+    // Debug logging
+    if (model) {
+      console.log(`📊 Query result for model "${model}": found ${vehicles.length}/${total} vehicles`);
+    }
     
     // Trim images to first one for list view (optimization)
     const trimmedVehicles = vehicles.map(vehicle => {
@@ -131,9 +149,24 @@ const getVehicleById = async (req, res) => {
       });
     }
     
-    // Increment views
+    // Increment views on vehicle document
     vehicle.views += 1;
     await vehicle.save({ validateBeforeSave: false });
+    
+    // Log view to ViewHistory for persistent trending (survives vehicle deletion)
+    try {
+      await ViewHistory.create({
+        vehicleId: vehicle._id,
+        brand: vehicle.brand,
+        model: vehicle.model,
+        userId: req.user?._id || null,
+        viewedAt: new Date()
+      });
+      console.log(`📊 View logged for ${vehicle.brand} ${vehicle.model}`);
+    } catch (viewHistoryError) {
+      console.error('Error logging to ViewHistory:', viewHistoryError);
+      // Don't fail the request if view history logging fails
+    }
     
     res.json({
       success: true,
@@ -479,7 +512,7 @@ const getVehiclesBySeller = async (req, res) => {
       Vehicle.find(filter)
         .populate({
           path: 'images',
-          select: 'filename mimeType order',
+          select: '_id filename mimeType order',
           options: { limit: 1 }
         })
         .sort({ createdAt: -1 })
@@ -487,7 +520,7 @@ const getVehiclesBySeller = async (req, res) => {
         .limit(limitNum),
       Vehicle.countDocuments(filter)
     ]);
-    
+
     res.json({
       success: true,
       ...formatPaginationResponse(vehicles, total, pageNum, limitNum)
@@ -519,7 +552,7 @@ const getMyVehicles = async (req, res) => {
       Vehicle.find(filter)
         .populate({
           path: 'images',
-          select: 'filename mimeType order',
+          select: '_id filename mimeType order',
           options: { limit: 1 }
         })
         .sort({ createdAt: -1 })
@@ -527,7 +560,7 @@ const getMyVehicles = async (req, res) => {
         .limit(limitNum),
       Vehicle.countDocuments(filter)
     ]);
-    
+
     res.json({
       success: true,
       ...formatPaginationResponse(vehicles, total, pageNum, limitNum)
@@ -601,7 +634,7 @@ const getSavedVehicles = async (req, res) => {
         .populate('sellerId', 'firstName lastName profileImage')
         .populate({
           path: 'images',
-          select: 'filename mimeType order'
+          select: '_id filename mimeType order'
         })
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -862,12 +895,18 @@ const uploadVehicleImages = async (req, res) => {
  */
 const boostVehicleAd = async (req, res) => {
   try {
+    console.log('🚀 [BOOST] POST /boost endpoint called');
     const { vehicleId } = req.params;
     const { packageType, duration, amount, startDate, paymentMethod, contactPerson, contactPhone, additionalNotes, cardLast4, cardHolder } = req.body;
-    const userId = req.user._id;
+    const userId = req.user?._id;
+
+    console.log('📝 [BOOST] Request body:', { packageType, duration, amount, startDate, paymentMethod, contactPerson, contactPhone });
+    console.log('📝 [BOOST] VehicleId:', vehicleId, 'UserId:', userId);
+    console.log('📝 [BOOST] User info:', { email:  req.user?.email, role: req.user?.role, authenticated: !!req.user });
 
     // Validate required fields
     if (!packageType || !duration || !amount || !startDate || !paymentMethod || !contactPerson || !contactPhone) {
+      console.log('❌ [BOOST] Missing required fields');
       return res.status(400).json({
         success: false,
         message: 'Missing required fields'
@@ -877,20 +916,26 @@ const boostVehicleAd = async (req, res) => {
     // Check if vehicle exists
     const vehicle = await Vehicle.findById(vehicleId);
     if (!vehicle) {
+      console.log('❌ [BOOST] Vehicle not found:', vehicleId);
       return res.status(404).json({
         success: false,
         message: 'Vehicle not found'
       });
     }
 
+    console.log('✅ [BOOST] Vehicle found:', vehicle.brand, vehicle.model);
+
     // Check if user owns the vehicle or is admin
     const isAdmin = ['admin1', 'admin2'].includes(req.user.role);
     if (vehicle.sellerId.toString() !== userId.toString() && !isAdmin) {
+      console.log('❌ [BOOST] Not authorized - seller:', vehicle.sellerId, 'user:', userId);
       return res.status(403).json({
         success: false,
         message: 'Not authorized to boost this vehicle'
       });
     }
+
+    console.log('✅ [BOOST] Authorization passed');
 
     // Handle bank slip upload if bank transfer
     let bankSlipPath = null;
@@ -918,7 +963,18 @@ const boostVehicleAd = async (req, res) => {
       status: packageType === 'free' ? 'active' : 'pending'
     });
 
+    console.log('📝 [BOOST] Creating boost with status:', newBoost.status);
+
     const savedBoost = await newBoost.save();
+
+    console.log('✅ [BOOST] Boost saved successfully:', savedBoost._id, 'Status:', savedBoost.status);
+    console.log('📊 [BOOST] Saved boost details:');
+    console.log('  - vehicleId:', savedBoost.vehicleId);
+    console.log('  - packageType:', savedBoost.packageType);
+    console.log('  - status:', savedBoost.status);
+    console.log('  - startDate:', savedBoost.startDate);
+    console.log('  - endDate:', savedBoost.endDate);
+    console.log('  - duration:', savedBoost.duration);
 
     // Send notification to admins only for paid boosts
     if (packageType !== 'free') {
@@ -935,7 +991,7 @@ const boostVehicleAd = async (req, res) => {
     }
 
     const message = packageType === 'free' 
-      ? 'Free boost activated successfully! Your vehicle will be featured for 1 day.'
+      ? 'Free boost activated successfully! Your vehicle will be featured for 28 days (4 weeks).'
       : 'Boost request submitted successfully. Our team will contact you shortly.';
 
     res.status(201).json({
@@ -970,34 +1026,69 @@ const boostVehicleAd = async (req, res) => {
  */
 const getAllBoostRequests = async (req, res) => {
   try {
+    console.log('📢 [BOOST] GET /api/vehicles/boost/all called');
+    console.log('👤 [BOOST] User:', req.user?._id, 'Role:', req.user?.role);
     const { status, page = 1, limit = 10 } = req.query;
+    console.log('📋 [BOOST] Query params:', { status, page, limit });
+    
+    // Check authorization manually
+    if (!req.user) {
+      console.log('❌ [BOOST] No user authenticated');
+      return res.status(401).json({
+        success: false,
+        message: 'Not authenticated'
+      });
+    }
+
+    if (!['admin1', 'admin2'].includes(req.user.role)) {
+      console.log('❌ [BOOST] User role not authorized:', req.user.role);
+      return res.status(403).json({
+        success: false,
+        message: `Not authorized. Your role is: ${req.user.role}`
+      });
+    }
+
+    console.log('✅ [BOOST] Authorization passed');
     
     const filter = {};
-    if (status) filter.status = status;
+    // Only add status filter if it's not 'all'
+    if (status && status !== 'all') {
+      filter.status = status;
+      console.log('📋 [BOOST] Filtering by status:', status);
+    } else {
+      console.log('📋 [BOOST] Fetching ALL boosts (no status filter)');
+    }
     
-    const skip = (page - 1) * limit;
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+    const skip = (pageNum - 1) * limitNum;
+    
+    console.log('📋 [BOOST] Pagination:', { pageNum, limitNum, skip });
     
     const boosts = await Boost.find(filter)
       .populate('vehicleId', 'brand model price')
       .populate('userId', 'name email phone')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(limitNum);
     
     const total = await Boost.countDocuments(filter);
     
+    console.log(`✅ [BOOST] Found ${boosts.length} boosts, total: ${total}`);
+    
     res.status(200).json({
       success: true,
-      data: boosts,
+      boosts: boosts,
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / limit)
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum)
       }
     });
   } catch (error) {
-    console.error('Get all boost requests error:', error);
+    console.error('❌ [BOOST] Get all boost requests error:', error.message);
+    console.error('🔍 [BOOST] Error stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Error fetching boost requests',
@@ -1145,7 +1236,7 @@ const getBoostRequestDetails = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      data: boost
+      boost: boost
     });
   } catch (error) {
     console.error('Get boost request error:', error);
@@ -1164,14 +1255,15 @@ const getBoostRequestDetails = async (req, res) => {
  */
 const getFeaturedVehicles = async (req, res) => {
   try {
-    const { limit = 6 } = req.query;
+    const { limit } = req.query; // Optional limit, no default
     
-    console.log('🔍 Fetching active/pending boosts...');
+    console.log('🔍 Fetching active boosts...');
     console.log('📅 Current time:', new Date());
     
-    // Find boosts (active or pending) that haven't ended yet
-    const activeBoosts = await Boost.find({
-      status: { $in: ['active', 'pending'] },
+    // Find only active boosts that haven't ended yet
+    // Note: Free boosts are 'active' immediately, paid boosts are 'pending' until admin approval
+    let query = Boost.find({
+      status: 'active',
       endDate: { $gte: new Date() }
     })
       .populate({
@@ -1182,8 +1274,14 @@ const getFeaturedVehicles = async (req, res) => {
         }
       })
       .populate('userId', 'firstName lastName email phone profileImage')
-      .sort({ startDate: -1 })
-      .limit(parseInt(limit));
+      .sort({ startDate: -1 });
+    
+    // Apply limit only if provided
+    if (limit) {
+      query = query.limit(parseInt(limit));
+    }
+    
+    const activeBoosts = await query;
     
     console.log(`✅ Found ${activeBoosts.length} featured boosts`);
     
