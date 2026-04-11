@@ -3,12 +3,12 @@
  * Express server with Socket.io for real-time features
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
 const connectDB = require('./config/db');
 
 // Initialize Express app

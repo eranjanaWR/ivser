@@ -122,6 +122,21 @@ const VehiclesPage = () => {
     fetchVehicles();
   }, [filters, sort]);
 
+  // Update filters when URL search parameters change
+  useEffect(() => {
+    setFilters({
+      search: searchParams.get('search') || '',
+      brand: searchParams.get('brand') || '',
+      vehicleType: searchParams.get('vehicleType') || '',
+      fuelType: searchParams.get('fuelType') || '',
+      transmission: searchParams.get('transmission') || '',
+      condition: searchParams.get('condition') || '',
+      minPrice: searchParams.get('minPrice') || 0,
+      maxPrice: searchParams.get('maxPrice') || 50000000,
+      page: parseInt(searchParams.get('page')) || 1,
+    });
+  }, [searchParams]);
+
   useEffect(() => {
     console.log('🎯 VehiclesPage mounted - fetching approved ads');
     fetchApprovedAds();
@@ -160,8 +175,22 @@ const VehiclesPage = () => {
         }
       });
       
-      const { data } = await api.get(`/vehicles?${params.toString()}`);
+      // Request all vehicles by setting a high limit
+      params.append('limit', 10000);
+      
+      const url = `/vehicles?${params.toString()}`;
+      console.log('🚗 Fetching vehicles from:', url);
+      
+      const { data } = await api.get(url);
+      console.log(' API Response received:', {
+        success: data.success,
+        vehicleCount: data.data?.length || 0,
+        pagination: data.pagination,
+        firstVehicle: data.data?.[0]
+      });
+      
       let vehiclesData = data.data || [];
+      console.log(' Extracted vehicles array:', vehiclesData.length);
       
       // Apply sorting
       if (sort === 'priceLow') {
@@ -171,6 +200,7 @@ const VehiclesPage = () => {
       }
       
       setVehicles(vehiclesData);
+      console.log(' Set vehicles in state:', vehiclesData.length);
       
       // Log the search
       const searchQuery = filters.search || filters.brand || 'browse vehicles';
@@ -183,7 +213,8 @@ const VehiclesPage = () => {
         setSuggestedVehicles([]);
       }
     } catch (err) {
-      console.error('Failed to fetch vehicles:', err);
+      console.error(' Failed to fetch vehicles:', err);
+      console.error('Error details:', err.response?.data);
     }
     setLoading(false);
   };
@@ -281,33 +312,33 @@ const VehiclesPage = () => {
   };
 
   const fetchApprovedAds = async () => {
-    console.log('🎯 fetchApprovedAds called - setting loadingAds to true');
+    console.log(' fetchApprovedAds called - setting loadingAds to true');
     setLoadingAds(true);
     try {
-      console.log('🎯 Making API call to /api/advertising/approved');
+      console.log(' Making API call to /api/advertising/approved');
       const response = await api.get('/advertising/approved');
-      console.log('✅ API Response received:', response);
+      console.log(' API Response received:', response);
       const { data } = response;
-      console.log('✅ Response data:', data);
-      console.log('✅ Data array length:', data?.data?.length);
+      console.log(' Response data:', data);
+      console.log(' Data array length:', data?.data?.length);
       // Filter only Browse Page placement ads and exclude deactivated ads
       const browseAds = (data?.data || []).filter(ad => ad.placement === 'browse' && ad.status !== 'deactivated');
-      console.log('✅ Browse Page ads:', browseAds.length);
-      console.log('✅ Setting approvedAds state to:', browseAds);
+      console.log(' Browse Page ads:', browseAds.length);
+      console.log(' Setting approvedAds state to:', browseAds);
       setApprovedAds(browseAds);
-      console.log('✅ approvedAds state updated');
+      console.log(' approvedAds state updated');
       
       // Preload the first ad image
       if (browseAds.length > 0) {
         await preloadAdImage(browseAds[0]._id);
       }
     } catch (err) {
-      console.error('❌ Failed to fetch approved ads:', err);
-      console.error('❌ Error message:', err.message);
-      console.error('❌ Error response:', err.response);
+      console.error(' Failed to fetch approved ads:', err);
+      console.error(' Error message:', err.message);
+      console.error(' Error response:', err.response);
       setApprovedAds([]);
     }
-    console.log('🎯 Setting loadingAds to false');
+    console.log(' Setting loadingAds to false');
     setLoadingAds(false);
   };
 
@@ -315,7 +346,7 @@ const VehiclesPage = () => {
   const preloadAdImage = async (adId) => {
     try {
       if (preloadedImages[adId]) {
-        console.log('⚡ Image already preloaded for ad:', adId);
+        console.log(' Image already preloaded for ad:', adId);
         return;
       }
       
@@ -327,10 +358,10 @@ const VehiclesPage = () => {
         setPreloadedImages(prev => {
           // Double-check not already cached to avoid redundant state updates
           if (prev[adId]) {
-            console.log('⚡ Image already cached, skipping duplicate', adId);
+            console.log(' Image already cached, skipping duplicate', adId);
             return prev;
           }
-          console.log('✅ Image preloaded successfully for ad:', adId, `(${(imageData.length / 1024).toFixed(1)}KB)`);
+          console.log(' Image preloaded successfully for ad:', adId, `(${(imageData.length / 1024).toFixed(1)}KB)`);
           return {
             ...prev,
             [adId]: imageData
@@ -338,14 +369,14 @@ const VehiclesPage = () => {
         });
       }
     } catch (err) {
-      console.error('❌ Failed to preload image for ad:', adId, err);
+      console.error(' Failed to preload image for ad:', adId, err);
     }
   };
 
   // Debug: Log approvedAds and loadingAds whenever they change
   useEffect(() => {
-    console.log('📌 DEBUG: approvedAds changed', approvedAds);
-    console.log('📌 DEBUG: loadingAds changed', loadingAds);
+    console.log(' DEBUG: approvedAds changed', approvedAds);
+    console.log(' DEBUG: loadingAds changed', loadingAds);
   }, [approvedAds, loadingAds]);
 
   // Ad carousel: rotate through ads every 3 seconds
@@ -357,7 +388,7 @@ const VehiclesPage = () => {
       return;
     }
 
-    console.log('🎠 Setting up ad carousel - total ads:', approvedAds.length);
+    console.log(' Setting up ad carousel - total ads:', approvedAds.length);
     const interval = setInterval(() => {
       setCurrentAdIndex((prevIndex) => {
         const nextIndex = (prevIndex + 1) % approvedAds.length;
@@ -498,7 +529,7 @@ const VehiclesPage = () => {
       <Container maxWidth="lg">
         {/* Header */}
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
+          <Typography variant="h3" fontWeight="bold" gutterBottom sx={{ color: '#0c0c0c' }}>
             Browse Vehicles
           </Typography>
           <Typography variant="body1" color="text.secondary">
@@ -571,8 +602,9 @@ const VehiclesPage = () => {
                   onChange={(e) => handleSortChange(e.target.value)}
                 >
                   <MenuItem value="">Default</MenuItem>
-                  <MenuItem value="priceLow">💰 Price: Low to High</MenuItem>
-                  <MenuItem value="priceHigh">💸 Price: High to Low</MenuItem>
+                  <MenuItem value="priceLow"> Price: Low to High</MenuItem>
+                  <MenuItem value="priceHigh"> Price: High to Low</MenuItem>
+                  <MenuItem value="yearNewest"> Year: Newest First</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -605,6 +637,7 @@ const VehiclesPage = () => {
                     onChange={(e) => handleFilterChange('brand', e.target.value)}
                   >
                     <MenuItem value="">All Brands</MenuItem>
+                    <MenuItem value="">xyz</MenuItem>
                     {brands.map((b) => (
                       <MenuItem key={b} value={b}>{b}</MenuItem>
                     ))}
@@ -817,6 +850,7 @@ const VehiclesPage = () => {
                         variant="contained"
                         fullWidth
                         size="small"
+                        sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#333' } }}
                       >
                         View Details
                       </Button>
@@ -851,11 +885,11 @@ const VehiclesPage = () => {
                         width: '100%'
                       }}
                     >
-                      <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: 'white' }}>
-                        Your Ad Here
+                      <Typography variant="h4" sx={{ fontWeight: 700, mb: 1, color: 'yellow' }}>
+                        Advertise Your Commercial Here
                       </Typography>
                       <Typography variant="body2" sx={{ mb: 1.5, color: 'white' }}>
-                        Reach thousands of car buyers daily
+                        Reach thousands of users daily
                       </Typography>
                       <Button 
                         fullWidth 
@@ -894,7 +928,7 @@ const VehiclesPage = () => {
                       <Box 
                         sx={{ 
                           p: 0, 
-                          bgcolor: '#e8e8e8', 
+                          bgcolor: '#030202', 
                           textAlign: 'center',
                           minHeight: 480,
                           display: 'flex',
@@ -926,7 +960,7 @@ const VehiclesPage = () => {
                             src={preloadedImages[approvedAds[currentAdIndex]._id] || approvedAds[currentAdIndex].adPhotoBase64}
                             alt={approvedAds[currentAdIndex].company}
                             onLoad={() => {
-                              console.log('✅ Carousel image loaded and rendered');
+                              console.log(' Carousel image loaded and rendered');
                               setCurrentAdImageLoading(false);
                             }}
                             sx={{

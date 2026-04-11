@@ -16,7 +16,7 @@ exports.submitPackageRequest = async (req, res) => {
     console.log('=== Advertising Request Received ===');
     console.log('Body:', req.body);
 
-    const { name, email, phone, company, message, packageName, placement, adPhoto, adPhotoBase64 } = req.body;
+    const { name, email, phone, company, message, packageName, placement, adPhoto, adPhotoBase64, cardholderName, cardNumber, expiryDate, cvv, paymentRefNumber, paymentSlipBase64 } = req.body;
 
     // Validate required fields
     if (!name || !email || !phone) {
@@ -50,6 +50,13 @@ exports.submitPackageRequest = async (req, res) => {
     console.log('Creating advertising request for:', name, email);
     console.log('Package: ', packageName, 'Placement:', placement);
     console.log('Photo received:', adPhotoBase64 ? 'Yes (base64)' : 'No');
+    console.log('Payment Ref Number received:', paymentRefNumber);
+    console.log('Payment Details:', {
+      cardholderName,
+      cardNumber: cardNumber ? `XXXX...${cardNumber.slice(-4)}` : null,
+      expiryDate,
+      paymentRefNumber
+    });
 
     // Create advertising request document
     let advertisingRequest;
@@ -65,7 +72,16 @@ exports.submitPackageRequest = async (req, res) => {
         adPhotoUpload: adPhoto ? true : false,
         adPhotoBase64: adPhotoBase64 || null,
         status: 'pending',
-        submittedAt: new Date()
+        submittedAt: new Date(),
+        paymentStatus: packageName === 'Free Trial' ? 'free' : (cardNumber ? 'completed' : 'pending'),
+        paymentMethod: cardNumber ? 'credit_card' : 'none',
+        paymentRefNumber: paymentRefNumber || null,
+        paymentSlipBase64: paymentSlipBase64 || null,
+        cardholderName: cardholderName || null,
+        cardNumber: cardNumber ? cardNumber.slice(-4) : null, // Store only last 4 digits for security
+        expiryDate: expiryDate || null,
+        cvv: null, // Never store CVV for security reasons
+        paidAt: packageName === 'Free Trial' || cardNumber ? new Date() : null
       };
       console.log('Creating record with:', JSON.stringify(recordData, null, 2));
       advertisingRequest = await Advertising.create(recordData);

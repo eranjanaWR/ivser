@@ -25,6 +25,16 @@ const getVehicles = async (req, res) => {
       sortBy, sortOrder, page, limit, search, status
     } = req.query;
     
+    // DEBUG: Log incoming query
+    console.log(`🚗 GET /api/vehicles called with:`, {
+      status,
+      brand,
+      model,
+      bodyType,
+      fuelType,
+      limit
+    });
+    
     // Build filter object - default to active vehicles unless status=all is specified
     const filter = {};
     if (status !== 'all') {
@@ -92,7 +102,18 @@ const getVehicles = async (req, res) => {
       Vehicle.countDocuments(filter)
     ]);
     
-    // Debug logging
+    // DEBUG: Log query results
+    const allVehiclesCount = await Vehicle.countDocuments({});
+    console.log(`📊 Query result:`, {
+      filter: filter,
+      totalVehiclesInDB: allVehiclesCount,
+      matchingFilter: total,
+      returned: vehicles.length,
+      status_filter_applied: status !== 'all'
+    });
+    
+    console.log(`✅ About to respond with ${vehicles.length} vehicles`);
+    
     if (model) {
       console.log(`📊 Query result for model "${model}": found ${vehicles.length}/${total} vehicles`);
     }
@@ -114,10 +135,18 @@ const getVehicles = async (req, res) => {
       return vehicleObj;
     });
     
-    res.json({
+    const response = {
       success: true,
       ...formatPaginationResponse(trimmedVehicles, total, pageNum, limitNum)
+    };
+    
+    console.log(`📤 Response structure:`, {
+      success: response.success,
+      dataCount: response.data?.length,
+      pagination: response.pagination
     });
+    
+    res.json(response);
   } catch (error) {
     console.error('Get vehicles error:', error);
     res.status(500).json({
@@ -352,6 +381,19 @@ const updateVehicle = async (req, res) => {
       for (let i = 0; i < req.files.length; i++) {
         const file = req.files[i];
         try {
+          // Check if file exists before reading
+          if (!fs.existsSync(file.path)) {
+            console.error(`File not found at path: ${file.path}`);
+            console.error(`File object:`, {
+              fieldname: file.fieldname,
+              originalname: file.originalname,
+              path: file.path,
+              destination: file.destination,
+              filename: file.filename
+            });
+            throw new Error(`Uploaded file not found at: ${file.path}`);
+          }
+          
           // Read file from disk
           const fileData = fs.readFileSync(file.path);
           
@@ -383,9 +425,18 @@ const updateVehicle = async (req, res) => {
           vehicle.images.push(imageDoc._id);
           
           // Delete file from disk after saving to database
-          fs.unlinkSync(file.path);
+          try {
+            fs.unlinkSync(file.path);
+          } catch (unlinkError) {
+            console.error('Error deleting temp file:', unlinkError);
+            // Continue even if we can't delete the temp file
+          }
         } catch (imageError) {
-          console.error('Error saving image to database:', imageError);
+          console.error('Error saving image to database:', {
+            error: imageError.message,
+            filePath: file.path,
+            fileName: file.filename
+          });
           // Continue with other images even if one fails
         }
       }
@@ -824,6 +875,19 @@ const uploadVehicleImages = async (req, res) => {
     for (let i = 0; i < req.files.length; i++) {
       const file = req.files[i];
       try {
+        // Check if file exists before reading
+        if (!fs.existsSync(file.path)) {
+          console.error(`File not found at path: ${file.path}`);
+          console.error(`File object:`, {
+            fieldname: file.fieldname,
+            originalname: file.originalname,
+            path: file.path,
+            destination: file.destination,
+            filename: file.filename
+          });
+          throw new Error(`Uploaded file not found at: ${file.path}`);
+        }
+        
         // Read file from disk
         const fileData = fs.readFileSync(file.path);
         
@@ -858,9 +922,18 @@ const uploadVehicleImages = async (req, res) => {
         imageIds.push(imageDoc._id);
         
         // Delete file from disk after saving to database
-        fs.unlinkSync(file.path);
+        try {
+          fs.unlinkSync(file.path);
+        } catch (unlinkError) {
+          console.error('Error deleting temp file:', unlinkError);
+          // Continue even if we can't delete the temp file
+        }
       } catch (imageError) {
-        console.error('Error saving image to database:', imageError);
+        console.error('Error saving image to database:', {
+          error: imageError.message,
+          filePath: file.path,
+          fileName: file.filename
+        });
         // Continue with other images even if one fails
       }
     }

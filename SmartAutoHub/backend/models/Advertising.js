@@ -61,6 +61,42 @@ const advertisingSchema = new mongoose.Schema({
     enum: ['pending', 'approved', 'rejected', 'completed', 'deactivated'],
     default: 'pending'
   },
+  paymentStatus: {
+    type: String,
+    enum: ['free', 'pending', 'completed', 'failed'],
+    default: function() {
+      return this.packageName === 'Free Trial' ? 'free' : 'pending';
+    }
+  },
+  paymentMethod: {
+    type: String,
+    enum: ['credit_card', 'debit_card', 'none'],
+    default: 'none'
+  },
+  paymentRefNumber: {
+    type: String,
+    default: null
+  },
+  cardholderName: {
+    type: String,
+    default: null
+  },
+  cardNumber: {
+    type: String,
+    default: null
+  },
+  expiryDate: {
+    type: String,
+    default: null
+  },
+  cvv: {
+    type: String,
+    default: null
+  },
+  paymentSlipBase64: {
+    type: String,
+    default: null
+  },
   adminMessage: {
     type: String,
     default: null
@@ -70,6 +106,10 @@ const advertisingSchema = new mongoose.Schema({
     default: Date.now
   },
   respondedAt: {
+    type: Date,
+    default: null
+  },
+  paidAt: {
     type: Date,
     default: null
   },

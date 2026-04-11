@@ -675,7 +675,7 @@ const BoostAdPage = () => {
                       transition: 'all 0.3s ease',
                       '&:hover': {
                         bgcolor: 'primary.100',
-                        borderColor: 'primary.dark',
+                        borderColor: 'primary.main',
                       },
                     }}
                   >

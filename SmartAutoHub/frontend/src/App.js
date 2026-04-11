@@ -24,6 +24,8 @@ import VerificationPage from './pages/VerificationPage';
 import VehiclesPage from './pages/VehiclesPage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
 import ComparisonPage from './pages/ComparisonPage';
+import ComparePage from './pages/ComparePage';
+import LeaseCalculatorPage from './pages/LeaseCalculatorPage';
 import AddVehiclePage from './pages/AddVehiclePage';
 import MyVehiclesPage from './pages/MyVehiclesPage';
 import TestDrivesPage from './pages/TestDrivesPage';
@@ -47,12 +49,16 @@ const theme = createTheme({
     primary: {
       main: '#1976d2', // Professional blue
       light: '#42a5f5',
+      lighter: '#e3f2fd',
+      50: '#e3f2fd',
       dark: '#1565c0',
       contrastText: '#ffffff',
     },
     secondary: {
       main: '#424242', // Dark gray
       light: '#6d6d6d',
+      lighter: '#eeeeee',
+      50: '#f5f5f5',
       dark: '#1b1b1b',
       contrastText: '#ffffff',
     },
@@ -66,9 +72,47 @@ const theme = createTheme({
     },
     error: {
       main: '#d32f2f',
+      light: '#ef5350',
+      lighter: '#ffebee',
+      50: '#ffebee',
+      dark: '#c62828',
+      contrastText: '#ffffff',
     },
     success: {
       main: '#2e7d32',
+      light: '#4caf50',
+      lighter: '#e8f5e9',
+      50: '#e8f5e9',
+      dark: '#1b5e20',
+      contrastText: '#ffffff',
+    },
+    warning: {
+      main: '#f57c00',
+      light: '#ffb74d',
+      lighter: '#fff3e0',
+      50: '#fff3e0',
+      dark: '#e65100',
+      contrastText: '#ffffff',
+    },
+    info: {
+      main: '#0288d1',
+      light: '#03a9f4',
+      lighter: '#e1f5fe',
+      50: '#e1f5fe',
+      dark: '#01579b',
+      contrastText: '#ffffff',
+    },
+    grey: {
+      50: '#fafafa',
+      100: '#f5f5f5',
+      200: '#eeeeee',
+      300: '#e0e0e0',
+      400: '#bdbdbd',
+      500: '#9e9e9e',
+      600: '#757575',
+      700: '#616161',
+      800: '#424242',
+      900: '#212121',
     },
     divider: '#e0e0e0',
   },
@@ -171,6 +215,8 @@ function App() {
                 <Route path="/vehicles" element={<VehiclesPage />} />
                 <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
                 <Route path="/vehicles/:vehicleId/boost" element={<BoostAdPage />} />
+                <Route path="/lease-calculator" element={<LeaseCalculatorPage />} />
+                <Route path="/compare" element={<ComparePage />} />
                 <Route path="/compare-vehicles" element={<ComparisonPage />} />
                 <Route path="/compare/:id" element={<ComparisonPage />} />
                 <Route path="/prediction" element={<PredictionPage />} />
