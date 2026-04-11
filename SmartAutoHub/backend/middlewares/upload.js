@@ -21,24 +21,26 @@ subdirs.forEach(dir => {
 // Storage configuration
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    let folder = 'uploads/';
+    let folderName = 'vehicles';
     
     // Determine folder based on fieldname or route
     if (file.fieldname === 'idFront' || file.fieldname === 'idBack' || file.fieldname === 'idImage' || file.fieldname === 'idDocument') {
-      folder = 'uploads/ids/';
+      folderName = 'ids';
     } else if (file.fieldname === 'selfie') {
-      folder = 'uploads/selfies/';
+      folderName = 'selfies';
     } else if (file.fieldname === 'profileImage') {
-      folder = 'uploads/profiles/';
+      folderName = 'profiles';
     } else if (file.fieldname === 'vehicleImages' || file.fieldname === 'images') {
-      folder = 'uploads/vehicles/';
+      folderName = 'vehicles';
     } else if (file.fieldname === 'breakdownImages') {
-      folder = 'uploads/breakdowns/';
+      folderName = 'breakdowns';
     } else if (file.fieldname === 'bankSlip') {
-      folder = 'uploads/bank_slips/';
+      folderName = 'bank_slips';
     }
     
-    cb(null, folder);
+    // Use absolute path
+    const dirPath = path.join(uploadsDir, folderName);
+    cb(null, dirPath);
   },
   filename: function (req, file, cb) {
     // Generate unique filename

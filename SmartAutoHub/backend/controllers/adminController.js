@@ -1121,10 +1121,9 @@ const migrateVehicleStatus = async (req, res) => {
 const getAllAdvertisingRequests = async (req, res) => {
   try {
     console.log('📋 getAllAdvertisingRequests called');
-    const { status, search, page, limit } = req.query;
-    const { skip, limit: limitNum, page: pageNum } = paginate(page, limit);
+    const { status, search } = req.query;
 
-    console.log('Filters:', { status, search, page, limit });
+    console.log('Filters:', { status, search });
 
     const filter = {};
     if (status) filter.status = status;
@@ -1140,19 +1139,22 @@ const getAllAdvertisingRequests = async (req, res) => {
 
     console.log('Query filter:', JSON.stringify(filter, null, 2));
 
-    const [requests, total] = await Promise.all([
-      Advertising.find(filter)
-        .sort({ submittedAt: -1 })
-        .skip(skip)
-        .limit(limitNum),
-      Advertising.countDocuments(filter)
-    ]);
+    const requests = await Advertising.find(filter)
+      .sort({ submittedAt: -1 })
+      .lean();
+    
+    const total = requests.length;
 
-    console.log(`✓ Found ${requests.length} advertising requests out of ${total} total`);
+    console.log(`✓ Found ${total} advertising requests`);
+    if (requests.length > 0) {
+      console.log('Sample request data keys:', Object.keys(requests[0]));
+      console.log('Sample request photo field:', requests[0].adPhotoBase64 ? `Present (${String(requests[0].adPhotoBase64).length} chars)` : 'Missing/null');
+    }
 
     res.json({
       success: true,
-      ...formatPaginationResponse(requests, total, pageNum, limitNum)
+      data: requests,
+      total: total
     });
   } catch (error) {
     console.error('❌ Get advertising requests error:', error);

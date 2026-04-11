@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -34,6 +34,8 @@ import {
   ArrowForward,
   CalendarToday,
   Favorite,
+  Calculate,
+  Balance,
 } from '@mui/icons-material';
 import api from '../services/api';
 import AlertsModal from '../components/AlertsModal';
@@ -84,6 +86,7 @@ const heroBgImages = [
 
 const HomePage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [vehicleType, setVehicleType] = useState('all');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -309,6 +312,81 @@ const HomePage = () => {
         }}
       >
         <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 2 }}>
+          {/* Quick Action Cards - Top Right Corner */}
+          <Box
+            sx={{
+              position: 'fixed',
+              top: { xs: 100, md: 140 },
+              right: { xs: 10, md: 20 },
+              zIndex: 10,
+            }}
+          >
+            <Grid container spacing={2} sx={{ maxWidth: 280, flexDirection: 'column' }}>
+              {/* Lease Calculator Card */}
+              <Grid item xs={12}>
+                <Card
+                  onClick={() => navigate('/lease-calculator')}
+                  sx={{
+                    cursor: 'pointer',
+                    bgcolor: '#2a2a2a',
+                    color: 'white',
+                    textAlign: 'center',
+                    p: 0.75,
+                    transition: 'all 0.3s ease',
+                    border: '2px solid transparent',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
+                      bgcolor: '#333',
+                    },
+                  }}
+                >
+                  <CardContent sx={{ p: 0.25 }}>
+                    <Box sx={{ mb: 0.25 }}>
+                      <Calculate sx={{ fontSize: 24, color: 'white' }} />
+                    </Box>
+                    <Typography variant="caption" fontWeight="bold" sx={{ mb: 0.15, display: 'block', fontSize: '0.65rem' }}>
+                      Lease
+                    </Typography>
+                    <Typography variant="caption" fontWeight="500" sx={{ fontSize: '0.6rem' }}>
+                      Calculator
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Compare Card */}
+              <Grid item xs={12}>
+                <Card
+                  onClick={() => navigate('/compare')}
+                  sx={{
+                    cursor: 'pointer',
+                    bgcolor: '#f39c12',
+                    color: 'white',
+                    textAlign: 'center',
+                    p: 0.75,
+                    transition: 'all 0.3s ease',
+                    border: '2px solid transparent',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 8px 16px rgba(243, 156, 18, 0.4)',
+                      bgcolor: '#e67e22',
+                    },
+                  }}
+                >
+                  <CardContent sx={{ p: 0.25 }}>
+                    <Box sx={{ mb: 0.25 }}>
+                      <Balance sx={{ fontSize: 24, color: 'white' }} />
+                    </Box>
+                    <Typography variant="caption" fontWeight="bold" sx={{ fontSize: '0.65rem' }}>
+                      Compare
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          </Box>
+
           {/* Heading */}
           <Typography
             variant="h2"
@@ -319,7 +397,7 @@ const HomePage = () => {
               textShadow: '0 2px 8px rgba(0,0,0,0.3)',
             }}
           >
-            Find your next vehicle
+            Find your dream vehicle
           </Typography>
 
           {/* Subheading */}
@@ -420,7 +498,7 @@ const HomePage = () => {
               fontWeight="bold"
               sx={{ mb: 2, color: '#1a1a1a' }}
             >
-              Trending Now
+              Trending Models
             </Typography>
 
             {loadingTrends ? (
@@ -456,7 +534,7 @@ const HomePage = () => {
                         },
                       }}
                       onClick={() => {
-                        window.location.href = `/vehicles?model=${encodeURIComponent(vehicle.model)}`;
+                        navigate(`/vehicles?search=${encodeURIComponent(vehicle.model)}`);
                       }}
                     >
                       <CardContent sx={{ p: 1.5, textAlign: 'center', '&:last-child': { pb: 1.5 } }}>
@@ -467,7 +545,7 @@ const HomePage = () => {
                           <Typography 
                             variant="caption" 
                             sx={{ 
-                              color: '#4caf50',
+                              color: '#ec1781',
                               fontSize: '0.75rem', 
                               fontWeight: 600 
                             }}
@@ -475,9 +553,6 @@ const HomePage = () => {
                             Available
                           </Typography>
                         </Box>
-                        <Typography variant="caption" sx={{ color: '#999', fontSize: '0.7rem', display: 'block' }}>
-                          {vehicle.vehicleCount || 0} available
-                        </Typography>
                       </CardContent>
                     </Card>
                   </Grid>
@@ -541,7 +616,7 @@ const HomePage = () => {
                             top: 12,
                             right: 12,
                             zIndex: 10,
-                            bgcolor: 'primary.main',
+                            bgcolor: '#d32f2f',
                             color: 'white',
                             fontWeight: 'bold',
                           }}
@@ -616,6 +691,7 @@ const HomePage = () => {
                             variant="contained"
                             fullWidth
                             size="small"
+                            sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#333' } }}
                           >
                             View Details
                           </Button>
@@ -638,6 +714,11 @@ const HomePage = () => {
                       py: 1.5,
                       fontSize: '1.1rem',
                       fontWeight: 600,
+                      bgcolor: '#000',
+                      color: 'white',
+                      '&:hover': {
+                        bgcolor: '#6f6e6e',
+                      },
                     }}
                   >
                     See All Premium Posts
@@ -653,11 +734,11 @@ const HomePage = () => {
         <Box sx={{ bgcolor: '#fafafa', py: 6 }}>
           <Container maxWidth="lg">
             <Box sx={{ mb: 4 }}>
-              <Typography variant="h5" fontWeight="bold" gutterBottom>
+              <Typography variant="h4" fontWeight="bold" gutterBottom>
                 Trending Vehicles
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Check out the latest vehicles added to our platform
+              <Typography variant="body2" sx={{ color: '#595758' }}>
+                Check out the most searched and popular vehicles on TakGaala.lk right now
               </Typography>
             </Box>
 
@@ -749,6 +830,7 @@ const HomePage = () => {
                         variant="contained"
                         fullWidth
                         size="small"
+                        sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#615f5f' } }}
                       >
                         View Details
                       </Button>

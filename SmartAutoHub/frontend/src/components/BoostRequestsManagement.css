@@ -167,12 +167,12 @@
 }
 
 .btn-view {
-  background: #2196f3;
+  background: #000;
   color: white;
 }
 
 .btn-view:hover {
-  background: #1976d2;
+  background: #333;
 }
 
 .btn-approve {

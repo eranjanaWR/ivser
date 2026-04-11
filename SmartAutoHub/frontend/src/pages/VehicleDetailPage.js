@@ -264,10 +264,15 @@ const VehicleDetailPage = () => {
           component={Link}
           to="/vehicles"
           startIcon={<ArrowBack />}
-          sx={{ mb: 3 }}
+          sx={{ 
+            mb: 3,
+            color: '#1976d2',
+            fontWeight: 600
+          }}
         >
           Back to Vehicles
         </Button>
+        
 
         {success && (
           <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
@@ -405,7 +410,7 @@ const VehicleDetailPage = () => {
                     px: 3,
                     py: 1.5,
                     '&:hover': {
-                      bgcolor: '#b71c1c',
+                      bgcolor: '#0b0b0b',
                     },
                   }}
                 >
@@ -423,9 +428,15 @@ const VehicleDetailPage = () => {
                   size="large"
                   startIcon={<Event />}
                   onClick={() => setTestDriveOpen(true)}
+                  sx={{
+                    backgroundColor: '#4281da',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    }}
                 >
                   Book Vehicle for Test Drive
                 </Button>
+
                 <Button
                   variant="outlined"
                   fullWidth
@@ -435,6 +446,7 @@ const VehicleDetailPage = () => {
                 >
                   Compare Vehicles
                 </Button>
+                
                 <Button
                   variant="outlined"
                   fullWidth
@@ -654,6 +666,7 @@ const VehicleDetailPage = () => {
                     >
                       Edit Vehicle
                     </Button>
+                    
                     <Button
                       variant="contained"
                       color="error"

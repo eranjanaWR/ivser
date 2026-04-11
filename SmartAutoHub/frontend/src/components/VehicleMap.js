@@ -134,64 +134,60 @@ export default function VehicleMap({ vehicles }) {
         }
     }, [])
 
-    // Automatically request location when component mounts
-    useEffect(() => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    const { latitude, longitude } = pos.coords
-                    const loc = [latitude, longitude]
-                    setUserLoc(loc)
-                    setShowLocationPrompt(false) // Hide prompt if we got location
-
-                    const map = mapInstanceRef.current
-                    if (map) {
-                        if (userMarkerRef.current) userMarkerRef.current.remove()
-
-                        const userIcon = L.divIcon({
-                            className: '',
-                            html: `<div style="
-                                width:18px;height:18px;
-                                background:#3b82f6;
-                                border:3px solid #fff;
-                                border-radius:50%;
-                                box-shadow:0 0 10px rgba(59,130,246,0.6);
-                            "></div>`,
-                            iconSize: [18, 18],
-                            iconAnchor: [9, 9],
-                        })
-
-                        userMarkerRef.current = L.marker(loc, { icon: userIcon })
-                            .addTo(map)
-                            .bindTooltip('<b>Your Current Location</b>', { direction: 'top', className: 'slm-tooltip' })
-
-                        map.setView(loc, 9)
-                    }
-                    console.log('Auto-location successful:', latitude, longitude)
-                },
-                (err) => {
-                    setIsLocating(false)
-                    console.log('Auto-location permission/error:', err.code)
-                    // Show prompt if permission was denied or not yet given
-                    setShowLocationPrompt(true)
-                },
-                {
-                    enableHighAccuracy: false,
-                    timeout: 8000,
-                    maximumAge: 0
-                }
-            )
-        }
-    }, [])
+    // Location is only requested when user clicks "Distance from Me" button
+    // This respects browser privacy - automatic location requests don't work
 
     const handleGetLocation = () => {
+        // Check if geolocation is supported
+        if (!navigator.geolocation) {
+            alert('❌ Geolocation is not supported by your browser. Please use a modern browser to enable this feature.')
+            return
+        }
+
+        // Check if user has already granted permission
+        if (userLoc) {
+            alert('✓ Location is already enabled and distances are being calculated.')
+            return
+        }
+
+        // Show confirmation before requesting location
+        const confirmed = window.confirm(
+            '📍 Enable Location Access?\n\n' +
+            'We need your location to show distances to vehicles.\n\n' +
+            'IMPORTANT: After clicking OK:\n' +
+            '1️⃣  A browser popup will appear\n' +
+            '2️⃣  Click "Allow" to share your location\n' +
+            '3️⃣  Your real-time location will then be shown on the map\n\n' +
+            'Your location data is:\n' +
+            '✓ Used only to calculate distances\n' +
+            '✓ Never stored or shared\n' +
+            '✓ Only visible to you\n\n' +
+            'Click "OK" to proceed.'
+        )
+
+        if (!confirmed) {
+            console.log('User cancelled location request')
+            return
+        }
+
+        console.log('📍 User confirmed location request - waiting for browser permission...')
         setIsLocating(true)
+        
+        // Request browser permission
         navigator.geolocation.getCurrentPosition(
             (pos) => {
-                const { latitude, longitude } = pos.coords
+                const { latitude, longitude, accuracy } = pos.coords
                 const loc = [latitude, longitude]
                 setUserLoc(loc)
                 setIsLocating(false)
+                setShowLocationPrompt(false)
+
+                console.log('✓ Real-time location captured:', {
+                    latitude: latitude.toFixed(6),
+                    longitude: longitude.toFixed(6),
+                    accuracy: `±${Math.round(accuracy)}m`,
+                    timestamp: new Date().toLocaleTimeString()
+                })
 
                 const map = mapInstanceRef.current
                 if (map) {
@@ -218,24 +214,52 @@ export default function VehicleMap({ vehicles }) {
                 }
             },
             (err) => {
-                console.error('Location error:', err)
+                console.error('❌ Location request failed:', {
+                    code: err.code,
+                    message: err.message,
+                    timestamp: new Date().toLocaleTimeString()
+                })
                 setIsLocating(false)
+                setShowLocationPrompt(true)
                 
-                let errorMsg = "Could not access your location."
+                let errorMsg = "❌ Could not access your location."
                 
                 if (err.code === 1) {
-                    errorMsg = "Location permission denied. Please enable location access in your browser settings and try again."
+                    errorMsg = "❌ Location Permission Not Granted\n\n" +
+                        "What happened:\n" +
+                        "You clicked \"Block\" or \"Don't Allow\" on the browser's location popup.\n\n" +
+                        "To fix this:\n" +
+                        "1. Click the lock 🔒 icon in the address bar\n" +
+                        "2. Find \"Location\" permission\n" +
+                        "3. Change it from \"Block\" to \"Allow\"\n" +
+                        "4. Reload the page\n" +
+                        "5. Try clicking \"Distance from Me\" again\n\n" +
+                        "OR simply allow it next time the popup appears."
                 } else if (err.code === 2) {
-                    errorMsg = "Location is unavailable. Please check your internet connection and try again."
+                    errorMsg = "❌ Location Service Unavailable\n\n" +
+                        "Possible reasons:\n" +
+                        "• GPS/location service is OFF on your device\n" +
+                        "• No internet connection\n" +
+                        "• Location service disabled in device settings\n\n" +
+                        "Fix:\n" +
+                        "1. Check your device's location services are ON\n" +
+                        "2. Verify internet connection is working\n" +
+                        "3. Try again in 5 seconds"
                 } else if (err.code === 3) {
-                    errorMsg = "Request timed out. Please try again."
+                    errorMsg = "⏱️ Location Request Timed Out\n\n" +
+                        "The browser took too long to get your location.\n\n" +
+                        "This may happen if:\n" +
+                        "• GPS signal is weak (indoors)\n" +
+                        "• Internet connection is slow\n" +
+                        "• Too many location requests at once\n\n" +
+                        "Try again in a moment, preferably outdoors for better GPS signal."
                 }
                 
                 alert(errorMsg)
             },
             {
-                enableHighAccuracy: false,
-                timeout: 10000,
+                enableHighAccuracy: true,
+                timeout: 15000,
                 maximumAge: 0
             }
         )

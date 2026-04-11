@@ -369,10 +369,10 @@ const ProfilePage = () => {
                   <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
                     <VerifiedUser sx={{ fontSize: 40, color: 'success.main' }} />
                     <Box>
-                      <Typography fontWeight="bold" color="success.dark">
+                      <Typography fontWeight="bold" color="success.main">
                         Fully Verified
                       </Typography>
-                      <Typography variant="body2" color="success.dark">
+                      <Typography variant="body2" color="success.main">
                         All verification steps complete
                       </Typography>
                     </Box>
@@ -381,12 +381,12 @@ const ProfilePage = () => {
               ) : (
                 <Card sx={{ bgcolor: 'warning.light', mb: 2 }}>
                   <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
-                    <Warning sx={{ fontSize: 40, color: 'warning.dark' }} />
+                    <Warning sx={{ fontSize: 40, color: 'warning.main' }} />
                     <Box>
-                      <Typography fontWeight="bold" color="warning.dark">
+                      <Typography fontWeight="bold" color="warning.main">
                         Incomplete
                       </Typography>
-                      <Typography variant="body2" color="warning.dark">
+                      <Typography variant="body2" color="warning.main">
                         Complete verification to unlock all features
                       </Typography>
                     </Box>

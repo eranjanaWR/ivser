@@ -398,7 +398,7 @@ const BreakdownPage = () => {
                 right: -8,
                 bgcolor: 'error.main',
                 color: 'white',
-                '&:hover': { bgcolor: 'error.dark' },
+                '&:hover': { bgcolor: 'error.main' },
                 width: 20,
                 height: 20,
               }}
