@@ -11,6 +11,7 @@ const Boost = require('../models/Boost');
 const ViewHistory = require('../models/ViewHistory');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const notificationController = require('./notificationController');
+const { sendNotificationEmail } = require('../utils/email');
 
 /**
  * @desc    Get all vehicles with filters
@@ -970,15 +971,20 @@ const boostVehicleAd = async (req, res) => {
   try {
     console.log('🚀 [BOOST] POST /boost endpoint called');
     const { vehicleId } = req.params;
-    const { packageType, duration, amount, startDate, paymentMethod, contactPerson, contactPhone, additionalNotes, cardLast4, cardHolder } = req.body;
+    const { packageType, duration, amount, startDate, paymentMethod, contactPerson, contactPhone, notificationEmail, additionalNotes, cardLast4, cardHolder, paymentRefNumber } = req.body;
     const userId = req.user?._id;
 
-    console.log('📝 [BOOST] Request body:', { packageType, duration, amount, startDate, paymentMethod, contactPerson, contactPhone });
+    console.log('📝 [BOOST] Request body:', { packageType, duration, amount, startDate, paymentMethod, contactPerson, contactPhone, notificationEmail, paymentRefNumber });
     console.log('📝 [BOOST] VehicleId:', vehicleId, 'UserId:', userId);
     console.log('📝 [BOOST] User info:', { email:  req.user?.email, role: req.user?.role, authenticated: !!req.user });
+    console.log('📝 [BOOST] Files received:', {
+      bankSlipCount: req.files?.bankSlip?.length || 0,
+      cardProofCount: req.files?.cardProof?.length || 0,
+      allFileKeys: Object.keys(req.files || {})
+    });
 
     // Validate required fields
-    if (!packageType || !duration || !amount || !startDate || !paymentMethod || !contactPerson || !contactPhone) {
+    if (!packageType || !duration || !amount || !startDate || !paymentMethod || !contactPerson || !contactPhone || !notificationEmail) {
       console.log('❌ [BOOST] Missing required fields');
       return res.status(400).json({
         success: false,
@@ -1010,10 +1016,37 @@ const boostVehicleAd = async (req, res) => {
 
     console.log('✅ [BOOST] Authorization passed');
 
-    // Handle bank slip upload if bank transfer
+    // Log all files received
+    console.log('📦 [BOOST] All files received:');
+    if (req.files) {
+      Object.keys(req.files).forEach(fieldName => {
+        const fileArray = req.files[fieldName];
+        console.log(`   ${fieldName}:`, fileArray.map(f => ({
+          originalName: f.originalname,
+          mimetype: f.mimetype,
+          size: f.size,
+          filename: f.filename,
+          path: f.path
+        })));
+      });
+    } else {
+      console.log('   No files received');
+    }
+
+    // Process files
     let bankSlipPath = null;
-    if (paymentMethod === 'bank_transfer' && req.file) {
-      bankSlipPath = req.file.path;
+    let cardProofPath = null;
+    
+    if (req.files?.bankSlip?.[0]) {
+      const file = req.files.bankSlip[0];
+      bankSlipPath = `bank_slips/${file.filename}`;
+      console.log(`✅ [BOOST] bankSlip saved: ${bankSlipPath}`);
+    }
+    
+    if (req.files?.cardProof?.[0]) {
+      const file = req.files.cardProof[0];
+      cardProofPath = `bank_slips/${file.filename}`;
+      console.log(`✅ [BOOST] cardProof saved: ${cardProofPath}`);
     }
 
     // Create and save boost record to database
@@ -1028,10 +1061,13 @@ const boostVehicleAd = async (req, res) => {
       paymentMethod,
       contactPerson,
       contactPhone,
+      notificationEmail,
       additionalNotes,
+      ...(paymentRefNumber && { paymentRefNumber }),
       ...(cardLast4 && { cardLast4 }),
       ...(cardHolder && { cardHolder }),
       ...(bankSlipPath && { bankSlipPath }),
+      ...(cardProofPath && { cardProofPath }),
       // Free boosts are automatically activated, others are pending
       status: packageType === 'free' ? 'active' : 'pending'
     });
@@ -1047,6 +1083,9 @@ const boostVehicleAd = async (req, res) => {
     console.log('  - status:', savedBoost.status);
     console.log('  - startDate:', savedBoost.startDate);
     console.log('  - endDate:', savedBoost.endDate);
+    console.log('📄 [BOOST] File paths:');
+    console.log('  - bankSlipPath:', savedBoost.bankSlipPath || 'NOT SET');
+    console.log('  - cardProofPath:', savedBoost.cardProofPath || 'NOT SET');
     console.log('  - duration:', savedBoost.duration);
 
     // Send notification to admins only for paid boosts
@@ -1143,7 +1182,23 @@ const getAllBoostRequests = async (req, res) => {
       .populate('userId', 'name email phone')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limitNum);
+      .limit(limitNum)
+      .lean();
+    
+    console.log('📄 [BOOST] Retrieved boosts count:', boosts.length);
+    if (boosts.length > 0) {
+      console.log('📄 [BOOST] Sample boost data:');
+      boosts.slice(0, 3).forEach((boost, idx) => {
+        console.log(`   Boost ${idx}:`, {
+          _id: boost._id,
+          paymentMethod: boost.paymentMethod,
+          bankSlipPath: boost.bankSlipPath || 'null',
+          cardProofPath: boost.cardProofPath || 'null',
+          hasBankSlip: !!boost.bankSlipPath,
+          hasCardProof: !!boost.cardProofPath
+        });
+      });
+    }
     
     const total = await Boost.countDocuments(filter);
     
@@ -1151,7 +1206,7 @@ const getAllBoostRequests = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      boosts: boosts,
+      data: boosts,
       pagination: {
         total,
         page: pageNum,
@@ -1181,12 +1236,41 @@ const approveBoostRequest = async (req, res) => {
     const { adminNotes } = req.body;
     const adminId = req.user._id;
     
-    const boost = await Boost.findById(boostId);
+    console.log(`📋 Processing boost approval for ID: ${boostId}`);
+    
+    const boost = await Boost.findById(boostId).populate('userId');
     if (!boost) {
       return res.status(404).json({
         success: false,
         message: 'Boost request not found'
       });
+    }
+    
+    console.log(`✓ Boost found: ${boost._id}`);
+    
+    // Validate user is populated
+    if (!boost.userId) {
+      console.error('❌ Boost user not populated');
+      return res.status(400).json({
+        success: false,
+        message: 'Boost user information is missing'
+      });
+    }
+    
+    // Ensure notificationEmail is set with a valid email before saving
+    const userEmail = boost.userId?.email || boost.userId?._doc?.email;
+    if (!userEmail) {
+      console.error('❌ User email not found:', { userId: boost.userId._id });
+      return res.status(400).json({
+        success: false,
+        message: 'User email address not found'
+      });
+    }
+    
+    // Set notificationEmail to user's email if it's missing or invalid
+    if (!boost.notificationEmail || !boost.notificationEmail.includes('@')) {
+      console.log(`⚠️ Setting notificationEmail to user email: ${userEmail}`);
+      boost.notificationEmail = userEmail;
     }
     
     // Update boost status to 'active' (not 'approved') so it displays in featured vehicles
@@ -1196,18 +1280,64 @@ const approveBoostRequest = async (req, res) => {
     if (adminNotes) boost.adminNotes = adminNotes;
     
     await boost.save();
+    console.log(`✅ Boost status updated to active`);
     
-    // Send notification to user
+    // Send in-app notification to user
     try {
-      const user = await boost.populate('userId');
       await notificationController.sendNotificationToUser(
-        boost.userId,
+        boost.userId._id,
         `Boost Request Approved! ✓`,
         `Your ad boost request has been approved. It will go live on ${new Date(boost.startDate).toLocaleDateString()}`,
         { type: 'boost_approved', boostId: boost._id }
       );
+      console.log(`✅ In-app notification sent`);
     } catch (err) {
-      console.error('Failed to send approval notification:', err);
+      console.error('⚠️ Failed to send in-app approval notification:', err.message);
+      // Don't fail the whole request if notification fails
+    }
+    
+    // Send email notification to user (use notificationEmail if provided, otherwise fallback to user email)
+    try {
+      const notificationsEmail = boost.notificationEmail || boost.userId?.email;
+      
+      if (!notificationsEmail) {
+        console.warn('⚠️ No email address found for notification');
+      } else {
+        const startDateFormatted = new Date(boost.startDate).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+        
+        const message = `
+          <p>Good news! Your boost request for your ad has been <strong>approved by our admin team</strong>! 🎉</p>
+          <p><strong>Here are the details:</strong></p>
+          <ul>
+            <li><strong>Boost Package:</strong> ${boost.packageType.charAt(0).toUpperCase() + boost.packageType.slice(1)}</li>
+            <li><strong>Duration:</strong> ${boost.duration} days</li>
+            <li><strong>Payment Reference:</strong> ${boost.paymentRefNumber}</li>
+            <li><strong>Start Date:</strong> ${startDateFormatted}</li>
+          </ul>
+          <p>Your ad will now get increased visibility on our platform! Your customers will see it more prominently in search results and featured listings.</p>
+          <p>Thank you for boosting your ad with SmartAuto Hub! 🚗</p>
+        `;
+        
+        const emailResult = await sendNotificationEmail(
+          notificationsEmail,
+          'Boost Request Approved! 🎉 - SmartAuto Hub',
+          message,
+          boost.userId?.firstName || 'User'
+        );
+        
+        if (emailResult.success) {
+          console.log(`✅ Approval email sent successfully to ${notificationsEmail} | Message ID: ${emailResult.messageId}`);
+        } else {
+          console.warn(`⚠️ Approval email failed for ${notificationsEmail}: ${emailResult.error}`);
+        }
+      }
+    } catch (err) {
+      console.error('⚠️ Failed to send approval email - Exception:', err.message);
+      // Don't fail the whole request if email sending fails
     }
     
     res.status(200).json({
@@ -1216,7 +1346,8 @@ const approveBoostRequest = async (req, res) => {
       data: boost
     });
   } catch (error) {
-    console.error('Approve boost request error:', error);
+    console.error('❌ Approve boost request error:', error.message);
+    console.error('Stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Error approving boost request',
@@ -1233,22 +1364,55 @@ const approveBoostRequest = async (req, res) => {
 const rejectBoostRequest = async (req, res) => {
   try {
     const { boostId } = req.params;
-    const { adminNotes } = req.body;
+    let { adminNotes } = req.body;
     const adminId = req.user._id;
     
-    if (!adminNotes) {
-      return res.status(400).json({
-        success: false,
-        message: 'Admin notes are required for rejection'
-      });
-    }
-    
-    const boost = await Boost.findById(boostId);
+    const boost = await Boost.findById(boostId).populate('userId');
     if (!boost) {
       return res.status(404).json({
         success: false,
         message: 'Boost request not found'
       });
+    }
+    
+    // Determine if this is a deactivation (for active boosts) or rejection (for pending boosts)
+    const isDeactivation = boost.status === 'active' || boost.status === 'approved';
+    const notificationType = isDeactivation ? 'boost_deactivated' : 'boost_rejected';
+    
+    // For rejection without notes, provide a default message
+    if (!adminNotes) {
+      if (isDeactivation) {
+        adminNotes = 'Boost deactivated by admin';
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Admin notes are required for rejection'
+        });
+      }
+    }
+    
+    // Ensure notificationEmail is set with a valid email before saving
+    if (!boost.userId) {
+      console.error('❌ Boost user not populated');
+      return res.status(400).json({
+        success: false,
+        message: 'Boost user information is missing'
+      });
+    }
+    
+    const userEmail = boost.userId?.email || boost.userId?._doc?.email;
+    if (!userEmail) {
+      console.error('❌ User email not found:', { userId: boost.userId._id });
+      return res.status(400).json({
+        success: false,
+        message: 'User email address not found'
+      });
+    }
+    
+    // Set notificationEmail to user's email if it's missing or invalid
+    if (!boost.notificationEmail || !boost.notificationEmail.includes('@')) {
+      console.log(`⚠️ Setting notificationEmail to user email: ${userEmail}`);
+      boost.notificationEmail = userEmail;
     }
     
     // Update boost status
@@ -1259,16 +1423,72 @@ const rejectBoostRequest = async (req, res) => {
     
     await boost.save();
     
-    // Send notification to user
+    // Send in-app notification to user
     try {
+      const notificationTitle = isDeactivation ? `Boost Deactivated` : `Boost Request Rejected`;
+      const notificationMessage = isDeactivation 
+        ? `Your active boost has been deactivated. Reason: ${adminNotes}`
+        : `Your ad boost request has been rejected. Reason: ${adminNotes}`;
+      
       await notificationController.sendNotificationToUser(
-        boost.userId,
-        `Boost Request Rejected`,
-        `Your ad boost request has been rejected. Reason: ${adminNotes}`,
-        { type: 'boost_rejected', boostId: boost._id }
+        boost.userId._id,
+        notificationTitle,
+        notificationMessage,
+        { type: notificationType, boostId: boost._id }
       );
     } catch (err) {
-      console.error('Failed to send rejection notification:', err);
+      console.error('Failed to send in-app rejection/deactivation notification:', err);
+    }
+    
+    // Send email notification to user (use notificationEmail if provided, otherwise fallback to user email)
+    try {
+      const notificationsEmail = boost.notificationEmail || boost.userId.email;
+      let emailSubject;
+      let message;
+      
+      if (isDeactivation) {
+        emailSubject = 'Your Boost Has Been Deactivated - SmartAuto Hub';
+        message = `
+          <p>We wanted to notify you that your boost post has been <strong>deactivated</strong> by our admin team.</p>
+          <p><strong>Reason:</strong> ${adminNotes}</p>
+          <p><strong>Boost Details:</strong></p>
+          <ul>
+            <li><strong>Package:</strong> ${boost.packageType.charAt(0).toUpperCase() + boost.packageType.slice(1)}</li>
+            <li><strong>Payment Reference:</strong> ${boost.paymentRefNumber}</li>
+          </ul>
+          <p>If you have any questions or would like to appeal this decision, please contact our support team.</p>
+          <p>Thank you for your understanding.</p>
+        `;
+      } else {
+        emailSubject = 'Boost Request Rejected - SmartAuto Hub';
+        message = `
+          <p>Unfortunately, your boost request has been <strong>rejected</strong> by our admin team.</p>
+          <p><strong>Reason:</strong> ${adminNotes}</p>
+          <p><strong>Boost Details:</strong></p>
+          <ul>
+            <li><strong>Package:</strong> ${boost.packageType.charAt(0).toUpperCase() + boost.packageType.slice(1)}</li>
+            <li><strong>Amount:</strong> PKR ${boost.amount}</li>
+            <li><strong>Payment Reference:</strong> ${boost.paymentRefNumber}</li>
+          </ul>
+          <p>If you have any questions about this rejection, please feel free to reach out to our support team for more information.</p>
+          <p>We hope to work with you on future boost requests!</p>
+        `;
+      }
+      
+      const emailResult = await sendNotificationEmail(
+        notificationsEmail,
+        emailSubject,
+        message,
+        boost.userId.firstName
+      );
+      
+      if (emailResult.success) {
+        console.log(`✅ ${isDeactivation ? 'Deactivation' : 'Rejection'} email sent successfully to ${notificationsEmail} | Message ID: ${emailResult.messageId}`);
+      } else {
+        console.warn(`⚠️ ${isDeactivation ? 'Deactivation' : 'Rejection'} email failed for ${notificationsEmail}: ${emailResult.error}`);
+      }
+    } catch (err) {
+      console.error(`❌ Failed to send ${isDeactivation ? 'deactivation' : 'rejection'} email - Exception:`, err.message);
     }
     
     res.status(200).json({

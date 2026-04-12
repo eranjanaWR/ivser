@@ -12,7 +12,7 @@ const express = require('express');
 const router = express.Router();
 const vehicleController = require('../controllers/vehicleController');
 const { protect, authorize, requireFullyVerified, optionalAuth } = require('../middlewares/auth');
-const { uploadVehicleImages, uploadSingle } = require('../middlewares/upload');
+const { uploadVehicleImages, uploadSingle, uploadFields } = require('../middlewares/upload');
 const { validateVehicle, validateObjectId, validatePagination } = require('../middlewares/validation');
 
 // ============================================
@@ -130,12 +130,48 @@ router.put(
   vehicleController.rejectBoostRequest
 );
 
+// Request logging middleware for boost endpoint
+const logBoostRequest = (req, res, next) => {
+  console.log(`\n🚀 [BOOST ROUTE] POST /:vehicleId/boost called`);
+  console.log(`  - vehicleId: ${req.params.vehicleId}`);
+  console.log(`  - user: ${req.user?.email}`);
+  console.log(`  - Content-Type: ${req.headers['content-type']}`);
+  next();
+};
+
+// Multer wrapper to catch errors
+const boost_upload = uploadFields([
+  { name: 'bankSlip', maxCount: 1 },
+  { name: 'cardProof', maxCount: 1 }
+]);
+
+// Error handler for Multer errors
+const multerErrorHandler = (err, req, res, next) => {
+  if (err) {
+    console.error('❌ [MULTER/UPLOAD ERROR]', {
+      message: err.message,
+      code: err.code,
+      field: err.field,
+      status: err.status
+    });
+    return res.status(400).json({
+      success: false,
+      message: `Upload error: ${err.message}`,
+      code: err.code,
+      debug: process.env.NODE_ENV === 'development' ? { stack: err.stack } : undefined
+    });
+  }
+  next();
+};
+
 // Boost vehicle ad (PROTECTED - multi-segment route, comes after /boost/* routes)
 router.post(
   '/:vehicleId/boost',
   protect,
   validateObjectId('vehicleId'),
-  uploadSingle('bankSlip'),
+  logBoostRequest,
+  boost_upload,
+  multerErrorHandler,
   vehicleController.boostVehicleAd
 );
 
