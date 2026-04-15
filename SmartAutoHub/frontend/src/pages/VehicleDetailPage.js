@@ -39,9 +39,17 @@ import {
   ChevronLeft,
   ChevronRight,
   VerifiedUser,
+  Edit,
+  Delete,
+  CompareArrows,
+  Favorite,
+  FavoriteBorder,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import EditVehicleModal from '../components/EditVehicleModal';
+import { getImageUrl } from '../utils/imageUrl';
+import { getWatermarkedImage } from '../utils/watermark';
 
 const VehicleDetailPage = () => {
   const { id } = useParams();
@@ -52,6 +60,10 @@ const VehicleDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentImage, setCurrentImage] = useState(0);
+  const [watermarkedImageUrl, setWatermarkedImageUrl] = useState(null);
+  const [watermarkLoading, setWatermarkLoading] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savingWishlist, setSavingWishlist] = useState(false);
   
   // Test drive dialog
   const [testDriveOpen, setTestDriveOpen] = useState(false);
@@ -60,20 +72,96 @@ const VehicleDetailPage = () => {
   const [testDriveMessage, setTestDriveMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
+  
+  // Admin actions
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const isAdmin = user && ['admin1', 'admin2'].includes(user.role);
 
   useEffect(() => {
     fetchVehicle();
   }, [id]);
+
+  // Apply watermark to current image
+  useEffect(() => {
+    if (vehicle && vehicle.images && vehicle.images[currentImage]) {
+      setWatermarkLoading(true);
+      const originalImageUrl = getImageUrl(vehicle.images[currentImage]);
+      getWatermarkedImage(originalImageUrl)
+        .then(watermarkedUrl => {
+          setWatermarkedImageUrl(watermarkedUrl);
+          setWatermarkLoading(false);
+        })
+        .catch(error => {
+          console.error('Failed to apply watermark:', error);
+          setWatermarkedImageUrl(originalImageUrl);
+          setWatermarkLoading(false);
+        });
+    }
+  }, [vehicle, currentImage]);
 
   const fetchVehicle = async () => {
     setLoading(true);
     try {
       const { data } = await api.get(`/vehicles/${id}`);
       setVehicle(data.data);
+      
+      // Check if vehicle is saved by current user
+      if (user && data.data.savedBy && Array.isArray(data.data.savedBy)) {
+        const userIdStr = String(user._id || user.id);
+        const isSavedByUser = data.data.savedBy.some(savedUserId => 
+          String(savedUserId) === userIdStr
+        );
+        setIsSaved(isSavedByUser);
+      }
+      
+      // Log vehicle search
+      try {
+        await api.post('/search/log-vehicle', { vehicleId: id });
+      } catch (err) {
+        console.error('Failed to log vehicle search:', err);
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load vehicle');
     }
     setLoading(false);
+  };
+
+  const handleDeleteVehicle = async () => {
+    try {
+      await api.delete(`/vehicles/${id}`);
+      alert('Vehicle deleted successfully!');
+      navigate('/vehicles');
+    } catch (err) {
+      alert('Error deleting vehicle: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleToggleSold = async () => {
+    try {
+      const newStatus = vehicle.status === 'available' ? 'sold' : 'available';
+      const { data } = await api.put(`/vehicles/${id}`, { status: newStatus });
+      // Preserve seller info from original vehicle
+      const updatedVehicle = {
+        ...data.data,
+        sellerId: data.data.sellerId || vehicle.sellerId
+      };
+      setVehicle(updatedVehicle);
+      alert(`Vehicle marked as ${newStatus}!`);
+    } catch (err) {
+      alert('Error updating vehicle: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleEditSuccess = (updatedVehicle) => {
+    // Preserve seller info from original vehicle if not in updated vehicle
+    const vehicleToSet = {
+      ...updatedVehicle,
+      sellerId: updatedVehicle.sellerId || vehicle.sellerId
+    };
+    setVehicle(vehicleToSet);
+    setEditModalOpen(false);
+    alert('Vehicle updated successfully!');
   };
 
   const handleTestDriveSubmit = async () => {
@@ -90,15 +178,34 @@ const VehicleDetailPage = () => {
         preferredTime: testDriveTime,
         message: testDriveMessage,
       });
-      setSuccess('Test drive request sent successfully!');
+      setSuccess('Test drive booked successfully!');
       setTestDriveOpen(false);
       setTestDriveDate('');
       setTestDriveTime('');
       setTestDriveMessage('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to request test drive');
+      setError(err.response?.data?.message || 'Failed to book test drive');
     }
     setSubmitting(false);
+  };
+
+  const handleToggleSaveVehicle = async () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    setSavingWishlist(true);
+    try {
+      await api.post(`/vehicles/${id}/save`);
+      setIsSaved(!isSaved);
+      setSuccess(isSaved ? 'Removed from wishlist' : 'Added to wishlist');
+      // Fetch updated vehicle to sync savedBy list
+      fetchVehicle();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update wishlist');
+    }
+    setSavingWishlist(false);
   };
 
   const formatPrice = (price) => {
@@ -143,7 +250,11 @@ const VehicleDetailPage = () => {
     );
   }
 
-  const isOwner = user && vehicle.seller?._id === user._id;
+  // Check if current user is the seller
+  const isOwner = user && vehicle.sellerId && (
+    String(typeof vehicle.sellerId === 'string' ? vehicle.sellerId : (vehicle.sellerId._id || vehicle.sellerId.id)) === 
+    String(user._id || user.id)
+  );
 
   return (
     <Box sx={{ py: 4, bgcolor: '#fafafa', minHeight: '80vh' }}>
@@ -153,10 +264,15 @@ const VehicleDetailPage = () => {
           component={Link}
           to="/vehicles"
           startIcon={<ArrowBack />}
-          sx={{ mb: 3 }}
+          sx={{ 
+            mb: 3,
+            color: '#1976d2',
+            fontWeight: 600
+          }}
         >
           Back to Vehicles
         </Button>
+        
 
         {success && (
           <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
@@ -177,9 +293,22 @@ const VehicleDetailPage = () => {
                 borderColor: 'grey.200',
               }}
             >
+              {watermarkLoading && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 10,
+                  }}
+                >
+                  <CircularProgress />
+                </Box>
+              )}
               <Box
                 component="img"
-                src={vehicle.images?.[currentImage] || '/placeholder-car.jpg'}
+                src={watermarkedImageUrl || getImageUrl(vehicle.images?.[currentImage])}
                 alt={`${vehicle.brand} ${vehicle.model}`}
                 sx={{
                   width: '100%',
@@ -251,7 +380,7 @@ const VehicleDetailPage = () => {
                   <Box
                     key={index}
                     component="img"
-                    src={img}
+                    src={getImageUrl(img)}
                     onClick={() => setCurrentImage(index)}
                     sx={{
                       width: 80,
@@ -265,6 +394,88 @@ const VehicleDetailPage = () => {
                     }}
                   />
                 ))}
+              </Box>
+            )}
+
+            {/* Boost Ad Button - Only for Admin and Seller */}
+            {(isAdmin || isOwner) && (
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+                <Button
+                  onClick={() => navigate(`/vehicles/${id}/boost`)}
+                  variant="contained"
+                  sx={{
+                    bgcolor: '#d32f2f',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    px: 3,
+                    py: 1.5,
+                    '&:hover': {
+                      bgcolor: '#0b0b0b',
+                    },
+                  }}
+                >
+                  Boost Ad
+                </Button>
+              </Box>
+            )}
+
+            {/* Action Buttons */}
+            {!isOwner && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 3 }}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  startIcon={<Event />}
+                  onClick={() => setTestDriveOpen(true)}
+                  sx={{
+                    backgroundColor: '#4281da',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    '&:hover': {
+                      backgroundColor: '#9CA3AF'
+                    }
+                  }}
+                >
+                  Book Vehicle for Test Drive
+                </Button>
+
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  startIcon={<CompareArrows />}
+                  onClick={() => navigate(`/compare/${id}`)}
+                  sx={{
+                    backgroundColor: '#000000',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    '&:hover': {
+                      backgroundColor: '#9CA3AF'
+                    }
+                  }}
+                >
+                  Compare Vehicles
+                </Button>
+                
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  startIcon={isSaved ? <Favorite /> : <FavoriteBorder />}
+                  onClick={handleToggleSaveVehicle}
+                  disabled={savingWishlist}
+                  sx={{
+                    backgroundColor: '#dc2626',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    '&:hover': {
+                      backgroundColor: '#9CA3AF'
+                    }
+                  }}
+                >
+                  {isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                </Button>
               </Box>
             )}
           </Grid>
@@ -354,75 +565,165 @@ const VehicleDetailPage = () => {
 
               <Divider sx={{ my: 2 }} />
 
-              {/* Seller Info */}
-              {vehicle.seller && (
+              {/* Vehicle Location */}
+              {vehicle.location && (vehicle.location.city || vehicle.location.country) && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Seller
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📍 Vehicle Location
                   </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Avatar sx={{ bgcolor: 'primary.main' }}>
-                      {vehicle.seller.name?.[0]}
-                    </Avatar>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography fontWeight="bold">{vehicle.seller.name}</Typography>
-                        {vehicle.seller.isFaceVerified && (
-                          <VerifiedUser fontSize="small" color="primary" />
+                  <Paper elevation={0} sx={{ p: 2.5, bgcolor: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Typography fontWeight="600" sx={{ mb: 0.5, fontSize: '1rem' }}>
+                          {vehicle.location.city || 'City'}{vehicle.location.country && `, ${vehicle.location.country}`}
+                        </Typography>
+                        {vehicle.location.state && (
+                          <Typography variant="body2" color="text.secondary">
+                            {vehicle.location.state}
+                          </Typography>
+                        )}
+                        {vehicle.location.address && (
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            📬 {vehicle.location.address}
+                          </Typography>
                         )}
                       </Box>
-                      <Typography variant="body2" color="text.secondary">
-                        {vehicle.seller.phone}
-                      </Typography>
                     </Box>
-                  </Box>
+                  </Paper>
                 </Box>
               )}
 
-              {/* Actions */}
-              {!isOwner && (
-                <Box sx={{ display: 'flex', gap: 2 }}>
+              <Divider sx={{ my: 2 }} />
+
+              {/* Seller Info */}
+              {vehicle.sellerId && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    👤 Seller Profile
+                  </Typography>
+                  <Paper elevation={0} sx={{ p: 2.5, bgcolor: '#fef5e7', border: '1px solid #f9e79f', borderRadius: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                      <Avatar 
+                        sx={{ 
+                          bgcolor: 'primary.main',
+                          width: 50,
+                          height: 50,
+                          fontSize: '1.25rem',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {vehicle.sellerId.firstName?.[0]?.toUpperCase()}
+                      </Avatar>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="h6" fontWeight="bold">
+                            {vehicle.sellerId.firstName} {vehicle.sellerId.lastName}
+                          </Typography>
+                          {vehicle.sellerId.isFaceVerified && (
+                            <VerifiedUser fontSize="small" sx={{ color: '#27ae60' }} title="Face Verified" />
+                          )}
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          Seller ID: {typeof vehicle.sellerId === 'string' ? vehicle.sellerId.slice(0, 8) : vehicle.sellerId._id?.slice(0, 8)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    
+                    {/* Contact Info */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Phone fontSize="small" color="action" />
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">Phone</Typography>
+                          <Typography variant="body2" fontWeight="600">{vehicle.sellerId.phone}</Typography>
+                        </Box>
+                      </Box>
+                      {vehicle.sellerId.email && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Email fontSize="small" color="action" />
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">Email</Typography>
+                            <Typography variant="body2" fontWeight="600">{vehicle.sellerId.email}</Typography>
+                          </Box>
+                        </Box>
+                      )}
+                    </Box>
+                  </Paper>
+                </Box>
+              )}
+              {/* Description */}
+              {vehicle.description && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📝 Description
+                  </Typography>
+                  <Paper elevation={0} sx={{ p: 2.5, bgcolor: '#f5f5f5', border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                    <Typography color="text.secondary" sx={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                      {vehicle.description}
+                    </Typography>
+                  </Paper>
+                </Box>
+              )}
+
+              <Divider sx={{ my: 2 }} />
+              
+              {/* Owner/Admin Actions (Edit, Delete, Mark as Sold) */}
+              {(isOwner || isAdmin) && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button
+                      variant="contained"
+                      color="info"
+                      fullWidth
+                      size="large"
+                      startIcon={<Edit />}
+                      onClick={() => setEditModalOpen(true)}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: '#9CA3AF'
+                        }
+                      }}
+                    >
+                      Edit Vehicle
+                    </Button>
+                    
+                    <Button
+                      variant="contained"
+                      color="error"
+                      fullWidth
+                      size="large"
+                      startIcon={<Delete />}
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: '#9CA3AF'
+                        }
+                      }}
+                    >
+                      Delete Vehicle
+                    </Button>
+                  </Box>
                   <Button
                     variant="contained"
                     fullWidth
                     size="large"
-                    startIcon={<Event />}
-                    onClick={() => setTestDriveOpen(true)}
+                    onClick={handleToggleSold}
+                    sx={{
+                      backgroundColor: '#000000',
+                      color: '#ffffff',
+                      fontWeight: 600,
+                      '&:hover': {
+                        backgroundColor: '#9CA3AF'
+                      }
+                    }}
                   >
-                    Request Test Drive
+                    {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
                   </Button>
                 </Box>
-              )}
-
-              {isOwner && (
-                <Button
-                  component={Link}
-                  to={`/my-vehicles`}
-                  variant="outlined"
-                  fullWidth
-                  size="large"
-                >
-                  Manage Your Listings
-                </Button>
               )}
             </Paper>
           </Grid>
         </Grid>
-
-        {/* Description */}
-        {vehicle.description && (
-          <Paper
-            elevation={0}
-            sx={{ p: 3, mt: 4, border: '1px solid', borderColor: 'grey.200' }}
-          >
-            <Typography variant="h6" fontWeight="bold" gutterBottom>
-              Description
-            </Typography>
-            <Typography color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-              {vehicle.description}
-            </Typography>
-          </Paper>
-        )}
 
         {/* Features */}
         {vehicle.features?.length > 0 && (
@@ -443,10 +744,10 @@ const VehicleDetailPage = () => {
 
         {/* Test Drive Dialog */}
         <Dialog open={testDriveOpen} onClose={() => setTestDriveOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Request Test Drive</DialogTitle>
+          <DialogTitle>Book Vehicle for Test Drive</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Request a test drive for {vehicle.brand} {vehicle.model}
+              Book a test drive for {vehicle.brand} {vehicle.model}
             </Typography>
             <TextField
               fullWidth
@@ -486,6 +787,30 @@ const VehicleDetailPage = () => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+          <DialogTitle>Delete Vehicle</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to delete <strong>{vehicle?.brand} {vehicle?.model}</strong>? This action cannot be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={handleDeleteVehicle} color="error" variant="contained">
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Edit Vehicle Modal */}
+        <EditVehicleModal
+          open={editModalOpen}
+          vehicle={vehicle}
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={handleEditSuccess}
+        />
       </Container>
     </Box>
   );

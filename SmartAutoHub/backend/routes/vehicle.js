@@ -1,53 +1,199 @@
 /**
  * Vehicle Routes
  * Handles vehicle CRUD operations
+ * 
+ * Route matching priority (Express matches in order):
+ * 1. Literal strings: /my-vehicles, /saved, /seller
+ * 2. Multi-segment params: /:id/images, /:vehicleId/images/:imageId
+ * 3. Single segment params: /:id, /:id/save
  */
 
 const express = require('express');
 const router = express.Router();
 const vehicleController = require('../controllers/vehicleController');
 const { protect, authorize, requireFullyVerified, optionalAuth } = require('../middlewares/auth');
-const { uploadVehicleImages } = require('../middlewares/upload');
+const { uploadVehicleImages, uploadSingle, uploadFields } = require('../middlewares/upload');
 const { validateVehicle, validateObjectId, validatePagination } = require('../middlewares/validation');
 
-// Public routes
-router.get('/', validatePagination, vehicleController.getVehicles);
-router.get('/seller/:sellerId', validateObjectId('sellerId'), validatePagination, vehicleController.getVehiclesBySeller);
-router.get('/:id', validateObjectId(), vehicleController.getVehicleById);
+// ============================================
+// GET ROUTES
+// ============================================
 
-// Protected routes
-router.use(protect);
-
-// My vehicles (seller's own)
-router.get('/my-vehicles', vehicleController.getMyVehicles);
-
-// Saved vehicles
-router.get('/saved', vehicleController.getSavedVehicles);
-
-// Save/unsave vehicle
-router.post('/:id/save', validateObjectId(), vehicleController.toggleSaveVehicle);
-
-// Create vehicle (verified sellers only)
+// Create vehicle 
 router.post(
   '/',
-  authorize('seller', 'admin1'),
-  requireFullyVerified,
+  protect,
+  authorize('buyer', 'seller', 'buyer/seller', 'admin1'),
   uploadVehicleImages,
   validateVehicle,
   vehicleController.createVehicle
 );
 
-// Update vehicle (owner or admin)
+// Get all vehicles (PUBLIC)
+router.get('/', validatePagination, vehicleController.getVehicles);
+
+// Get my vehicles (PROTECTED - literal string before :id)
+router.get('/my-vehicles', protect, vehicleController.getMyVehicles);
+
+// Get saved vehicles (PROTECTED - literal string before :id)
+router.get('/saved', protect, vehicleController.getSavedVehicles);
+
+// Get featured/boosted vehicles (PUBLIC - literal string before :id)
+router.get('/featured/active', vehicleController.getFeaturedVehicles);
+
+// DEBUG: Get all boosts (PUBLIC - for testing)
+router.get('/debug/boosts', vehicleController.getAllBoosts);
+
+// DEBUG: Test endpoint to verify boost creation
+router.get('/debug/test-boosts', async (req, res) => {
+  try {
+    const Boost = require('../models/Boost');
+    const boosts = await Boost.find().limit(10);
+    res.json({
+      success: true,
+      message: `Found ${boosts.length} boosts in database`,
+      boosts: boosts.map(b => ({
+        _id: b._id,
+        vehicleId: b.vehicleId,
+        status: b.status,
+        packageType: b.packageType,
+        createdAt: b.createdAt
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get vehicles by seller (PUBLIC - specific path segment before generic :id)
+router.get('/seller/:sellerId', validateObjectId('sellerId'), validatePagination, vehicleController.getVehiclesBySeller);
+
+// Get vehicle images (PUBLIC - multi-segment route before generic :id)
+router.get('/:id/images', validateObjectId('id'), vehicleController.getVehicleImages);
+
+// Delete specific image (PROTECTED - multi-segment route before generic :id)
+router.delete(
+  '/:vehicleId/images/:imageId',
+  protect,
+  validateObjectId('vehicleId'),
+  validateObjectId('imageId'),
+  vehicleController.deleteVehicleImage
+);
+
+// Upload images to vehicle (PROTECTED - multi-segment route before generic :id)
+router.post(
+  '/:vehicleId/images',
+  protect,
+  validateObjectId('vehicleId'),
+  uploadVehicleImages,
+  vehicleController.uploadVehicleImages
+);
+
+// ============================================
+// BOOST ROUTES (MUST come before /:vehicleId/... routes)
+// ============================================
+
+// Get all boost requests (ADMIN ONLY - literal route, MUST come first)
+router.get(
+  '/boost/all',
+  protect,
+  authorize('admin1', 'admin2'),
+  vehicleController.getAllBoostRequests
+);
+
+// Get single boost request (PROTECTED - specific multi-segment route)
+router.get(
+  '/boost/:boostId',
+  protect,
+  validateObjectId('boostId'),
+  vehicleController.getBoostRequestDetails
+);
+
+// Approve boost request (ADMIN ONLY - specific multi-segment route)
+router.put(
+  '/boost/:boostId/approve',
+  protect,
+  authorize('admin1', 'admin2'),
+  validateObjectId('boostId'),
+  vehicleController.approveBoostRequest
+);
+
+// Reject boost request (ADMIN ONLY - specific multi-segment route)
+router.put(
+  '/boost/:boostId/reject',
+  protect,
+  authorize('admin1', 'admin2'),
+  validateObjectId('boostId'),
+  vehicleController.rejectBoostRequest
+);
+
+// Request logging middleware for boost endpoint
+const logBoostRequest = (req, res, next) => {
+  console.log(`\n🚀 [BOOST ROUTE] POST /:vehicleId/boost called`);
+  console.log(`  - vehicleId: ${req.params.vehicleId}`);
+  console.log(`  - user: ${req.user?.email}`);
+  console.log(`  - Content-Type: ${req.headers['content-type']}`);
+  next();
+};
+
+// Multer wrapper to catch errors
+const boost_upload = uploadFields([
+  { name: 'bankSlip', maxCount: 1 },
+  { name: 'cardProof', maxCount: 1 }
+]);
+
+// Error handler for Multer errors
+const multerErrorHandler = (err, req, res, next) => {
+  if (err) {
+    console.error('❌ [MULTER/UPLOAD ERROR]', {
+      message: err.message,
+      code: err.code,
+      field: err.field,
+      status: err.status
+    });
+    return res.status(400).json({
+      success: false,
+      message: `Upload error: ${err.message}`,
+      code: err.code,
+      debug: process.env.NODE_ENV === 'development' ? { stack: err.stack } : undefined
+    });
+  }
+  next();
+};
+
+// Boost vehicle ad (PROTECTED - multi-segment route, comes after /boost/* routes)
+router.post(
+  '/:vehicleId/boost',
+  protect,
+  validateObjectId('vehicleId'),
+  logBoostRequest,
+  boost_upload,
+  multerErrorHandler,
+  vehicleController.boostVehicleAd
+);
+
+// Save/unsave vehicle (PROTECTED)
+router.post('/:id/save', protect, validateObjectId(), vehicleController.toggleSaveVehicle);
+
+// Get single vehicle (PUBLIC - generic :id comes last)
+router.get('/:id', validateObjectId(), vehicleController.getVehicleById);
+
+// Update vehicle (PROTECTED)
 router.put(
   '/:id',
+  protect,
   validateObjectId(),
   uploadVehicleImages,
   vehicleController.updateVehicle
 );
 
-// Delete vehicle (owner or admin)
+// Delete vehicle (PROTECTED)
 router.delete(
   '/:id',
+  protect,
   validateObjectId(),
   vehicleController.deleteVehicle
 );

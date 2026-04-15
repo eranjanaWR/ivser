@@ -3,8 +3,8 @@
  * Browse all vehicle listings with filters
  */
 
-import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -22,12 +22,15 @@ import {
   MenuItem,
   Slider,
   Chip,
-  Pagination,
   CircularProgress,
   InputAdornment,
   Paper,
   Collapse,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Search,
@@ -37,26 +40,76 @@ import {
   LocalGasStation,
   ExpandMore,
   ExpandLess,
+  Edit,
+  Delete,
+  DirectionsCar,
+  LocalShipping,
+  Agriculture,
+  TwoWheeler,
+  AirportShuttle,
+  RvHookup,
 } from '@mui/icons-material';
 import api from '../services/api';
+import VehicleMap from '../components/VehicleMap';
+import NotifyModal from '../components/NotifyModal';
+import { useAuth } from '../context/AuthContext';
+import { getImageUrl } from '../utils/imageUrl';
+import WatermarkedImage from '../components/WatermarkedImage';
+import ListImage from '../components/ListImage';
 
 const brands = ['Toyota', 'Honda', 'Nissan', 'Suzuki', 'BMW', 'Mercedes', 'Audi', 'Mazda', 'Mitsubishi', 'Hyundai'];
 const fuelTypes = ['Petrol', 'Diesel', 'Hybrid', 'Electric'];
 const transmissions = ['Manual', 'Automatic'];
 const conditions = ['New', 'Used', 'Certified Pre-Owned'];
+const vehicleTypes = ['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Truck', 'Van', 'Wagon', 'Convertible', 'Bus', 'Three Wheeler', 'Motorcycle', 'Pickup', 'Jeep'];
+
+// Vehicle type icons mapping
+const vehicleTypeIcons = {
+  'Sedan': '🚗',
+  'SUV': '🚙',
+  'Hatchback': '🚗',
+  'Coupe': '🚗',
+  'Truck': '🚚',
+  'Van': '🚐',
+  'Wagon': '🚙',
+  'Convertible': '🏎️',
+  'Bus': '🚌',
+  'Three Wheeler': '🛺',
+  'Motorcycle': '🏍️',
+  'Pickup': '🚚',
+  'Jeep': '🚙',
+};
 
 const VehiclesPage = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const isAdmin = user && ['admin1', 'admin2'].includes(user.role);
+  
   const [searchParams, setSearchParams] = useSearchParams();
+  const vehiclesResultRef = useRef(null);
   
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [totalPages, setTotalPages] = useState(1);
+
   const [showFilters, setShowFilters] = useState(false);
+  const [notifyModalOpen, setNotifyModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [vehicleToDelete, setVehicleToDelete] = useState(null);
+  const [suggestedVehicles, setSuggestedVehicles] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [approvedAds, setApprovedAds] = useState([]);
+  const [loadingAds, setLoadingAds] = useState(false);
+  const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  const [currentAdImageLoading, setCurrentAdImageLoading] = useState(true);
+  const [preloadedImages, setPreloadedImages] = useState({});
   
   // Filters
+  const [sort, setSort] = useState(searchParams.get('sort') || '');
+  
   const [filters, setFilters] = useState({
     search: searchParams.get('search') || '',
     brand: searchParams.get('brand') || '',
+    vehicleType: searchParams.get('vehicleType') || '',
     fuelType: searchParams.get('fuelType') || '',
     transmission: searchParams.get('transmission') || '',
     condition: searchParams.get('condition') || '',
@@ -67,27 +120,323 @@ const VehiclesPage = () => {
 
   useEffect(() => {
     fetchVehicles();
-  }, [filters]);
+  }, [filters, sort]);
+
+  // Update filters when URL search parameters change
+  useEffect(() => {
+    setFilters({
+      search: searchParams.get('search') || '',
+      brand: searchParams.get('brand') || '',
+      vehicleType: searchParams.get('vehicleType') || '',
+      fuelType: searchParams.get('fuelType') || '',
+      transmission: searchParams.get('transmission') || '',
+      condition: searchParams.get('condition') || '',
+      minPrice: searchParams.get('minPrice') || 0,
+      maxPrice: searchParams.get('maxPrice') || 50000000,
+      page: parseInt(searchParams.get('page')) || 1,
+    });
+  }, [searchParams]);
+
+  useEffect(() => {
+    console.log('🎯 VehiclesPage mounted - fetching approved ads');
+    fetchApprovedAds();
+  }, []);
+
+  const logSearch = async (searchQuery, resultsCount) => {
+    try {
+      await api.post('/search/log', {
+        searchQuery: searchQuery || 'general browse',
+        searchType: filters.brand ? 'brand' : filters.search ? 'model' : 'general',
+        filters: {
+          search: filters.search,
+          brand: filters.brand,
+          model: filters.model || filters.search, // Also track model explicitly
+          fuelType: filters.fuelType,
+          transmission: filters.transmission,
+          condition: filters.condition,
+          priceRange: [filters.minPrice, filters.maxPrice],
+        },
+        resultsCount: resultsCount,
+      });
+    } catch (err) {
+      console.error('Failed to log search:', err);
+    }
+  };
 
   const fetchVehicles = async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       Object.entries(filters).forEach(([key, value]) => {
-        if (value) params.append(key, value);
+        if (value) {
+          // Map vehicleType to bodyType for backend compatibility
+          const paramKey = key === 'vehicleType' ? 'bodyType' : key;
+          params.append(paramKey, value);
+        }
       });
       
-      const { data } = await api.get(`/vehicles?${params.toString()}`);
-      setVehicles(data.data || []);
-      setTotalPages(data.pagination?.pages || 1);
+      // Request all vehicles by setting a high limit
+      params.append('limit', 10000);
+      
+      const url = `/vehicles?${params.toString()}`;
+      console.log('🚗 Fetching vehicles from:', url);
+      
+      const { data } = await api.get(url);
+      console.log(' API Response received:', {
+        success: data.success,
+        vehicleCount: data.data?.length || 0,
+        pagination: data.pagination,
+        firstVehicle: data.data?.[0]
+      });
+      
+      let vehiclesData = data.data || [];
+      console.log(' Extracted vehicles array:', vehiclesData.length);
+      
+      // Apply sorting
+      if (sort === 'priceLow') {
+        vehiclesData.sort((a, b) => a.price - b.price);
+      } else if (sort === 'priceHigh') {
+        vehiclesData.sort((a, b) => b.price - a.price);
+      }
+      
+      setVehicles(vehiclesData);
+      console.log(' Set vehicles in state:', vehiclesData.length);
+      
+      // Log the search
+      const searchQuery = filters.search || filters.brand || 'browse vehicles';
+      logSearch(searchQuery, vehiclesData.length);
+      
+      // Fetch featured suggestions if there's a search query
+      if (filters.search) {
+        fetchSuggestedVehicles(filters.search);
+      } else {
+        setSuggestedVehicles([]);
+      }
     } catch (err) {
-      console.error('Failed to fetch vehicles:', err);
+      console.error(' Failed to fetch vehicles:', err);
+      console.error('Error details:', err.response?.data);
     }
     setLoading(false);
   };
 
+  const fetchSuggestedVehicles = async (searchQuery) => {
+    setLoadingSuggestions(true);
+    try {
+      // Get vehicles from current results to understand search context
+      if (vehicles.length === 0) {
+        setSuggestedVehicles([]);
+        setLoadingSuggestions(false);
+        return;
+      }
+
+      // Extract brand/model and vehicle type from search query for filtering
+      const searchLower = searchQuery.toLowerCase();
+      
+      // Calculate average price and get vehicle type from current results
+      const avgPrice = vehicles.length > 0 
+        ? vehicles.reduce((sum, v) => sum + v.price, 0) / vehicles.length 
+        : 0;
+      const priceRange = 0.3; // 30% variance
+      
+      // Get the vehicle type from the first search result
+      const searchVehicleType = vehicles[0]?.bodyType || vehicles[0]?.vehicleType || '';
+
+      // Get similar vehicles with different brands/models but same type
+      // Fetch from a larger pool and filter
+      const params = new URLSearchParams();
+      // Use price-based filtering to get similar vehicles
+      params.append('minPrice', Math.max(0, Math.floor(avgPrice * (1 - priceRange))));
+      params.append('maxPrice', Math.ceil(avgPrice * (1 + priceRange)));
+      // Filter by same vehicle type
+      if (searchVehicleType) {
+        params.append('bodyType', searchVehicleType);
+      }
+
+      
+      const { data } = await api.get(`/vehicles?${params.toString()}`);
+      let allVehicles = data.data || [];
+      
+      // Filter to remove:
+      // 1. Exact matches from main results
+      // 2. Same brand as search query
+      // 3. Same model keyword
+      const mainVehicleIds = vehicles.map(v => v._id);
+      const searchBrand = vehicles[0]?.brand?.toLowerCase() || '';
+      
+      let suggestions = allVehicles.filter(v => {
+        // Don't include main results
+        if (mainVehicleIds.includes(v._id)) return false;
+        
+        // Ensure same vehicle type
+        if (searchVehicleType && (v.bodyType || v.vehicleType) !== searchVehicleType) return false;
+        
+        // Don't include same brand as the searched vehicle
+        if (v.brand?.toLowerCase() === searchBrand) return false;
+        
+        // Don't include exact model keyword matches
+        if (v.model?.toLowerCase().includes(searchBrand)) return false;
+        
+        return true;
+      }).slice(0, 6);
+
+      // If we don't have enough suggestions, get more diverse options (same type)
+      if (suggestions.length < 6) {
+        const diverseParams = new URLSearchParams();
+        // Filter by same vehicle type to get more same-type vehicles
+        if (searchVehicleType) {
+          diverseParams.append('bodyType', searchVehicleType);
+        }
+        
+        const { data: diverseData } = await api.get(`/vehicles?${diverseParams.toString()}`);
+        const diverseVehicles = diverseData.data || [];
+        
+        const additionalSuggestions = diverseVehicles.filter(v => {
+          if (mainVehicleIds.includes(v._id)) return false;
+          if (suggestions.find(s => s._id === v._id)) return false;
+          // Ensure same vehicle type
+          if (searchVehicleType && (v.bodyType || v.vehicleType) !== searchVehicleType) return false;
+          if (v.brand?.toLowerCase() === searchBrand) return false;
+          if (v.model?.toLowerCase().includes(searchBrand)) return false;
+          return true;
+        });
+        
+        suggestions = [...suggestions, ...additionalSuggestions].slice(0, 6);
+      }
+      
+      setSuggestedVehicles(suggestions);
+    } catch (err) {
+      console.error('Failed to fetch suggested vehicles:', err);
+      setSuggestedVehicles([]);
+    }
+    setLoadingSuggestions(false);
+  };
+
+  const fetchApprovedAds = async () => {
+    console.log(' fetchApprovedAds called - setting loadingAds to true');
+    setLoadingAds(true);
+    try {
+      console.log(' Making API call to /api/advertising/approved');
+      const response = await api.get('/advertising/approved');
+      console.log(' API Response received:', response);
+      const { data } = response;
+      console.log(' Response data:', data);
+      console.log(' Data array length:', data?.data?.length);
+      // Filter only Browse Page placement ads and exclude deactivated ads
+      const browseAds = (data?.data || []).filter(ad => ad.placement === 'browse' && ad.status !== 'deactivated');
+      console.log(' Browse Page ads:', browseAds.length);
+      console.log(' Setting approvedAds state to:', browseAds);
+      setApprovedAds(browseAds);
+      console.log(' approvedAds state updated');
+      
+      // Preload the first ad image
+      if (browseAds.length > 0) {
+        await preloadAdImage(browseAds[0]._id);
+      }
+    } catch (err) {
+      console.error(' Failed to fetch approved ads:', err);
+      console.error(' Error message:', err.message);
+      console.error(' Error response:', err.response);
+      setApprovedAds([]);
+    }
+    console.log(' Setting loadingAds to false');
+    setLoadingAds(false);
+  };
+
+  // Fetch lightweight image from new endpoint
+  const preloadAdImage = async (adId) => {
+    try {
+      if (preloadedImages[adId]) {
+        console.log(' Image already preloaded for ad:', adId);
+        return;
+      }
+      
+      console.log('📸 Preloading image for ad:', adId);
+      const response = await api.get(`/advertising/image/${adId}`);
+      const imageData = response.data?.data?.adPhotoBase64;
+      
+      if (imageData) {
+        setPreloadedImages(prev => {
+          // Double-check not already cached to avoid redundant state updates
+          if (prev[adId]) {
+            console.log(' Image already cached, skipping duplicate', adId);
+            return prev;
+          }
+          console.log(' Image preloaded successfully for ad:', adId, `(${(imageData.length / 1024).toFixed(1)}KB)`);
+          return {
+            ...prev,
+            [adId]: imageData
+          };
+        });
+      }
+    } catch (err) {
+      console.error(' Failed to preload image for ad:', adId, err);
+    }
+  };
+
+  // Debug: Log approvedAds and loadingAds whenever they change
+  useEffect(() => {
+    console.log(' DEBUG: approvedAds changed', approvedAds);
+    console.log(' DEBUG: loadingAds changed', loadingAds);
+  }, [approvedAds, loadingAds]);
+
+  // Ad carousel: rotate through ads every 3 seconds
+  useEffect(() => {
+    if (approvedAds.length <= 1) {
+      // No need for carousel with 0 or 1 ad
+      setCurrentAdIndex(0);
+      setCurrentAdImageLoading(false);
+      return;
+    }
+
+    console.log(' Setting up ad carousel - total ads:', approvedAds.length);
+    const interval = setInterval(() => {
+      setCurrentAdIndex((prevIndex) => {
+        const nextIndex = (prevIndex + 1) % approvedAds.length;
+        
+        // Only show loading if image NOT already preloaded
+        const nextAd = approvedAds[nextIndex];
+        if (!preloadedImages[nextAd._id]) {
+          setCurrentAdImageLoading(true);
+        }
+        
+        // Preload the next image after this one
+        const upcomingIndex = (nextIndex + 1) % approvedAds.length;
+        preloadAdImage(approvedAds[upcomingIndex]._id);
+        
+        return nextIndex;
+      });
+    }, 3000); // Change ad every 3 seconds
+
+    return () => {
+      clearInterval(interval);
+      console.log('🎠 Cleaned up ad carousel interval');
+    };
+  }, [approvedAds, preloadedImages]);
+
+  // Preload next ad image when current index changes
+  useEffect(() => {
+    if (approvedAds.length > currentAdIndex) {
+      const currentAd = approvedAds[currentAdIndex];
+      
+      // If image already preloaded, hide loading state immediately
+      if (preloadedImages[currentAd._id]) {
+        console.log('⚡ Image already cached for ad:', currentAd._id);
+        setCurrentAdImageLoading(false);
+      } else {
+        console.log('⏳ Image not cached yet for ad:', currentAd._id);
+      }
+      
+      // Preload images for current and next ad
+      preloadAdImage(currentAd._id);
+      if (approvedAds.length > 1) {
+        const nextIndex = (currentAdIndex + 1) % approvedAds.length;
+        preloadAdImage(approvedAds[nextIndex]._id);
+      }
+    }
+  }, [currentAdIndex, approvedAds, preloadedImages]);
+
   const handleFilterChange = (name, value) => {
-    setFilters({ ...filters, [name]: value, page: 1 });
+    setFilters({ ...filters, [name]: value });
     
     const newParams = new URLSearchParams(searchParams);
     if (value) {
@@ -95,21 +444,35 @@ const VehiclesPage = () => {
     } else {
       newParams.delete(name);
     }
-    newParams.set('page', '1');
+    setSearchParams(newParams);
+    
+    // Scroll to results after a short delay to ensure filter is applied
+    setTimeout(() => {
+      if (vehiclesResultRef.current) {
+        vehiclesResultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 100);
+  };
+
+  const handleSortChange = (value) => {
+    setSort(value);
+    
+    const newParams = new URLSearchParams(searchParams);
+    if (value) {
+      newParams.set('sort', value);
+    } else {
+      newParams.delete('sort');
+    }
     setSearchParams(newParams);
   };
 
-  const handlePageChange = (event, value) => {
-    setFilters({ ...filters, page: value });
-    searchParams.set('page', value);
-    setSearchParams(searchParams);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+
 
   const clearFilters = () => {
     setFilters({
       search: '',
       brand: '',
+      vehicleType: '',
       fuelType: '',
       transmission: '',
       condition: '',
@@ -118,6 +481,39 @@ const VehiclesPage = () => {
       page: 1,
     });
     setSearchParams({});
+  };
+
+  const handleVehicleClick = async (vehicleId) => {
+    try {
+      // Log the vehicle view
+      await api.post('/search/log-vehicle', { vehicleId });
+    } catch (err) {
+      console.error('Failed to log vehicle click:', err);
+    }
+  };
+
+  // Check if there's an active search filter
+  const hasActiveFilter = filters.search || filters.brand || filters.fuelType || filters.transmission || filters.condition || (filters.minPrice > 0 || filters.maxPrice < 50000000);
+
+  const handleDeleteVehicle = (vehicle) => {
+    setVehicleToDelete(vehicle);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!vehicleToDelete) return;
+    
+    try {
+      await api.delete(`/vehicles/${vehicleToDelete._id}`);
+      // Remove vehicle from list
+      setVehicles(vehicles.filter(v => v._id !== vehicleToDelete._id));
+      setDeleteConfirmOpen(false);
+      setVehicleToDelete(null);
+      alert('Vehicle deleted successfully');
+    } catch (err) {
+      console.error('Failed to delete vehicle:', err);
+      alert('Failed to delete vehicle: ' + (err.response?.data?.message || err.message));
+    }
   };
 
   const formatPrice = (price) => {
@@ -133,7 +529,7 @@ const VehiclesPage = () => {
       <Container maxWidth="lg">
         {/* Header */}
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
+          <Typography variant="h3" fontWeight="bold" gutterBottom sx={{ color: '#0c0c0c' }}>
             Browse Vehicles
           </Typography>
           <Typography variant="body1" color="text.secondary">
@@ -141,10 +537,48 @@ const VehiclesPage = () => {
           </Typography>
         </Box>
 
+        {/* Visual Filter - Vehicle Types */}
+        <Paper elevation={0} sx={{ p: 1.5, mb: 2, border: '1px solid', borderColor: 'grey.200', bgcolor: 'white' }}>
+          <Typography variant="body1" fontWeight="bold" sx={{ mb: 1.5 }}>
+            Discover Vehicles by Type
+          </Typography>
+          <Grid container spacing={1}>
+            {vehicleTypes.map((type) => (
+              <Grid item xs={6} sm={4} md={3} lg={2} key={type}>
+                <Card
+                  onClick={() => handleFilterChange('vehicleType', filters.vehicleType === type ? '' : type)}
+                  sx={{
+                    cursor: 'pointer',
+                    border: filters.vehicleType === type ? '2px solid' : '1px solid',
+                    borderColor: filters.vehicleType === type ? 'primary.main' : 'grey.300',
+                    bgcolor: filters.vehicleType === type ? 'primary.50' : 'white',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      bgcolor: filters.vehicleType === type ? 'primary.50' : 'grey.50',
+                      borderColor: 'primary.main',
+                      transform: 'translateY(-2px)',
+                      boxShadow: 2,
+                    },
+                    textAlign: 'center',
+                    p: 1,
+                  }}
+                >
+                  <Box sx={{ fontSize: 24, mb: 0.5 }}>
+                    {vehicleTypeIcons[type]}
+                  </Box>
+                  <Typography variant="caption" fontWeight={filters.vehicleType === type ? 'bold' : 'normal'}>
+                    {type}
+                  </Typography>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Paper>
+
         {/* Search Bar */}
         <Paper elevation={0} sx={{ p: 2, mb: 3, border: '1px solid', borderColor: 'grey.200' }}>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={8}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 placeholder="Search by brand, model, or keywords..."
@@ -159,7 +593,22 @@ const VehiclesPage = () => {
                 }}
               />
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={4} md={2}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Sort By</InputLabel>
+                <Select
+                  value={sort}
+                  label="Sort By"
+                  onChange={(e) => handleSortChange(e.target.value)}
+                >
+                  <MenuItem value="">Default</MenuItem>
+                  <MenuItem value="priceLow"> Price: Low to High</MenuItem>
+                  <MenuItem value="priceHigh"> Price: High to Low</MenuItem>
+                  <MenuItem value="yearNewest"> Year: Newest First</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={4} md={2}>
               <Button
                 fullWidth
                 variant="outlined"
@@ -169,7 +618,7 @@ const VehiclesPage = () => {
                 Filters
               </Button>
             </Grid>
-            <Grid item xs={6} md={2}>
+            <Grid item xs={4} md={2}>
               <Button fullWidth variant="text" onClick={clearFilters}>
                 Clear All
               </Button>
@@ -190,6 +639,21 @@ const VehiclesPage = () => {
                     <MenuItem value="">All Brands</MenuItem>
                     {brands.map((b) => (
                       <MenuItem key={b} value={b}>{b}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={6} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Vehicle Type</InputLabel>
+                  <Select
+                    value={filters.vehicleType}
+                    label="Vehicle Type"
+                    onChange={(e) => handleFilterChange('vehicleType', e.target.value)}
+                  >
+                    <MenuItem value="">All Types</MenuItem>
+                    {vehicleTypes.map((v) => (
+                      <MenuItem key={v} value={v}>{v}</MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -244,10 +708,13 @@ const VehiclesPage = () => {
         </Paper>
 
         {/* Active Filters */}
-        {(filters.brand || filters.fuelType || filters.transmission || filters.condition) && (
+        {(filters.brand || filters.vehicleType || filters.fuelType || filters.transmission || filters.condition) && (
           <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {filters.brand && (
               <Chip label={filters.brand} onDelete={() => handleFilterChange('brand', '')} />
+            )}
+            {filters.vehicleType && (
+              <Chip label={filters.vehicleType} onDelete={() => handleFilterChange('vehicleType', '')} />
             )}
             {filters.fuelType && (
               <Chip label={filters.fuelType} onDelete={() => handleFilterChange('fuelType', '')} />
@@ -271,73 +738,118 @@ const VehiclesPage = () => {
             <Typography variant="h6" color="text.secondary">
               No vehicles found
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               Try adjusting your filters
             </Typography>
-            <Button variant="outlined" onClick={clearFilters}>
-              Clear Filters
-            </Button>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button variant="outlined" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={() => setNotifyModalOpen(true)}
+              >
+                📧 Notify When Available
+              </Button>
+            </Box>
           </Box>
         ) : (
           <>
-            {/* Vehicle Grid */}
             <Grid container spacing={3}>
-              {vehicles.map((vehicle) => (
-                <Grid item xs={12} sm={6} md={4} key={vehicle._id}>
+              {/* Middle/Left Column - Vehicle Grid */}
+              <Grid item xs={12} md={12} lg={filters.search ? 8 : 8.5}>
+                {/* Vehicle Grid */}
+                <Grid container spacing={3} ref={vehiclesResultRef} sx={{ justifyContent: 'flex-start' }}>
+                  {vehicles.map((vehicle) => (
+                    <Grid 
+                      item 
+                      xs={12} 
+                      sm={6} 
+                      md={filters.search ? 4 : 4}
+                      lg={filters.search ? 4 : 4}
+                      key={vehicle._id}
+                >
                   <Card
                     sx={{
                       height: '100%',
                       display: 'flex',
                       flexDirection: 'column',
-                      transition: 'transform 0.2s',
-                      '&:hover': { transform: 'translateY(-4px)' },
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      outline: '2px solid #000000',
+                      outlineOffset: '-2px',
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                      '&:hover': {
+                        transform: 'translateY(-8px)',
+                        boxShadow: '0 12px 24px rgba(25,118,210,0.2)',
+                      },
+                      position: 'relative',
                     }}
                   >
-                    <CardMedia
-                      component="img"
-                      height="200"
-                      image={vehicle.images?.[0] || '/placeholder-car.jpg'}
+                    <ListImage
+                      src={getImageUrl(vehicle.images?.[0])}
                       alt={`${vehicle.brand} ${vehicle.model}`}
-                      sx={{ objectFit: 'cover' }}
+                      sx={{
+                        height: 280,
+                        width: '100%',
+                        objectFit: 'cover',
+                      }}
                     />
-                    <CardContent sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Chip
-                          label={vehicle.condition}
-                          size="small"
-                          color={vehicle.condition === 'New' ? 'success' : 'default'}
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          {vehicle.fuelType}
-                        </Typography>
+                    <CardContent sx={{ flex: 1, pb: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1, gap: 1 }}>
+                        <Box>
+                          <Typography variant="h6" fontWeight="bold" gutterBottom>
+                            {vehicle.brand} {vehicle.model}
+                          </Typography>
+                          <Typography variant="h6" color="primary.main" fontWeight="bold">
+                            {formatPrice(vehicle.price)}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Typography variant="h6" fontWeight="bold" gutterBottom>
-                        {vehicle.brand} {vehicle.model}
-                      </Typography>
-                      <Typography variant="h6" color="primary.main" fontWeight="bold">
-                        {formatPrice(vehicle.price)}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                      <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <CalendarToday fontSize="small" color="action" />
-                          <Typography variant="body2" color="text.secondary">
+                          <CalendarToday fontSize="small" color="primary" />
+                          <Typography variant="body2" fontWeight="500">
                             {vehicle.year}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Speed fontSize="small" color="action" />
-                          <Typography variant="body2" color="text.secondary">
+                          <Speed fontSize="small" color="primary" />
+                          <Typography variant="body2" fontWeight="500">
                             {vehicle.mileage?.toLocaleString()} km
                           </Typography>
                         </Box>
                       </Box>
+
+                      {/* Location */}
+                      {vehicle.location && (
+                        <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
+                          <Typography variant="caption" color="text.secondary">
+                            📍 Location
+                          </Typography>
+                          <Typography variant="body2" fontWeight="600" color="#1976d2">
+                            {typeof vehicle.location === 'string' 
+                              ? vehicle.location 
+                              : `${vehicle.location.city || 'City'}, ${vehicle.location.country || 'Country'}`}
+                          </Typography>
+                        </Box>
+                      )}
                     </CardContent>
-                    <CardActions sx={{ p: 2, pt: 0 }}>
+                    <CardActions sx={{ 
+                      p: 2, 
+                      pt: 0, 
+                      display: 'flex', 
+                      justifyContent: 'center',
+                    }}>
                       <Button
                         component={Link}
                         to={`/vehicles/${vehicle._id}`}
+                        onClick={() => handleVehicleClick(vehicle._id)}
                         variant="contained"
                         fullWidth
+                        size="small"
+                        sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#333' } }}
                       >
                         View Details
                       </Button>
@@ -345,22 +857,332 @@ const VehiclesPage = () => {
                   </Card>
                 </Grid>
               ))}
+                </Grid>
+              </Grid>
+
+              {/* Right Column - Ads Section (Only show when NOT searching) */}
+              {!filters.search && (
+              <Grid item xs={12} md={12} lg={3.5}>
+                {/* SECTION 1: Ad Banner Card */}
+                <Card 
+                  sx={{ 
+                    position: 'sticky', 
+                    top: 20,
+                    overflow: 'hidden',
+                    border: '2px solid #9e9e9e',
+                    m: 0
+                  }}
+                >
+                  <CardContent sx={{ p: 0, m: 0, '&:last-child': { pb: 0 } }}>
+                    {/* Ad Banner */}
+                    <Box 
+                      sx={{ 
+                        p: 2.5, 
+                        bgcolor: '#000000', 
+                        textAlign: 'center',
+                        m: 0,
+                        width: '100%'
+                      }}
+                    >
+                      <Typography variant="h4" sx={{ fontWeight: 700, mb: 1, color: 'yellow' }}>
+                        Advertise Your Commercial Here
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 1.5, color: 'white' }}>
+                        Reach thousands of users daily
+                      </Typography>
+                      <Button 
+                        fullWidth 
+                        variant="contained" 
+                        sx={{ 
+                          bgcolor: '#424242', 
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: '#FFD700',
+                            color: '#000000'
+                          }
+                        }}
+                        size="small"
+                        onClick={() => navigate('/advertise-packages')}
+                      >
+                        Advertise Today
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+
+                {/* SECTION 2: Ad Carousel Card */}
+                <Card 
+                  sx={{ 
+                    position: 'sticky', 
+                    top: 280,
+                    overflow: 'hidden',
+                    border: '2px solid #9e9e9e',
+                    mt: 2,
+                    m: 0
+                  }}
+                >
+                  <CardContent sx={{ p: 0, m: 0, '&:last-child': { pb: 0 } }}>
+                    {/* Ad Spaces Below */}
+                    {loadingAds ? (
+                      <Box 
+                        sx={{ 
+                          p: 0, 
+                          bgcolor: '#030202', 
+                          textAlign: 'center',
+                          minHeight: 480,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          width: '100%'
+                        }}
+                      >
+                        <CircularProgress />
+                      </Box>
+                    ) : approvedAds.length > 0 ? (
+                      <Box 
+                        sx={{ 
+                          p: 0, 
+                          minHeight: 320,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          overflow: 'hidden',
+                          width: '100%',
+                          position: 'relative',
+                          bgcolor: '#f0f0f0'
+                        }}
+                      >
+                        {/* Current Ad Image - Always visible */}
+                        {approvedAds.length > 0 && approvedAds[currentAdIndex] && (
+                          <Box
+                            component="img"
+                            src={preloadedImages[approvedAds[currentAdIndex]._id] || approvedAds[currentAdIndex].adPhotoBase64}
+                            alt={approvedAds[currentAdIndex].company}
+                            onLoad={() => {
+                              console.log(' Carousel image loaded and rendered');
+                              setCurrentAdImageLoading(false);
+                            }}
+                            sx={{
+                              width: '100%',
+                              height: '100%',
+                              minHeight: 320,
+                              objectFit: 'cover',
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s ease, opacity 0.3s ease',
+                              opacity: currentAdImageLoading ? 0.6 : 1,
+                              '&:hover': {
+                                transform: 'scale(1.02)'
+                              }
+                            }}
+                            onClick={() => navigate('/advertise-packages', { state: { companyName: approvedAds[currentAdIndex].company } })}
+                          />
+                        )}
+                        
+                        {/* Loading Skeleton - Only show if image not cached and still loading */}
+                        {currentAdImageLoading && !preloadedImages[approvedAds[currentAdIndex]?._id] && (
+                          <Box
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              minHeight: 320,
+                              bgcolor: '#e0e0e0',
+                              zIndex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              animation: 'pulse 1.5s ease-in-out infinite',
+                              '@keyframes pulse': {
+                                '0%': { opacity: 1 },
+                                '50%': { opacity: 0.7 },
+                                '100%': { opacity: 1 }
+                              }
+                            }}
+                          >
+                            <CircularProgress size={40} />
+                          </Box>
+                        )}
+                      </Box>
+                    ) : (
+                      <Box 
+                        sx={{ 
+                          p: 0, 
+                          textAlign: 'center',
+                          minHeight: 480,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexDirection: 'column',
+                          width: '100%'
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ color: '#999', fontWeight: 500 }}>
+                          Ad Space
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#bbb', mt: 0.5 }}>
+                          300x480 px
+                        </Typography>
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+              )}
+              {filters.search && (
+              <Grid item xs={12} md={12} lg={4}>
+                <Card 
+                  sx={{ 
+                    position: 'sticky', 
+                    top: 20,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <CardContent sx={{ p: 2, pb: 2 }}>
+                    <VehicleMap vehicles={vehicles} />
+                  </CardContent>
+                </Card>
+              </Grid>
+              )}
             </Grid>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                <Pagination
-                  count={totalPages}
-                  page={filters.page}
-                  onChange={handlePageChange}
-                  color="primary"
-                  size="large"
-                />
+
+            {/* Featured Suggestions Section */}
+            {filters.search && suggestedVehicles.length > 0 && (
+              <Box sx={{ mt: 6, mb: 4 }}>
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="h5" fontWeight="bold" gutterBottom>
+                    ✨ Featured Suggestions Related to "{filters.search}"
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    You might also be interested in these featured vehicles
+                  </Typography>
+                </Box>
+
+                {loadingSuggestions ? (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <Grid container spacing={2}>
+                    {suggestedVehicles.map((vehicle) => (
+                      <Grid item xs={12} sm={6} md={4} lg={2} key={vehicle._id}>
+                        <Card
+                          sx={{
+                            height: '100%',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            transition: 'all 0.3s ease',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                            border: '2px solid',
+                            borderColor: 'primary.light',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: 'white',
+                            '&:hover': {
+                              transform: 'translateY(-8px)',
+                              boxShadow: '0 8px 16px rgba(102, 126, 234, 0.4)',
+                            },
+                          }}
+                        >
+                          <ListImage
+                            src={getImageUrl(vehicle.images?.[0])}
+                            alt={`${vehicle.brand} ${vehicle.model}`}
+                            sx={{
+                              height: 140,
+                              objectFit: 'cover',
+                            }}
+                          />
+                          <CardContent sx={{ flexGrow: 1, p: 1.5 }}>
+                            <Box sx={{ display: 'flex', gap: 0.5, mb: 1, alignItems: 'center' }}>
+                              <Chip
+                                label={vehicle.condition}
+                                size="small"
+                                sx={{
+                                  bgcolor: vehicle.condition === 'New' ? 'success.main' : 'warning.main',
+                                  color: 'white',
+                                  fontWeight: 'bold',
+                                }}
+                              />
+                              <Chip
+                                label="Featured"
+                                size="small"
+                                sx={{
+                                  bgcolor: 'rgba(255,255,255,0.3)',
+                                  color: 'white',
+                                  fontWeight: 'bold',
+                                  border: '1px solid white',
+                                }}
+                                icon={<Typography sx={{ fontSize: '12px' }}>⭐</Typography>}
+                              />
+                            </Box>
+                            <Typography variant="subtitle2" fontWeight="bold" noWrap>
+                              {vehicle.brand} {vehicle.model}
+                            </Typography>
+                            <Typography variant="subtitle1" fontWeight="bold" sx={{ mt: 0.5 }}>
+                              {formatPrice(vehicle.price)}
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1, mt: 1, fontSize: '12px' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
+                                <CalendarToday fontSize="small" />
+                                {vehicle.year}
+                              </Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3 }}>
+                                <Speed fontSize="small" />
+                                {vehicle.mileage?.toLocaleString()} km
+                              </Box>
+                            </Box>
+                          </CardContent>
+                          <CardActions sx={{ p: 1.5, pt: 1 }}>
+                            <Button
+                              component={Link}
+                              to={`/vehicles/${vehicle._id}`}
+                              onClick={() => handleVehicleClick(vehicle._id)}
+                              variant="contained"
+                              size="small"
+                              fullWidth
+                              sx={{
+                                bgcolor: 'white',
+                                color: 'primary.main',
+                                fontWeight: 'bold',
+                                '&:hover': { bgcolor: 'grey.100' },
+                              }}
+                            >
+                              View
+                            </Button>
+                          </CardActions>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                )}
               </Box>
             )}
           </>
         )}
+
+        {/* Notification Modal */}
+        <NotifyModal
+          open={notifyModalOpen}
+          onClose={() => setNotifyModalOpen(false)}
+          filters={filters}
+        />
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+          <DialogTitle>Delete Vehicle</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to delete <strong>{vehicleToDelete?.brand} {vehicleToDelete?.model}</strong>? This action cannot be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={confirmDelete} color="error" variant="contained">
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Container>
     </Box>
   );

@@ -9,7 +9,7 @@ const fs = require('fs');
 
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, '../uploads');
-const subdirs = ['vehicles', 'ids', 'selfies', 'profiles', 'breakdowns'];
+const subdirs = ['vehicles', 'ids', 'selfies', 'profiles', 'breakdowns', 'bank_slips'];
 
 subdirs.forEach(dir => {
   const dirPath = path.join(uploadsDir, dir);
@@ -21,42 +21,82 @@ subdirs.forEach(dir => {
 // Storage configuration
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    let folder = 'uploads/';
+    let folderName = 'vehicles';
     
     // Determine folder based on fieldname or route
     if (file.fieldname === 'idFront' || file.fieldname === 'idBack' || file.fieldname === 'idImage' || file.fieldname === 'idDocument') {
-      folder = 'uploads/ids/';
+      folderName = 'ids';
     } else if (file.fieldname === 'selfie') {
-      folder = 'uploads/selfies/';
+      folderName = 'selfies';
     } else if (file.fieldname === 'profileImage') {
-      folder = 'uploads/profiles/';
+      folderName = 'profiles';
     } else if (file.fieldname === 'vehicleImages' || file.fieldname === 'images') {
-      folder = 'uploads/vehicles/';
+      folderName = 'vehicles';
     } else if (file.fieldname === 'breakdownImages') {
-      folder = 'uploads/breakdowns/';
+      folderName = 'breakdowns';
+    } else if (file.fieldname === 'bankSlip' || file.fieldname === 'cardProof') {
+      folderName = 'bank_slips';
     }
     
-    cb(null, folder);
+    // Use absolute path
+    const dirPath = path.join(uploadsDir, folderName);
+    console.log(`📂 [MULTER DEST] Field: ${file.fieldname}, Folder: ${folderName}, Path: ${dirPath}`);
+    cb(null, dirPath);
   },
   filename: function (req, file, cb) {
     // Generate unique filename
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+    const filename = file.fieldname + '-' + uniqueSuffix + ext;
+    console.log(`📝 [MULTER FILE] Generated filename: ${filename}`);
+    cb(null, filename);
   }
 });
 
 // File filter
 const fileFilter = (req, file, cb) => {
-  // Allowed file types
-  const allowedTypes = /jpeg|jpg|png|gif|webp/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
+  // Allowed file types - images and PDFs for bank slip uploads
+  const allowedImageExtensions = ['.jpeg', '.jpg', '.png', '.gif', '.webp'];
+  const allowedDocExtensions = ['.pdf'];
   
-  if (extname && mimetype) {
-    cb(null, true);
+  const extname = path.extname(file.originalname).toLowerCase();
+  const mimetype = file.mimetype.toLowerCase();
+  
+  console.log(`📁 [FILEFILTER] Processing file: ${file.fieldname}`);
+  console.log(`  - originalName: ${file.originalname}`);
+  console.log(`  - extension: ${extname}`);
+  console.log(`  - mimetype: ${mimetype}`);
+  
+  // Check if it's for bank slip or card proof upload (allow both images and PDFs)
+  if (file.fieldname === 'bankSlip' || file.fieldname === 'cardProof') {
+    const isAllowedImage = allowedImageExtensions.includes(extname) && mimetype.startsWith('image/');
+    const isAllowedDoc = allowedDocExtensions.includes(extname) && mimetype === 'application/pdf';
+    
+    console.log(`  - isAllowedImage: ${isAllowedImage} (for ${file.fieldname})`);
+    console.log(`  - isAllowedDoc: ${isAllowedDoc} (for ${file.fieldname})`);
+    
+    if (isAllowedImage || isAllowedDoc) {
+      console.log(`✅ [FILEFILTER] File accepted: ${file.fieldname}`);
+      cb(null, true);
+    } else {
+      const error = 'For payment uploads, only image files (JPEG, PNG, GIF) or PDF documents are allowed';
+      console.log(`❌ [FILEFILTER] File rejected: ${error}`);
+      cb(new Error(error), false);
+    }
   } else {
-    cb(new Error('Only image files (jpeg, jpg, png, gif, webp) are allowed'), false);
+    // For other uploads, only allow images
+    const isImage = allowedImageExtensions.includes(extname) && mimetype.startsWith('image/');
+    
+    console.log(`  - isImage: ${isImage} (for ${file.fieldname})`);
+    
+    if (isImage) {
+      console.log(`✅ [FILEFILTER] File accepted: ${file.fieldname}`);
+      cb(null, true);
+    } else {
+      const error = 'Only image files (JPEG, JPG, PNG, GIF, WebP) are allowed';
+      console.log(`❌ [FILEFILTER] File rejected: ${error}`);
+      cb(new Error(error), false);
+    }
   }
 };
 

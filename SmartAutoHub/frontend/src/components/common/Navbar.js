@@ -88,9 +88,19 @@ const Navbar = () => {
   const drawer = (
     <Box sx={{ width: 260, pt: 2 }}>
       <Box sx={{ px: 2, pb: 2 }}>
-        <Typography variant="h6" fontWeight="bold" color="primary">
-          SmartAuto Hub
-        </Typography>
+        <Box
+          component="img"
+          src="/images/takgaala-logo.png"
+          alt="TakGaala"
+          sx={{
+            width: '100%',
+            maxWidth: 180,
+            objectFit: 'contain',
+          }}
+          onError={(e) => {
+            e.target.style.display = 'none';
+          }}
+        />
       </Box>
       <Divider />
       <List>
@@ -122,6 +132,17 @@ const Navbar = () => {
             <ListItemText primary={item.label} />
           </ListItem>
         ))}
+        {isAuthenticated && (
+          <ListItem 
+            button 
+            component={Link} 
+            to="/add-vehicle"
+            onClick={handleDrawerToggle}
+          >
+            <ListItemIcon><DirectionsCar /></ListItemIcon>
+            <ListItemText primary="Sell Vehicle" sx={{ fontWeight: 600 }} />
+          </ListItem>
+        )}
         {isAuthenticated && (user?.role === 'seller' || user?.role === 'admin1') && 
           sellerNavItems.map((item) => (
             <ListItem 
@@ -193,22 +214,32 @@ const Navbar = () => {
                 <MenuIcon />
               </IconButton>
             )}
-            <Typography
-              variant="h6"
+            <Box
               component={Link}
               to="/"
               sx={{
-                fontWeight: 'bold',
-                color: 'primary.main',
-                textDecoration: 'none',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1,
+                textDecoration: 'none',
+                height: 50,
+                cursor: 'pointer',
               }}
             >
-              <DirectionsCar />
-              SmartAuto Hub
-            </Typography>
+              <Box
+                component="img"
+                src="/images/takgaala-logo.png"
+                alt="TakGaala"
+                sx={{
+                  height: '100%',
+                  maxWidth: 250,
+                  objectFit: 'contain',
+                }}
+                onError={(e) => {
+                  // Fallback if image not found
+                  e.target.style.display = 'none';
+                }}
+              />
+            </Box>
           </Box>
 
           {/* Desktop Navigation */}
@@ -236,6 +267,17 @@ const Navbar = () => {
                   {item.label}
                 </Button>
               ))}
+              {isAuthenticated && (
+                <Button
+                  component={Link}
+                  to="/add-vehicle"
+                  color="inherit"
+                  startIcon={<DirectionsCar />}
+                  sx={{ fontWeight: 600 }}
+                >
+                  Sell Vehicle
+                </Button>
+              )}
             </Box>
           )}
 

@@ -1,0 +1,128 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 550px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.locationBtn {
+  padding: 6px 12px;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.3);
+}
+
+.locationBtn:hover:not(:disabled) {
+  background: #2563eb;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.locationBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.map {
+  flex: 1;
+  min-height: 500px;
+  height: 500px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  gap: 12px;
+  color: #94a3b8;
+  text-align: center;
+  font-size: 13px;
+}
+
+.empty p {
+  margin: 0;
+  color: #94a3b8;
+}
+
+.cityPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0;
+  font-size: 12px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e0;
+  border-radius: 20px;
+  padding: 6px 12px;
+  color: #334155;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.pill:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.pill b {
+  color: #e63946;
+  font-weight: 600;
+}
+
+.distLabel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #e63946;
+  color: white;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* Leaflet tooltip customization */
+:global(.slm-tooltip) {
+  background: rgba(30, 41, 59, 0.95) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  color: white !important;
+  border: none !important;
+}
+
+:global(.slm-tooltip.leaflet-tooltip-top::before) {
+  border-top-color: rgba(30, 41, 59, 0.95) !important;
+}

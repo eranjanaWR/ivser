@@ -61,6 +61,13 @@ router.get(
   adminController.getDashboard
 );
 
+// Migrate vehicle status (for updates/maintenance)
+router.post(
+  '/migrate-vehicle-status',
+  authorize('admin1'),
+  adminController.migrateVehicleStatus
+);
+
 // Update user status (activate/deactivate)
 router.put(
   '/users/:id/status',
@@ -177,6 +184,24 @@ router.put(
   authorize('admin2', 'admin1'),
   validateObjectId(),
   adminController.rejectManualID
+);
+
+// ==================== ADVERTISING REQUESTS (Admin1) ====================
+
+// Get all advertising requests
+router.get(
+  '/advertising-requests',
+  authorize('admin1'),
+  validatePagination,
+  adminController.getAllAdvertisingRequests
+);
+
+// Update advertising request status (approve/reject)
+router.put(
+  '/advertising-requests/:id/status',
+  authorize('admin1'),
+  validateObjectId(),
+  adminController.updateAdvertisingRequestStatus
 );
 
 // ==================== SHARED ROUTES ====================
