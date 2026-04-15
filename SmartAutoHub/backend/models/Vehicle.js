@@ -104,9 +104,10 @@ const vehicleSchema = new mongoose.Schema({
     trim: true
   }],
   
-  // Images (URLs or paths)
+  // Images (References to Image documents in database)
   images: [{
-    type: String
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Image'
   }],
   
   // VIN Number (optional)
@@ -139,8 +140,8 @@ const vehicleSchema = new mongoose.Schema({
   // Status
   status: {
     type: String,
-    enum: ['available', 'pending', 'sold', 'removed'],
-    default: 'available'
+    enum: ['active', 'inactive', 'pending', 'sold', 'removed'],
+    default: 'active'
   },
   
   // Views counter

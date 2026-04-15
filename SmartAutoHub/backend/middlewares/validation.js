@@ -251,7 +251,7 @@ const validatePagination = [
   
   query('limit')
     .optional()
-    .isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+    .isInt({ min: 1, max: 10000 }).withMessage('Limit must be between 1 and 10000'),
   
   handleValidationErrors
 ];

@@ -33,6 +33,7 @@ const transmissions = ['Manual', 'Automatic'];
 const conditions = ['New', 'Used'];
 const colors = ['White', 'Black', 'Silver', 'Gray', 'Red', 'Blue', 'Green', 'Yellow', 'Brown', 'Beige'];
 
+
 const AddVehiclePage = () => {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
@@ -546,6 +547,16 @@ const AddVehiclePage = () => {
                   <Button
                     variant="outlined"
                     onClick={() => navigate('/')}
+                    sx={{ 
+                      color: '#efe8e8',
+                      borderColor: '#080808',
+                      backgroundColor: '#ea1b1b',
+                      fontWeight: 600,
+                      '&:hover': {
+                        borderColor: '#080808',
+                        backgroundColor: '#0a0a0a',
+                      }
+                    }}
                   >
                     Cancel
                   </Button>
@@ -553,7 +564,15 @@ const AddVehiclePage = () => {
                     variant="contained"
                     type="submit"
                     disabled={loading}
-                    sx={{ minWidth: 120 }}
+                    sx={{ 
+                      minWidth: 120,
+                      backgroundColor: '#1976d2',
+                      color: '#ffffff',
+                      fontWeight: 600,
+                      '&:hover': {
+                        backgroundColor: '#0a0a0b',
+                      }
+                    }}
                   >
                     {loading ? <CircularProgress size={24} /> : 'List Vehicle'}
                   </Button>

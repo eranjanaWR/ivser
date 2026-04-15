@@ -463,10 +463,10 @@ const RepairmanTracker = ({
       {breakdown?.finalCost && currentStatus === 'completed' && (
         <Box sx={{ p: 2, bgcolor: 'success.lighter', borderTop: '1px solid', borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="body2" color="success.dark">
+            <Typography variant="body2" color="success.main">
               Final Cost
             </Typography>
-            <Typography variant="h5" fontWeight="bold" color="success.dark">
+            <Typography variant="h5" fontWeight="bold" color="success.main">
               Rs. {breakdown.finalCost.toLocaleString()}
             </Typography>
           </Box>

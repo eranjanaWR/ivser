@@ -42,11 +42,14 @@ import {
   Edit,
   Delete,
   CompareArrows,
+  Favorite,
+  FavoriteBorder,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import EditVehicleModal from '../components/EditVehicleModal';
 import { getImageUrl } from '../utils/imageUrl';
+import { getWatermarkedImage } from '../utils/watermark';
 
 const VehicleDetailPage = () => {
   const { id } = useParams();
@@ -57,6 +60,10 @@ const VehicleDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentImage, setCurrentImage] = useState(0);
+  const [watermarkedImageUrl, setWatermarkedImageUrl] = useState(null);
+  const [watermarkLoading, setWatermarkLoading] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savingWishlist, setSavingWishlist] = useState(false);
   
   // Test drive dialog
   const [testDriveOpen, setTestDriveOpen] = useState(false);
@@ -75,11 +82,38 @@ const VehicleDetailPage = () => {
     fetchVehicle();
   }, [id]);
 
+  // Apply watermark to current image
+  useEffect(() => {
+    if (vehicle && vehicle.images && vehicle.images[currentImage]) {
+      setWatermarkLoading(true);
+      const originalImageUrl = getImageUrl(vehicle.images[currentImage]);
+      getWatermarkedImage(originalImageUrl)
+        .then(watermarkedUrl => {
+          setWatermarkedImageUrl(watermarkedUrl);
+          setWatermarkLoading(false);
+        })
+        .catch(error => {
+          console.error('Failed to apply watermark:', error);
+          setWatermarkedImageUrl(originalImageUrl);
+          setWatermarkLoading(false);
+        });
+    }
+  }, [vehicle, currentImage]);
+
   const fetchVehicle = async () => {
     setLoading(true);
     try {
       const { data } = await api.get(`/vehicles/${id}`);
       setVehicle(data.data);
+      
+      // Check if vehicle is saved by current user
+      if (user && data.data.savedBy && Array.isArray(data.data.savedBy)) {
+        const userIdStr = String(user._id || user.id);
+        const isSavedByUser = data.data.savedBy.some(savedUserId => 
+          String(savedUserId) === userIdStr
+        );
+        setIsSaved(isSavedByUser);
+      }
       
       // Log vehicle search
       try {
@@ -155,6 +189,25 @@ const VehicleDetailPage = () => {
     setSubmitting(false);
   };
 
+  const handleToggleSaveVehicle = async () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    setSavingWishlist(true);
+    try {
+      await api.post(`/vehicles/${id}/save`);
+      setIsSaved(!isSaved);
+      setSuccess(isSaved ? 'Removed from wishlist' : 'Added to wishlist');
+      // Fetch updated vehicle to sync savedBy list
+      fetchVehicle();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update wishlist');
+    }
+    setSavingWishlist(false);
+  };
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat('en-LK', {
       style: 'currency',
@@ -211,10 +264,15 @@ const VehicleDetailPage = () => {
           component={Link}
           to="/vehicles"
           startIcon={<ArrowBack />}
-          sx={{ mb: 3 }}
+          sx={{ 
+            mb: 3,
+            color: '#1976d2',
+            fontWeight: 600
+          }}
         >
           Back to Vehicles
         </Button>
+        
 
         {success && (
           <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
@@ -235,9 +293,22 @@ const VehicleDetailPage = () => {
                 borderColor: 'grey.200',
               }}
             >
+              {watermarkLoading && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 10,
+                  }}
+                >
+                  <CircularProgress />
+                </Box>
+              )}
               <Box
                 component="img"
-                src={getImageUrl(vehicle.images?.[currentImage])}
+                src={watermarkedImageUrl || getImageUrl(vehicle.images?.[currentImage])}
                 alt={`${vehicle.brand} ${vehicle.model}`}
                 sx={{
                   width: '100%',
@@ -323,6 +394,73 @@ const VehicleDetailPage = () => {
                     }}
                   />
                 ))}
+              </Box>
+            )}
+
+            {/* Boost Ad Button - Only for Admin and Seller */}
+            {(isAdmin || isOwner) && (
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+                <Button
+                  onClick={() => navigate(`/vehicles/${id}/boost`)}
+                  variant="contained"
+                  sx={{
+                    bgcolor: '#d32f2f',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    px: 3,
+                    py: 1.5,
+                    '&:hover': {
+                      bgcolor: '#0b0b0b',
+                    },
+                  }}
+                >
+                  Boost Ad
+                </Button>
+              </Box>
+            )}
+
+            {/* Action Buttons */}
+            {!isOwner && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 3 }}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  startIcon={<Event />}
+                  onClick={() => setTestDriveOpen(true)}
+                  sx={{
+                    backgroundColor: '#4281da',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    }}
+                >
+                  Book Vehicle for Test Drive
+                </Button>
+
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  startIcon={<CompareArrows />}
+                  onClick={() => navigate(`/compare/${id}`)}
+                >
+                  Compare Vehicles
+                </Button>
+                
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  startIcon={isSaved ? <Favorite /> : <FavoriteBorder />}
+                  onClick={handleToggleSaveVehicle}
+                  disabled={savingWishlist}
+                  sx={{
+                    color: isSaved ? 'error.main' : 'inherit',
+                    borderColor: isSaved ? 'error.main' : 'inherit'
+                  }}
+                >
+                  {isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                </Button>
               </Box>
             )}
           </Grid>
@@ -513,31 +651,9 @@ const VehicleDetailPage = () => {
               )}
 
               <Divider sx={{ my: 2 }} />
-              {/* Actions */}
-              {!isOwner && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    startIcon={<Event />}
-                    onClick={() => setTestDriveOpen(true)}
-                  >
-                    Book Vehicle for Test Drive
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    size="large"
-                    startIcon={<CompareArrows />}
-                    onClick={() => navigate(`/compare/${id}`)}
-                  >
-                    Compare Vehicles
-                  </Button>
-                </Box>
-              )}
-
-              {isOwner && (
+              
+              {/* Owner/Admin Actions (Edit, Delete, Mark as Sold) */}
+              {(isOwner || isAdmin) && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <Box sx={{ display: 'flex', gap: 2 }}>
                     <Button
@@ -550,42 +666,7 @@ const VehicleDetailPage = () => {
                     >
                       Edit Vehicle
                     </Button>
-                    <Button
-                      variant="contained"
-                      color="error"
-                      fullWidth
-                      size="large"
-                      startIcon={<Delete />}
-                      onClick={() => setDeleteConfirmOpen(true)}
-                    >
-                      Delete Vehicle
-                    </Button>
-                  </Box>
-                  <Button
-                    variant="outlined"
-                    color={vehicle.status === 'available' ? 'error' : 'success'}
-                    fullWidth
-                    size="large"
-                    onClick={handleToggleSold}
-                  >
-                    {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
-                  </Button>
-                </Box>
-              )}
-
-              {isAdmin && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Button
-                      variant="contained"
-                      color="info"
-                      fullWidth
-                      size="large"
-                      startIcon={<Edit />}
-                      onClick={() => setEditModalOpen(true)}
-                    >
-                      Edit Vehicle
-                    </Button>
+                    
                     <Button
                       variant="contained"
                       color="error"

@@ -28,17 +28,20 @@ const searchSchema = new mongoose.Schema({
   
   // Metadata
   filters: {
-    search: String,
-    brand: String,
-    model: String,
-    type: String,
-    fuelType: String,
-    transmission: String,
-    minPrice: Number,
-    maxPrice: Number,
-    condition: String,
-    location: String,
-    priceRange: [Number]
+    type: {
+      search: String,
+      brand: String,
+      model: String,
+      type: String,
+      fuelType: String,
+      transmission: String,
+      minPrice: Number,
+      maxPrice: Number,
+      condition: String,
+      location: String,
+      priceRange: [Number]
+    },
+    default: {}
   },
   
   resultsCount: {

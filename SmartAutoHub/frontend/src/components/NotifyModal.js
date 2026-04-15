@@ -52,6 +52,7 @@ const NotifyModal = ({ open, onClose, filters }) => {
         searchCriteria: {
           search: filters.search || '',
           brand: filters.brand || '',
+          vehicleType: filters.vehicleType || '',
           fuelType: filters.fuelType || '',
           transmission: filters.transmission || '',
           condition: filters.condition || '',

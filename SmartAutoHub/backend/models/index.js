@@ -10,6 +10,9 @@ const Breakdown = require('./Breakdown');
 const Search = require('./Search');
 const Notification = require('./Notification');
 const UserAlert = require('./UserAlert');
+const Image = require('./Image');
+const Boost = require('./Boost');
+const Advertising = require('./Advertising');
 
 module.exports = {
   User,
@@ -18,5 +21,8 @@ module.exports = {
   Breakdown,
   Search,
   Notification,
-  UserAlert
+  UserAlert,
+  Image,
+  Boost,
+  Advertising
 };

@@ -20,6 +20,7 @@ import {
   Chip,
   Card,
   CardContent,
+  CardMedia,
   Switch,
   FormControlLabel,
   FormGroup,
@@ -36,14 +37,19 @@ import {
   Warning,
   NotificationsActive,
   Mail,
+  Favorite,
+  Close,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getImageUrl } from '../utils/imageUrl';
 
 const ProfilePage = () => {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const wishlistRef = useRef(null);
   
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -62,9 +68,12 @@ const ProfilePage = () => {
   });
 
   const [preferencesLoading, setPreferencesLoading] = useState(false);
+  const [wishlistVehicles, setWishlistVehicles] = useState([]);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
 
   useEffect(() => {
     fetchNotificationPreferences();
+    fetchWishlistVehicles();
   }, []);
 
   const fetchNotificationPreferences = async () => {
@@ -78,6 +87,18 @@ const ProfilePage = () => {
       console.error('Failed to fetch notification preferences:', err);
     } finally {
       setPreferencesLoading(false);
+    }
+  };
+
+  const fetchWishlistVehicles = async () => {
+    try {
+      setWishlistLoading(true);
+      const { data } = await api.get('/vehicles/saved');
+      setWishlistVehicles(data.data || []);
+    } catch (err) {
+      console.error('Failed to fetch wishlist:', err);
+    } finally {
+      setWishlistLoading(false);
     }
   };
 
@@ -124,11 +145,11 @@ const ProfilePage = () => {
     if (!file) return;
     
     setLoading(true);
-    const formData = new FormData();
-    formData.append('avatar', file);
+    const formDataFD = new FormData();
+    formDataFD.append('avatar', file);
     
     try {
-      await api.post('/users/avatar', formData, {
+      await api.post('/users/avatar', formDataFD, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       await refreshUser();
@@ -137,6 +158,30 @@ const ProfilePage = () => {
       setError(err.response?.data?.message || 'Failed to update avatar');
     }
     setLoading(false);
+  };
+
+  const handleRemoveFromWishlist = async (vehicleId) => {
+    try {
+      await api.post(`/vehicles/${vehicleId}/save`);
+      setWishlistVehicles(wishlistVehicles.filter(v => v._id !== vehicleId));
+      setSuccess('Removed from wishlist');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to remove from wishlist');
+    }
+  };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('en-LK', {
+      style: 'currency',
+      currency: 'LKR',
+      maximumFractionDigits: 0,
+    }).format(price);
+  };
+
+  const scrollToWishlist = () => {
+    if (wishlistRef.current) {
+      wishlistRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const getVerificationStatus = () => {
@@ -324,10 +369,10 @@ const ProfilePage = () => {
                   <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
                     <VerifiedUser sx={{ fontSize: 40, color: 'success.main' }} />
                     <Box>
-                      <Typography fontWeight="bold" color="success.dark">
+                      <Typography fontWeight="bold" color="success.main">
                         Fully Verified
                       </Typography>
-                      <Typography variant="body2" color="success.dark">
+                      <Typography variant="body2" color="success.main">
                         All verification steps complete
                       </Typography>
                     </Box>
@@ -336,12 +381,12 @@ const ProfilePage = () => {
               ) : (
                 <Card sx={{ bgcolor: 'warning.light', mb: 2 }}>
                   <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
-                    <Warning sx={{ fontSize: 40, color: 'warning.dark' }} />
+                    <Warning sx={{ fontSize: 40, color: 'warning.main' }} />
                     <Box>
-                      <Typography fontWeight="bold" color="warning.dark">
+                      <Typography fontWeight="bold" color="warning.main">
                         Incomplete
                       </Typography>
-                      <Typography variant="body2" color="warning.dark">
+                      <Typography variant="body2" color="warning.main">
                         Complete verification to unlock all features
                       </Typography>
                     </Box>
@@ -396,6 +441,21 @@ const ProfilePage = () => {
                   Complete Verification
                 </Button>
               )}
+              <Button
+                component={Link}
+                to="/vehicles/saved"
+                variant="outlined"
+                startIcon={<Favorite />}
+                fullWidth
+                sx={{ 
+                  mt: 3,
+                  color: 'primary.main',
+                  borderColor: 'primary.main',
+                  fontWeight: 600,
+                }}
+              >
+                My Wishlist
+              </Button>
             </Paper>
 
             {/* Account Stats */}
