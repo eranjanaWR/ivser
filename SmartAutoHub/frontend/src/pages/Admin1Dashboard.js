@@ -34,6 +34,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 import {
   People,
   DirectionsCar,
@@ -47,10 +48,12 @@ import {
   Search,
   NewReleases,
   Image as ImageIcon,
+  Bolt,
 } from '@mui/icons-material';
 import api from '../services/api';
 
 const Admin1Dashboard = () => {
+  const navigate = useNavigate();
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -69,6 +72,7 @@ const Admin1Dashboard = () => {
   const [vehicles, setVehicles] = useState([]);
   const [breakdowns, setBreakdowns] = useState([]);
   const [advertisingRequests, setAdvertisingRequests] = useState([]);
+  const [boostRequests, setBoostRequests] = useState([]);
   
   // Menu
   const [anchorEl, setAnchorEl] = useState(null);
@@ -155,6 +159,30 @@ const Admin1Dashboard = () => {
           console.error('Error status:', e.response?.status);
           setAdvertisingRequests([]);
         }
+      } else if (tab === 4) {
+        try {
+          const { data } = await api.get('/vehicles/boost/all');
+          console.log('✓ Boost requests fetched:', data);
+          console.log('Sample boost data:', data.data?.[0]);
+          if (data.data && data.data.length > 0) {
+            console.log('📄 [FETCH] First boost payment proof fields:');
+            data.data.forEach((boost, idx) => {
+              console.log(`  Boost ${idx}:`, {
+                _id: boost._id,
+                paymentMethod: boost.paymentMethod,
+                bankSlipPath: boost.bankSlipPath,
+                cardProofPath: boost.cardProofPath,
+                hasProof: !!(boost.bankSlipPath || boost.cardProofPath)
+              });
+            });
+          }
+          setBoostRequests(data.data || []);
+        } catch (e) {
+          console.error('❌ Failed to fetch boost requests:', e);
+          console.error('Error response:', e.response?.data);
+          console.error('Error status:', e.response?.status);
+          setBoostRequests([]);
+        }
       }
     } catch (err) {
       setError('Failed to fetch data');
@@ -163,6 +191,12 @@ const Admin1Dashboard = () => {
   };
 
   const handleMenuOpen = (event, item) => {
+    console.log('📋 [MENU] Opened for boost request:', item._id);
+    console.log('  - paymentMethod:', item?.paymentMethod);
+    console.log('  - bankSlipPath:', item?.bankSlipPath);
+    console.log('  - cardProofPath:', item?.cardProofPath);
+    console.log('  - Has proof?:', !!(item?.bankSlipPath || item?.cardProofPath));
+    console.log('  - All keys:', Object.keys(item || {}));
     setAnchorEl(event.currentTarget);
     setSelectedItem(item);
   };
@@ -222,6 +256,14 @@ const Admin1Dashboard = () => {
   const handleClosePaymentProof = () => {
     setPaymentProofDialogOpen(false);
     setSelectedPaymentProofRequest(null);
+  };
+
+  const handleOpenVehicleDetail = (vehicle) => {
+    console.log('🚗 Opening vehicle detail page:', vehicle);
+    handleMenuClose();
+    if (vehicle && vehicle._id) {
+      navigate(`/vehicles/${vehicle._id}`);
+    }
   };
 
   const getBankNameFromCard = (cardNumber) => {
@@ -293,10 +335,47 @@ const Admin1Dashboard = () => {
           });
           setSuccess('Advertising request deactivated successfully');
         }
+      } else if (tab === 4) {
+        // Boost request actions
+        if (dialogAction === 'approve') {
+          console.log('📊 Approving boost:', selectedItem._id);
+          try {
+            const response = await api.put(`/vehicles/boost/${selectedItem._id}/approve`, {
+              adminNotes: 'Boost approved by admin'
+            });
+            console.log('✅ Approval response:', response);
+            setSuccess('Boost request approved successfully');
+          } catch (approveErr) {
+            console.error('❌ Approval error details:', {
+              status: approveErr.response?.status,
+              message: approveErr.response?.data?.message,
+              fullResponse: approveErr.response?.data,
+              error: approveErr.message
+            });
+            throw approveErr;
+          }
+        } else if (dialogAction === 'reject') {
+          await api.put(`/vehicles/boost/${selectedItem._id}/reject`, {
+            adminNotes: 'Boost rejected by admin'
+          });
+          setSuccess('Boost request rejected successfully');
+        } else if (dialogAction === 'deactivate') {
+          await api.put(`/vehicles/boost/${selectedItem._id}/reject`, {
+            adminNotes: 'Boost deactivated by admin'
+          });
+          setSuccess('Boost request deactivated successfully');
+        }
       }
       fetchData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Action failed');
+      console.error('❌ Action error:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        fullError: err
+      });
+      const errorMessage = err.response?.data?.message || err.message || 'Action failed';
+      setError(errorMessage);
     }
     setDialogOpen(false);
   };
@@ -406,6 +485,7 @@ const Admin1Dashboard = () => {
             <Tab label="Vehicles" icon={<DirectionsCar />} iconPosition="start" />
             <Tab label="Breakdowns" icon={<Build />} iconPosition="start" />
             <Tab label="Advertising Requests" icon={<NewReleases />} iconPosition="start" />
+            <Tab label="Boost Requests" icon={<Bolt />} iconPosition="start" />
           </Tabs>
 
           {loading ? (
@@ -726,9 +806,145 @@ const Admin1Dashboard = () => {
                           />
                         </TableCell>
                         <TableCell>
-                          <IconButton
+                          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            {(request.bankSlipPath || request.cardProofPath) && (
+                              <Button
+                                size="small"
+                                variant="outlined"
+                                onClick={() => {
+                                  console.log('📸 [PROOF] Clicked proof button for:', request._id);
+                                  console.log('  bankSlipPath:', request.bankSlipPath);
+                                  console.log('  cardProofPath:', request.cardProofPath);
+                                  handleOpenPaymentProof(request);
+                                }}
+                                sx={{ 
+                                  fontSize: '0.7rem',
+                                  padding: '4px 8px',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                📄 Proof
+                              </Button>
+                            )}
+                            <IconButton
+                              onClick={(e) => handleMenuOpen(e, request)}
+                              disabled={request.status === 'completed' || request.status === 'deactivated'}
+                              sx={{
+                                borderRadius: '8px',
+                                bgcolor: '#f0f0f0',
+                                '&:hover': {
+                                  bgcolor: '#e0e0e0',
+                                },
+                                '&.Mui-disabled': {
+                                  bgcolor: '#f5f5f5',
+                                },
+                              }}
+                            >
+                              <MoreVert />
+                            </IconButton>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+
+              {tab === 4 && (
+                <Table>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'grey.50' }}>
+                      <TableCell>Vehicle</TableCell>
+                      <TableCell>Contact</TableCell>
+                      <TableCell>Package</TableCell>
+                      <TableCell>Duration</TableCell>
+                      <TableCell>Amount</TableCell>
+                      <TableCell>Reference Number</TableCell>
+                      <TableCell>Submitted Date</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Actions</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {boostRequests.map((request) => (
+                      <TableRow key={request._id} hover>
+                        <TableCell>
+                          <Box>
+                            <Typography fontWeight="medium">
+                              {request.vehicleId?.brand} {request.vehicleId?.model}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {request.vehicleId?.year}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Box>
+                            <Typography variant="body2">{request.contactPerson}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {request.contactPhone}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
+                            {request.packageType}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {request.duration} days
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {request.amount === 0 ? 'Free' : `LKR ${request.amount?.toLocaleString()}`}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          {request.paymentRefNumber ? (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontFamily: 'monospace',
+                                fontWeight: 600,
+                                color: '#1565c0',
+                                fontSize: '0.75rem',
+                                letterSpacing: '0.5px'
+                              }}
+                            >
+                              {request.paymentRefNumber}
+                            </Typography>
+                          ) : (
+                            <Typography variant="caption" sx={{ color: '#999', fontStyle: 'italic' }}>
+                              N/A
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(request.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={request.status}
+                            size="small"
+                            color={
+                              request.status === 'active'
+                                ? 'success'
+                                : request.status === 'approved'
+                                ? 'success'
+                                : request.status === 'rejected'
+                                ? 'error'
+                                : request.status === 'completed'
+                                ? 'success'
+                                : 'warning'
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <IconButton 
                             onClick={(e) => handleMenuOpen(e, request)}
-                            disabled={request.status === 'completed' || request.status === 'deactivated'}
+                            disabled={request.status === 'completed'}
                             sx={{
                               borderRadius: '8px',
                               bgcolor: '#f0f0f0',
@@ -826,6 +1042,40 @@ const Admin1Dashboard = () => {
               </MenuItem>
             ),
           ]}
+          {tab === 4 && [
+            (selectedItem?.bankSlipPath || selectedItem?.cardProofPath) && (
+              <MenuItem key="viewProof" onClick={() => {
+                console.log('💳 [PROOF] Viewing payment proof for:', selectedItem._id);
+                handleOpenPaymentProof(selectedItem);
+                handleMenuClose();
+              }}>
+                <ImageIcon sx={{ mr: 1 }} fontSize="small" />
+                View Payment Proof
+              </MenuItem>
+            ),
+            <MenuItem key="viewVehicle" onClick={() => handleOpenVehicleDetail(selectedItem.vehicleId)}>
+              <DirectionsCar sx={{ mr: 1 }} fontSize="small" />
+              View Vehicle Card
+            </MenuItem>,
+            selectedItem?.status === 'pending' && (
+              <MenuItem key="approve" onClick={() => handleAction('approve')}>
+                <CheckCircle sx={{ mr: 1 }} fontSize="small" />
+                Approve Boost
+              </MenuItem>
+            ),
+            selectedItem?.status === 'pending' && (
+              <MenuItem key="reject" onClick={() => handleAction('reject')}>
+                <Block sx={{ mr: 1 }} fontSize="small" />
+                Reject Boost
+              </MenuItem>
+            ),
+            (selectedItem?.status === 'active' || selectedItem?.status === 'approved') && (
+              <MenuItem key="deactivate" onClick={() => handleAction('deactivate')}>
+                <Block sx={{ mr: 1 }} fontSize="small" />
+                Deactivate Boost
+              </MenuItem>
+            ),
+          ].filter(Boolean)}
         </Menu>
 
         {/* Confirmation Dialog */}
@@ -840,6 +1090,8 @@ const Admin1Dashboard = () => {
                 ? 'vehicle'
                 : tab === 3
                 ? 'advertising request'
+                : tab === 4
+                ? 'boost request'
                 : 'item'}
               ?
             </Typography>
@@ -1272,11 +1524,95 @@ const Admin1Dashboard = () => {
           </DialogTitle>
 
           <DialogContent sx={{ p: 3, textAlign: 'center' }}>
-            {selectedPaymentProofRequest?.paymentSlipBase64 ? (
+            {selectedPaymentProofRequest?.bankSlipPath || selectedPaymentProofRequest?.cardProofPath ? (
               <Box>
                 <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
-                  <strong>Company:</strong> {selectedPaymentProofRequest?.company || 'N/A'} | 
-                  <strong sx={{ ml: 1 }}>Reference:</strong> {selectedPaymentProofRequest?.paymentRefNumber || 'N/A'}
+                  <strong>Reference:</strong> {selectedPaymentProofRequest?.paymentRefNumber || 'N/A'}{' '}
+                  {selectedPaymentProofRequest?.paymentMethod && (
+                    <span>
+                      | <strong>Method:</strong> {selectedPaymentProofRequest.paymentMethod === 'bank_transfer' ? 'Bank Transfer' : 'Credit Card'}
+                    </span>
+                  )}
+                </Typography>
+                {selectedPaymentProofRequest?.bankSlipPath && (
+                  <Box>
+                    {selectedPaymentProofRequest.bankSlipPath.endsWith('.pdf') ? (
+                      <Box sx={{ p: 3, bgcolor: '#f5f5f5', borderRadius: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <ImageIcon sx={{ fontSize: 64, color: '#d32f2f' }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>PDF Document</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Bank transfer proof document</Typography>
+                        <Button 
+                          variant="contained" 
+                          href={`http://localhost:5000/uploads/${selectedPaymentProofRequest.bankSlipPath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Download PDF
+                        </Button>
+                      </Box>
+                    ) : (
+                      <Box
+                        component="img"
+                        src={`http://localhost:5000/uploads/${selectedPaymentProofRequest.bankSlipPath}`}
+                        alt="Bank Slip"
+                        onError={(e) => {
+                          console.error('Bank slip load error:', e, 'URL:', e.target.src);
+                          e.target.style.display = 'none';
+                          e.target.parentElement.innerHTML += '<div style="padding: 40px; color: #d32f2f; fontSize: 14px;">Failed to load image. URL: ' + e.target.src + '</div>';
+                        }}
+                        sx={{
+                          maxWidth: '100%',
+                          maxHeight: '500px',
+                          borderRadius: 1,
+                          border: '2px solid #2196f3',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    )}
+                  </Box>
+                )}
+                {selectedPaymentProofRequest?.cardProofPath && (
+                  <Box>
+                    {selectedPaymentProofRequest.cardProofPath.endsWith('.pdf') ? (
+                      <Box sx={{ p: 3, bgcolor: '#f5f5f5', borderRadius: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <ImageIcon sx={{ fontSize: 64, color: '#d32f2f' }} />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>PDF Document</Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Card payment proof document</Typography>
+                        <Button 
+                          variant="contained" 
+                          href={`http://localhost:5000/uploads/${selectedPaymentProofRequest.cardProofPath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Download PDF
+                        </Button>
+                      </Box>
+                    ) : (
+                      <Box
+                        component="img"
+                        src={`http://localhost:5000/uploads/${selectedPaymentProofRequest.cardProofPath}`}
+                        alt="Card Proof"
+                        onError={(e) => {
+                          console.error('Card proof load error:', e, 'URL:', e.target.src);
+                          e.target.style.display = 'none';
+                          e.target.parentElement.innerHTML += '<div style="padding: 40px; color: #d32f2f; fontSize: 14px;">Failed to load image. URL: ' + e.target.src + '</div>';
+                        }}
+                        sx={{
+                          maxWidth: '100%',
+                          maxHeight: '500px',
+                          borderRadius: 1,
+                          border: '2px solid #2196f3',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    )}
+                  </Box>
+                )}
+              </Box>
+            ) : selectedPaymentProofRequest?.paymentSlipBase64 ? (
+              <Box>
+                <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+                  <strong>Reference:</strong> {selectedPaymentProofRequest?.paymentRefNumber || 'N/A'}
                 </Typography>
                 <Box
                   component="img"

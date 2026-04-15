@@ -1,6 +1,46 @@
 const { Notification, Vehicle, UserAlert } = require('../models');
 const { sendEmail } = require('../utils/email');
 
+/**
+ * Send notification to a specific user
+ * @param {string} userId - User ID
+ * @param {string} title - Notification title
+ * @param {string} message - Notification message
+ * @param {object} metadata - Additional metadata (optional)
+ */
+exports.sendNotificationToUser = async (userId, title, message, metadata = {}) => {
+  try {
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+
+    // Create in-app notification/alert
+    const alert = await UserAlert.create({
+      userId: userId,
+      vehicleId: metadata.vehicleId || null,
+      vehicleBrand: metadata.vehicleBrand || 'SmartAuto Hub',
+      vehicleModel: metadata.vehicleModel || '',
+      vehiclePrice: metadata.vehiclePrice || 0,
+      vehicleImage: metadata.vehicleImage || null,
+      sellerName: metadata.sellerName || 'SmartAuto Hub',
+      alertType: metadata.type || 'notification',
+      message: message,
+      isSeen: false
+    });
+
+    console.log(`✓ In-app notification created for user ${userId}: ${title}`);
+
+    return {
+      success: true,
+      notificationId: alert._id,
+      message: `Notification sent to user`
+    };
+  } catch (err) {
+    console.error(`✗ Failed to send notification to user ${userId}:`, err.message);
+    throw err;
+  }
+};
+
 exports.subscribe = async (req, res) => {
   try {
     const { email, phone, searchCriteria } = req.body;

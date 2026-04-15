@@ -63,6 +63,12 @@ const sendOTPEmail = async (email, otp, firstName) => {
   try {
     const transporter = createTransporter();
     
+    // Check if transporter is null (email credentials not configured)
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping OTP email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
+    
     const mailOptions = {
       from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -105,10 +111,10 @@ const sendOTPEmail = async (email, otp, firstName) => {
     };
     
     const result = await transporter.sendMail(mailOptions);
-    console.log('OTP email sent:', result.messageId);
+    console.log('✅ OTP email sent successfully to:', email, '| Message ID:', result.messageId);
     return { success: true, messageId: result.messageId };
   } catch (error) {
-    console.error('Error sending OTP email:', error);
+    console.error('❌ Error sending OTP email to', email, ':', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -119,6 +125,12 @@ const sendOTPEmail = async (email, otp, firstName) => {
 const sendNotificationEmail = async (email, subject, message, firstName) => {
   try {
     const transporter = createTransporter();
+    
+    // Check if transporter is null (email credentials not configured)
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
     
     const mailOptions = {
       from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
@@ -155,9 +167,10 @@ const sendNotificationEmail = async (email, subject, message, firstName) => {
     };
     
     const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Notification email sent successfully to:', email, '| Message ID:', result.messageId);
     return { success: true, messageId: result.messageId };
   } catch (error) {
-    console.error('Error sending notification email:', error);
+    console.error('❌ Error sending notification email to', email, ':', error.message);
     return { success: false, error: error.message };
   }
 };

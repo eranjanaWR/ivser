@@ -432,31 +432,46 @@ const VehicleDetailPage = () => {
                     backgroundColor: '#4281da',
                     color: '#ffffff',
                     fontWeight: 600,
-                    }}
+                    '&:hover': {
+                      backgroundColor: '#9CA3AF'
+                    }
+                  }}
                 >
                   Book Vehicle for Test Drive
                 </Button>
 
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   fullWidth
                   size="large"
                   startIcon={<CompareArrows />}
                   onClick={() => navigate(`/compare/${id}`)}
+                  sx={{
+                    backgroundColor: '#000000',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    '&:hover': {
+                      backgroundColor: '#9CA3AF'
+                    }
+                  }}
                 >
                   Compare Vehicles
                 </Button>
                 
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   fullWidth
                   size="large"
                   startIcon={isSaved ? <Favorite /> : <FavoriteBorder />}
                   onClick={handleToggleSaveVehicle}
                   disabled={savingWishlist}
                   sx={{
-                    color: isSaved ? 'error.main' : 'inherit',
-                    borderColor: isSaved ? 'error.main' : 'inherit'
+                    backgroundColor: '#dc2626',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    '&:hover': {
+                      backgroundColor: '#9CA3AF'
+                    }
                   }}
                 >
                   {isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
@@ -663,6 +678,11 @@ const VehicleDetailPage = () => {
                       size="large"
                       startIcon={<Edit />}
                       onClick={() => setEditModalOpen(true)}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: '#9CA3AF'
+                        }
+                      }}
                     >
                       Edit Vehicle
                     </Button>
@@ -674,16 +694,28 @@ const VehicleDetailPage = () => {
                       size="large"
                       startIcon={<Delete />}
                       onClick={() => setDeleteConfirmOpen(true)}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: '#9CA3AF'
+                        }
+                      }}
                     >
                       Delete Vehicle
                     </Button>
                   </Box>
                   <Button
-                    variant="outlined"
-                    color={vehicle.status === 'available' ? 'error' : 'success'}
+                    variant="contained"
                     fullWidth
                     size="large"
                     onClick={handleToggleSold}
+                    sx={{
+                      backgroundColor: '#000000',
+                      color: '#ffffff',
+                      fontWeight: 600,
+                      '&:hover': {
+                        backgroundColor: '#9CA3AF'
+                      }
+                    }}
                   >
                     {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
                   </Button>

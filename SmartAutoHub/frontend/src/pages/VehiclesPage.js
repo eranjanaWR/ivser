@@ -637,7 +637,6 @@ const VehiclesPage = () => {
                     onChange={(e) => handleFilterChange('brand', e.target.value)}
                   >
                     <MenuItem value="">All Brands</MenuItem>
-                    <MenuItem value="">xyz</MenuItem>
                     {brands.map((b) => (
                       <MenuItem key={b} value={b}>{b}</MenuItem>
                     ))}
