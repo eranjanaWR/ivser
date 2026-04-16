@@ -66,6 +66,16 @@ const Admin2Dashboard = () => {
   const [manualRejectReason, setManualRejectReason] = useState('');
   const [manualRejectDialogOpen, setManualRejectDialogOpen] = useState(false);
 
+  const getAssetUrl = (assetPath) => {
+    if (!assetPath) return undefined;
+    if (assetPath.startsWith('http://') || assetPath.startsWith('https://') || assetPath.startsWith('data:')) {
+      return assetPath;
+    }
+
+    const backendUrl = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+    return `${backendUrl}/${assetPath.replace(/^\/+/, '')}`;
+  };
+
   useEffect(() => {
     if (tab === 2) {
       fetchManualIDVerifications();
@@ -233,7 +243,7 @@ const Admin2Dashboard = () => {
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Avatar
-                      src={user.profileImage ? `http://localhost:5001/${user.profileImage}` : undefined}
+                      src={getAssetUrl(user.profileImage)}
                       sx={{ bgcolor: 'primary.main' }}
                     >
                       {user.firstName?.[0]}
@@ -657,7 +667,7 @@ const Admin2Dashboard = () => {
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                   <Avatar
-                    src={manualViewUser?.profileImage ? `http://localhost:5001/${manualViewUser.profileImage}` : undefined}
+                    src={getAssetUrl(manualViewUser?.profileImage)}
                     sx={{ width: 56, height: 56 }}
                   >
                     {manualViewUser?.firstName?.[0]}
@@ -705,7 +715,7 @@ const Admin2Dashboard = () => {
                   {manualViewUser?.idVerification?.idFrontImage ? (
                     <Box
                       component="img"
-                      src={`http://localhost:5001/${manualViewUser.idVerification.idFrontImage}`}
+                      src={getAssetUrl(manualViewUser.idVerification.idFrontImage)}
                       alt="ID Document"
                       sx={{ maxWidth: '100%', maxHeight: 350, objectFit: 'contain', borderRadius: 1 }}
                     />

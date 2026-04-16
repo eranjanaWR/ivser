@@ -11,6 +11,16 @@ const http = require('http');
 const { Server } = require('socket.io');
 const connectDB = require('./config/db');
 
+// Allow both single-port mode (5000) and optional split-port local dev.
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5000',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3003'
+].filter(Boolean);
+
 // Initialize Express app
 const app = express();
 const server = http.createServer(app);
@@ -18,12 +28,7 @@ const server = http.createServer(app);
 // Initialize Socket.io with CORS
 const io = new Server(server, {
   cors: {
-    origin: [
-      process.env.FRONTEND_URL || 'http://localhost:3000',
-      'http://localhost:3001',
-      'http://localhost:3002',
-      'http://localhost:3003'
-    ],
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
   }
@@ -34,12 +39,7 @@ connectDB();
 
 // Middleware
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3002',
-    'http://localhost:3003'
-  ],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
