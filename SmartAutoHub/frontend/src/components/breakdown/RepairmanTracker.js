@@ -132,7 +132,7 @@ const RepairmanTracker = ({
   useEffect(() => {
     if (!breakdownId) return;
 
-    const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5001', {
+    const socket = io(process.env.REACT_APP_API_URL || window.location.origin, {
       transports: ['websocket', 'polling'],
     });
 
