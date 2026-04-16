@@ -7,8 +7,8 @@ import axios from 'axios';
 
 // Create axios instance with base URL
 const api = axios.create({
-  // Default to backend port 5000 (server uses PORT from backend/.env)
-  baseURL: (process.env.REACT_APP_API_URL || 'http://localhost:5000') + '/api',
+  // Use relative URL to connect to same port/domain
+  baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
