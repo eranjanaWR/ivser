@@ -40,6 +40,7 @@ import Admin2Dashboard from './pages/Admin2Dashboard';
 import BoostAdPage from './pages/BoostAdPage';
 import PremiumPostsPage from './pages/PremiumPostsPage';
 import AdvertisePackagesPage from './pages/AdvertisePackagesPage';
+import FinancialAidsPage from './pages/FinancialAidsPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Professional, minimal theme similar to Uber
@@ -222,6 +223,7 @@ function App() {
                 <Route path="/prediction" element={<PredictionPage />} />
                 <Route path="/premium-posts" element={<PremiumPostsPage />} />
                 <Route path="/advertise-packages" element={<AdvertisePackagesPage />} />
+                <Route path="/financial-aids" element={<FinancialAidsPage />} />
                 
                 {/* Protected Routes */}
                 <Route path="/verification" element={
