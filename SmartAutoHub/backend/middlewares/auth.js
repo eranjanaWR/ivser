@@ -13,30 +13,39 @@ const protect = async (req, res, next) => {
   try {
     let token;
     
+    console.log('🔐 AUTH MIDDLEWARE - Checking token');
+    console.log('Authorization header:', req.headers.authorization);
+    
     // Check for token in Authorization header
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
     }
     
     if (!token) {
+      console.log('❌ No token found');
       return res.status(401).json({
         success: false,
         message: 'Not authorized, no token provided'
       });
     }
     
+    console.log('✅ Token found, verifying...');
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('✅ Token verified, user ID:', decoded.id);
     
     // Get user from token
     const user = await User.findById(decoded.id).select('-password');
     
     if (!user) {
+      console.log('❌ User not found');
       return res.status(401).json({
         success: false,
         message: 'User not found'
       });
     }
+    
+    console.log('✅ User authenticated:', user.email);
     
     if (!user.isActive) {
       return res.status(401).json({

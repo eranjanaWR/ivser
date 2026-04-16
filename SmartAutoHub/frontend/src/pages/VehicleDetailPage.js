@@ -39,9 +39,18 @@ import {
   ChevronLeft,
   ChevronRight,
   VerifiedUser,
+  Edit,
+  Delete,
+  CompareArrows,
+  Schedule,
+  Favorite,
+  FavoriteBorder,
 } from '@mui/icons-material';
+import { Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import EditVehicleModal from '../components/EditVehicleModal';
+import { getImageUrl } from '../utils/imageUrl';
 
 const VehicleDetailPage = () => {
   const { id } = useParams();
@@ -52,6 +61,10 @@ const VehicleDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [currentImage, setCurrentImage] = useState(0);
+  const [watermarkedImageUrl, setWatermarkedImageUrl] = useState(null);
+  const [watermarkLoading, setWatermarkLoading] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savingWishlist, setSavingWishlist] = useState(false);
   
   // Test drive dialog
   const [testDriveOpen, setTestDriveOpen] = useState(false);
@@ -60,6 +73,14 @@ const VehicleDetailPage = () => {
   const [testDriveMessage, setTestDriveMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
+  const [availabilitySlots, setAvailabilitySlots] = useState([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  
+  // Admin actions
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const isAdmin = user && ['admin1', 'admin2'].includes(user.role);
 
   useEffect(() => {
     fetchVehicle();
@@ -70,11 +91,189 @@ const VehicleDetailPage = () => {
     try {
       const { data } = await api.get(`/vehicles/${id}`);
       setVehicle(data.data);
+      
+      // Check if vehicle is saved by current user
+      if (user && data.data.savedBy && Array.isArray(data.data.savedBy)) {
+        const userIdStr = String(user._id || user.id);
+        const isSavedByUser = data.data.savedBy.some(savedUserId => 
+          String(savedUserId) === userIdStr
+        );
+        setIsSaved(isSavedByUser);
+      }
+      
+      // Log vehicle search
+      try {
+        await api.post('/search/log-vehicle', { vehicleId: id });
+      } catch (err) {
+        console.error('Failed to log vehicle search:', err);
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load vehicle');
     }
     setLoading(false);
   };
+
+  const handleDeleteVehicle = async () => {
+    try {
+      await api.delete(`/vehicles/${id}`);
+      alert('Vehicle deleted successfully!');
+      navigate('/vehicles');
+    } catch (err) {
+      alert('Error deleting vehicle: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleToggleSold = async () => {
+    try {
+      const newStatus = vehicle.status === 'available' ? 'sold' : 'available';
+      const { data } = await api.put(`/vehicles/${id}`, { status: newStatus });
+      // Preserve seller info from original vehicle
+      const updatedVehicle = {
+        ...data.data,
+        sellerId: data.data.sellerId || vehicle.sellerId
+      };
+      setVehicle(updatedVehicle);
+      alert(`Vehicle marked as ${newStatus}!`);
+    } catch (err) {
+      alert('Error updating vehicle: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleEditSuccess = (updatedVehicle) => {
+    // Preserve seller info from original vehicle if not in updated vehicle
+    const vehicleToSet = {
+      ...updatedVehicle,
+      sellerId: updatedVehicle.sellerId || vehicle.sellerId
+    };
+    setVehicle(vehicleToSet);
+    setEditModalOpen(false);
+    alert('Vehicle updated successfully!');
+  };
+
+  // Fetch seller's availability slots
+  const fetchSellerAvailability = async (sellerId) => {
+    setLoadingSlots(true);
+    try {
+      console.log('🔍 Fetching availability for seller:', sellerId);
+      const { data } = await api.get(`/availability/seller/${sellerId}`);
+      console.log('📦 Full API Response:', data);
+      console.log('📦 Response status:', data.success);
+      console.log('📦 Response data prop:', data.data);
+      
+      const slots = data.data?.availabilitySlots || [];
+      console.log('📅 Available slots found:', slots.length, 'slots');
+      if (slots.length > 0) {
+        console.log('📋 Slots structure:', slots.map(s => ({
+          id: s.id,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          enabled: s.enabled,
+          days: s.days
+        })));
+      } else {
+        console.log('⚠️  No slots in response. Full data:', data.data);
+      }
+      setAvailabilitySlots(slots);
+    } catch (err) {
+      console.error('❌ Failed to fetch availability:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error message:', err.message);
+      setAvailabilitySlots([]);
+    }
+    setLoadingSlots(false);
+  };
+
+  // Get available time slots for a selected date
+  const getAvailableTimesForDate = (date) => {
+    if (!date || availabilitySlots.length === 0) {
+      console.log('⏹️  No date selected or no slots available. date:', date, 'slots:', availabilitySlots.length);
+      return [];
+    }
+
+    const dateObj = new Date(date);
+    const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    // Convert to Mon-Sun format (0-6) where Mon = 0
+    const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+    console.log('📅 Selected date:', date, 'Day of week:', dayOfWeek, 'Adjusted day:', adjustedDay);
+
+    const times = [];
+    
+    availabilitySlots.forEach((slot) => {
+      if (!slot.enabled) {
+        console.log('⏭️  Slot disabled:', slot);
+        return;
+      }
+      
+      // Check if this slot is open on the selected day
+      if (!slot.days[adjustedDay]) {
+        console.log('❌ Slot not open on day', adjustedDay, ':', slot);
+        return;
+      }
+      
+      console.log('✅ Processing slot:', slot);
+
+      // Convert 12-hour format (e.g., "09:00 AM") to 24-hour format
+      const convertTo24Hour = (timeStr) => {
+        const [time, period] = timeStr.split(' ');
+        let [hour, min] = time.split(':').map(Number);
+        
+        if (period === 'PM' && hour !== 12) {
+          hour += 12;
+        } else if (period === 'AM' && hour === 12) {
+          hour = 0;
+        }
+        
+        return { hour, min };
+      };
+
+      const startTime = convertTo24Hour(slot.startTime);
+      const endTime = convertTo24Hour(slot.endTime);
+
+      let currentHour = startTime.hour;
+      let currentMin = startTime.min;
+
+      while (currentHour < endTime.hour || (currentHour === endTime.hour && currentMin < endTime.min)) {
+        const timeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMin).padStart(2, '0')}`;
+        times.push(timeStr);
+
+        // Add 30 minutes
+        currentMin += 30;
+        if (currentMin >= 60) {
+          currentMin = 0;
+          currentHour += 1;
+        }
+      }
+    });
+
+    // Remove duplicates and sort
+    const uniqueTimes = Array.from(new Set(times)).sort();
+    console.log('🕐 Available times for date:', uniqueTimes);
+    return uniqueTimes;
+  };
+
+  // Fetch availability when test drive dialog opens
+  useEffect(() => {
+    if (testDriveOpen && vehicle?.sellerId) {
+      const sellerId = typeof vehicle.sellerId === 'string' ? vehicle.sellerId : vehicle.sellerId._id;
+      console.log('🔑 Vehicle seller ID:', { raw: vehicle.sellerId, extracted: sellerId, type: typeof sellerId });
+      fetchSellerAvailability(sellerId);
+    }
+  }, [testDriveOpen, vehicle?.sellerId]);
+
+  // Update available times when date changes
+  useEffect(() => {
+    if (testDriveDate) {
+      const times = getAvailableTimesForDate(testDriveDate);
+      setAvailableTimeSlots(times);
+      // Reset time selection if current time is no longer available
+      if (testDriveTime && !times.includes(testDriveTime)) {
+        setTestDriveTime('');
+      }
+    } else {
+      setAvailableTimeSlots([]);
+    }
+  }, [testDriveDate, availabilitySlots]);
 
   const handleTestDriveSubmit = async () => {
     if (!isAuthenticated) {
@@ -90,15 +289,34 @@ const VehicleDetailPage = () => {
         preferredTime: testDriveTime,
         message: testDriveMessage,
       });
-      setSuccess('Test drive request sent successfully!');
+      setSuccess('Test drive booked successfully!');
       setTestDriveOpen(false);
       setTestDriveDate('');
       setTestDriveTime('');
       setTestDriveMessage('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to request test drive');
+      setError(err.response?.data?.message || 'Failed to book test drive');
     }
     setSubmitting(false);
+  };
+
+  const handleToggleSaveVehicle = async () => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    setSavingWishlist(true);
+    try {
+      await api.post(`/vehicles/${id}/save`);
+      setIsSaved(!isSaved);
+      setSuccess(isSaved ? 'Removed from wishlist' : 'Added to wishlist');
+      // Fetch updated vehicle to sync savedBy list
+      fetchVehicle();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update wishlist');
+    }
+    setSavingWishlist(false);
   };
 
   const formatPrice = (price) => {
@@ -143,7 +361,11 @@ const VehicleDetailPage = () => {
     );
   }
 
-  const isOwner = user && vehicle.seller?._id === user._id;
+  // Check if current user is the seller
+  const isOwner = user && vehicle.sellerId && (
+    String(typeof vehicle.sellerId === 'string' ? vehicle.sellerId : (vehicle.sellerId._id || vehicle.sellerId.id)) === 
+    String(user._id || user.id)
+  );
 
   return (
     <Box sx={{ py: 4, bgcolor: '#fafafa', minHeight: '80vh' }}>
@@ -179,7 +401,7 @@ const VehicleDetailPage = () => {
             >
               <Box
                 component="img"
-                src={vehicle.images?.[currentImage] || '/placeholder-car.jpg'}
+                src={getImageUrl(vehicle.images?.[currentImage])}
                 alt={`${vehicle.brand} ${vehicle.model}`}
                 sx={{
                   width: '100%',
@@ -251,7 +473,7 @@ const VehicleDetailPage = () => {
                   <Box
                     key={index}
                     component="img"
-                    src={img}
+                    src={getImageUrl(img)}
                     onClick={() => setCurrentImage(index)}
                     sx={{
                       width: 80,
@@ -265,6 +487,66 @@ const VehicleDetailPage = () => {
                     }}
                   />
                 ))}
+              </Box>
+            )}
+
+            {/* Boost Ad Button - Only for Admin and Seller */}
+            {(isAdmin || isOwner) && (
+              <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+                <Button
+                  onClick={() => navigate(`/vehicles/${id}/boost`)}
+                  variant="contained"
+                  sx={{
+                    bgcolor: '#d32f2f',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    px: 3,
+                    py: 1.5,
+                    '&:hover': {
+                      bgcolor: '#b71c1c',
+                    },
+                  }}
+                >
+                  Boost Ad
+                </Button>
+              </Box>
+            )}
+
+            {/* Action Buttons */}
+            {!isOwner && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 3 }}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  startIcon={<Event />}
+                  onClick={() => navigate(`/book-test-drive/${id}`)}
+                >
+                  Book Vehicle for Test Drive
+                </Button>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  startIcon={<CompareArrows />}
+                  onClick={() => navigate(`/compare/${id}`)}
+                >
+                  Compare Vehicles
+                </Button>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  startIcon={isSaved ? <Favorite /> : <FavoriteBorder />}
+                  onClick={handleToggleSaveVehicle}
+                  disabled={savingWishlist}
+                  sx={{
+                    color: isSaved ? 'error.main' : 'inherit',
+                    borderColor: isSaved ? 'error.main' : 'inherit'
+                  }}
+                >
+                  {isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                </Button>
               </Box>
             )}
           </Grid>
@@ -354,75 +636,207 @@ const VehicleDetailPage = () => {
 
               <Divider sx={{ my: 2 }} />
 
-              {/* Seller Info */}
-              {vehicle.seller && (
+              {/* Vehicle Location */}
+              {vehicle.location && (vehicle.location.city || vehicle.location.country) && (
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Seller
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📍 Vehicle Location
                   </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Avatar sx={{ bgcolor: 'primary.main' }}>
-                      {vehicle.seller.name?.[0]}
-                    </Avatar>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography fontWeight="bold">{vehicle.seller.name}</Typography>
-                        {vehicle.seller.isFaceVerified && (
-                          <VerifiedUser fontSize="small" color="primary" />
+                  <Paper elevation={0} sx={{ p: 2.5, bgcolor: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Typography fontWeight="600" sx={{ mb: 0.5, fontSize: '1rem' }}>
+                          {vehicle.location.city || 'City'}{vehicle.location.country && `, ${vehicle.location.country}`}
+                        </Typography>
+                        {vehicle.location.state && (
+                          <Typography variant="body2" color="text.secondary">
+                            {vehicle.location.state}
+                          </Typography>
+                        )}
+                        {vehicle.location.address && (
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                            📬 {vehicle.location.address}
+                          </Typography>
                         )}
                       </Box>
-                      <Typography variant="body2" color="text.secondary">
-                        {vehicle.seller.phone}
-                      </Typography>
                     </Box>
-                  </Box>
+                  </Paper>
                 </Box>
               )}
 
-              {/* Actions */}
-              {!isOwner && (
-                <Box sx={{ display: 'flex', gap: 2 }}>
+              <Divider sx={{ my: 2 }} />
+
+              {/* Seller Info */}
+              {vehicle.sellerId && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    👤 Seller Profile
+                  </Typography>
+                  <Paper elevation={0} sx={{ p: 2.5, bgcolor: '#fef5e7', border: '1px solid #f9e79f', borderRadius: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                      <Avatar 
+                        sx={{ 
+                          bgcolor: 'primary.main',
+                          width: 50,
+                          height: 50,
+                          fontSize: '1.25rem',
+                          fontWeight: 'bold'
+                        }}
+                      >
+                        {vehicle.sellerId.firstName?.[0]?.toUpperCase()}
+                      </Avatar>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="h6" fontWeight="bold">
+                            {vehicle.sellerId.firstName} {vehicle.sellerId.lastName}
+                          </Typography>
+                          {vehicle.sellerId.isFaceVerified && (
+                            <VerifiedUser fontSize="small" sx={{ color: '#27ae60' }} title="Face Verified" />
+                          )}
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          Seller ID: {typeof vehicle.sellerId === 'string' ? vehicle.sellerId.slice(0, 8) : vehicle.sellerId._id?.slice(0, 8)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    
+                    {/* Contact Info */}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Phone fontSize="small" color="action" />
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">Phone</Typography>
+                          <Typography variant="body2" fontWeight="600">{vehicle.sellerId.phone}</Typography>
+                        </Box>
+                      </Box>
+                      {vehicle.sellerId.email && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Email fontSize="small" color="action" />
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">Email</Typography>
+                            <Typography variant="body2" fontWeight="600">{vehicle.sellerId.email}</Typography>
+                          </Box>
+                        </Box>
+                      )}
+                    </Box>
+                  </Paper>
+                </Box>
+              )}
+              {/* Description */}
+              {vehicle.description && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📝 Description
+                  </Typography>
+                  <Paper elevation={0} sx={{ p: 2.5, bgcolor: '#f5f5f5', border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                    <Typography color="text.secondary" sx={{ whiteSpace: 'pre-wrap', fontSize: '0.95rem', lineHeight: 1.6 }}>
+                      {vehicle.description}
+                    </Typography>
+                  </Paper>
+                </Box>
+              )}
+
+              <Divider sx={{ my: 2 }} />
+              
+              {/* Owner/Admin Actions (Edit, Delete, Mark as Sold) */}
+              {(isOwner || isAdmin) && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   <Button
-                    variant="contained"
+                    variant="outlined"
                     fullWidth
                     size="large"
-                    startIcon={<Event />}
-                    onClick={() => setTestDriveOpen(true)}
+                    startIcon={<CompareArrows />}
+                    onClick={() => navigate(`/compare/${id}`)}
                   >
-                    Request Test Drive
+                    Compare Vehicles
                   </Button>
                 </Box>
               )}
 
               {isOwner && (
-                <Button
-                  component={Link}
-                  to={`/my-vehicles`}
-                  variant="outlined"
-                  fullWidth
-                  size="large"
-                >
-                  Manage Your Listings
-                </Button>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button
+                      variant="contained"
+                      color="info"
+                      fullWidth
+                      size="large"
+                      startIcon={<Edit />}
+                      onClick={() => setEditModalOpen(true)}
+                    >
+                      Edit Vehicle
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      fullWidth
+                      size="large"
+                      startIcon={<Delete />}
+                      onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                      Delete Vehicle
+                    </Button>
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    color={vehicle.status === 'available' ? 'error' : 'success'}
+                    fullWidth
+                    size="large"
+                    onClick={handleToggleSold}
+                  >
+                    {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="primary"         //success (green)
+                    fullWidth
+                    size="large"
+                    startIcon={<Schedule />}
+                    onClick={() => navigate('/seller-availability')}
+                  >
+                    Manage Test Drive Availability
+                  </Button>
+                </Box>
+              )}
+
+              {isAdmin && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <Button
+                      variant="contained"
+                      color="info"
+                      fullWidth
+                      size="large"
+                      startIcon={<Edit />}
+                      onClick={() => setEditModalOpen(true)}
+                    >
+                      Edit Vehicle
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="error"
+                      fullWidth
+                      size="large"
+                      startIcon={<Delete />}
+                      onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                      Delete Vehicle
+                    </Button>
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    color={vehicle.status === 'available' ? 'error' : 'success'}
+                    fullWidth
+                    size="large"
+                    onClick={handleToggleSold}
+                  >
+                    {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
+                  </Button>
+                </Box>
               )}
             </Paper>
           </Grid>
         </Grid>
-
-        {/* Description */}
-        {vehicle.description && (
-          <Paper
-            elevation={0}
-            sx={{ p: 3, mt: 4, border: '1px solid', borderColor: 'grey.200' }}
-          >
-            <Typography variant="h6" fontWeight="bold" gutterBottom>
-              Description
-            </Typography>
-            <Typography color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-              {vehicle.description}
-            </Typography>
-          </Paper>
-        )}
 
         {/* Features */}
         {vehicle.features?.length > 0 && (
@@ -443,10 +857,10 @@ const VehicleDetailPage = () => {
 
         {/* Test Drive Dialog */}
         <Dialog open={testDriveOpen} onClose={() => setTestDriveOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Request Test Drive</DialogTitle>
+          <DialogTitle>Book Vehicle for Test Drive</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Request a test drive for {vehicle.brand} {vehicle.model}
+              Book a test drive for {vehicle.brand} {vehicle.model}
             </Typography>
             <TextField
               fullWidth
@@ -457,15 +871,52 @@ const VehicleDetailPage = () => {
               InputLabelProps={{ shrink: true }}
               sx={{ mb: 2 }}
             />
-            <TextField
-              fullWidth
-              label="Preferred Time"
-              type="time"
-              value={testDriveTime}
-              onChange={(e) => setTestDriveTime(e.target.value)}
-              InputLabelProps={{ shrink: true }}
-              sx={{ mb: 2 }}
-            />
+            {loadingSlots ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                <CircularProgress size={24} />
+              </Box>
+            ) : availabilitySlots.length > 0 ? (
+              // Slots are configured - show dropdown with available times
+              <>
+                {testDriveDate ? (
+                  availableTimeSlots.length > 0 ? (
+                    <FormControl fullWidth sx={{ mb: 2 }}>
+                      <InputLabel>Preferred Time</InputLabel>
+                      <Select
+                        value={testDriveTime}
+                        onChange={(e) => setTestDriveTime(e.target.value)}
+                        label="Preferred Time"
+                      >
+                        {availableTimeSlots.map((time) => (
+                          <MenuItem key={time} value={time}>
+                            {time}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  ) : (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      ❌ No available slots on this date
+                    </Alert>
+                  )
+                ) : (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    📅 Select a date above to see available time slots
+                  </Alert>
+                )}
+              </>
+            ) : (
+              // No slots configured - show simple time input
+              <TextField
+                fullWidth
+                label="Preferred Time"
+                type="time"
+                value={testDriveTime}
+                onChange={(e) => setTestDriveTime(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ mb: 2 }}
+              />
+            )}
             <TextField
               fullWidth
               label="Message to Seller (Optional)"
@@ -486,6 +937,30 @@ const VehicleDetailPage = () => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+          <DialogTitle>Delete Vehicle</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to delete <strong>{vehicle?.brand} {vehicle?.model}</strong>? This action cannot be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
+            <Button onClick={handleDeleteVehicle} color="error" variant="contained">
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Edit Vehicle Modal */}
+        <EditVehicleModal
+          open={editModalOpen}
+          vehicle={vehicle}
+          onClose={() => setEditModalOpen(false)}
+          onSuccess={handleEditSuccess}
+        />
       </Container>
     </Box>
   );

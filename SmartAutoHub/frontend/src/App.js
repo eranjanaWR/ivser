@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
@@ -23,16 +23,28 @@ import SignupPage from './pages/SignupPage';
 import VerificationPage from './pages/VerificationPage';
 import VehiclesPage from './pages/VehiclesPage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
+import ComparisonPage from './pages/ComparisonPage';
 import AddVehiclePage from './pages/AddVehiclePage';
 import MyVehiclesPage from './pages/MyVehiclesPage';
 import TestDrivesPage from './pages/TestDrivesPage';
+import TestDriveBookingForm from './pages/TestDriveBookingForm';
+import SellerAvailability from './pages/SellerAvailability';
 import BreakdownPage from './pages/BreakdownPage';
 import RepairmanMapPage from './pages/RepairmanMapPage';
 import RepairmanDashboard from './pages/RepairmanDashboard';
 import PredictionPage from './pages/PredictionPage';
 import ProfilePage from './pages/ProfilePage';
+import WishlistPage from './pages/WishlistPage';
 import Admin1Dashboard from './pages/Admin1Dashboard';
 import Admin2Dashboard from './pages/Admin2Dashboard';
+import BiddingPage from './pages/BiddingPage';
+import MyAuctionsPage from './pages/MyAuctionsPage';
+import WonBidsPage from './pages/WonBidsPage';
+import AuctionVehicleDetailsPage from './pages/AuctionVehicleDetailsPage';
+import LiveAuctionDashboard from './pages/LiveAuctionDashboard';
+import BoostAdPage from './pages/BoostAdPage';
+import PremiumPostsPage from './pages/PremiumPostsPage';
+import AdvertisePackagesPage from './pages/AdvertisePackagesPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Professional, minimal theme similar to Uber
@@ -165,7 +177,13 @@ function App() {
                 <Route path="/signup" element={<SignupPage />} />
                 <Route path="/vehicles" element={<VehiclesPage />} />
                 <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
+                <Route path="/auction-vehicles/:id" element={<AuctionVehicleDetailsPage />} />
+                <Route path="/vehicles/:vehicleId/boost" element={<BoostAdPage />} />
+                <Route path="/compare-vehicles" element={<ComparisonPage />} />
+                <Route path="/compare/:id" element={<ComparisonPage />} />
                 <Route path="/prediction" element={<PredictionPage />} />
+                <Route path="/premium-posts" element={<PremiumPostsPage />} />
+                <Route path="/advertise-packages" element={<AdvertisePackagesPage />} />
                 
                 {/* Protected Routes */}
                 <Route path="/verification" element={
@@ -178,19 +196,59 @@ function App() {
                     <ProfilePage />
                   </PrivateRoute>
                 } />
+                <Route path="/vehicles/saved" element={
+                  <PrivateRoute>
+                    <WishlistPage />
+                  </PrivateRoute>
+                } />
                 <Route path="/add-vehicle" element={
-                  <PrivateRoute roles={['seller', 'admin1']}>
+                  <PrivateRoute>
                     <AddVehiclePage />
                   </PrivateRoute>
                 } />
                 <Route path="/my-vehicles" element={
-                  <PrivateRoute roles={['seller', 'admin1']}>
+                  <PrivateRoute roles={['seller', 'buyer/seller', 'admin1']}>
                     <MyVehiclesPage />
                   </PrivateRoute>
                 } />
                 <Route path="/test-drives" element={
                   <PrivateRoute>
                     <TestDrivesPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/bidding" element={
+                  <PrivateRoute>
+                    <BiddingPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/my-auctions" element={
+                  <PrivateRoute>
+                    <MyAuctionsPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/won-bids" element={
+                  <PrivateRoute>
+                    <WonBidsPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/bidding/:vehicleId/place-bid" element={
+                  <PrivateRoute>
+                    <LiveAuctionDashboard />
+                  </PrivateRoute>
+                } />
+                <Route path="/bidding/:vehicleId" element={
+                  <PrivateRoute>
+                    <LiveAuctionDashboard />
+                  </PrivateRoute>
+                } />
+                <Route path="/book-test-drive/:vehicleId" element={
+                  <PrivateRoute>
+                    <TestDriveBookingForm />
+                  </PrivateRoute>
+                } />
+                <Route path="/seller-availability" element={
+                  <PrivateRoute roles={['seller', 'buyer/seller', 'admin1']}>
+                    <SellerAvailability />
                   </PrivateRoute>
                 } />
                 <Route path="/breakdown" element={

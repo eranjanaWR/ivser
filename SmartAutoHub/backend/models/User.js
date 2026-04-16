@@ -151,6 +151,18 @@ const userSchema = new mongoose.Schema({
     }
   },
   
+  // Notification Preferences
+  notificationPreferences: {
+    systemAlerts: {
+      type: Boolean,
+      default: true // Enable in-app popup alerts by default
+    },
+    emailNotifications: {
+      type: Boolean,
+      default: true // Enable email notifications by default
+    }
+  },
+  
   // Account Status
   isActive: {
     type: Boolean,

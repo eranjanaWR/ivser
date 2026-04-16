@@ -12,10 +12,9 @@ const { validateTestDrive, validateObjectId, validatePagination } = require('../
 // All routes require authentication
 router.use(protect);
 
-// Schedule a test drive (verified buyers)
+// Schedule a test drive
 router.post(
   '/',
-  requireFullyVerified,
   validateTestDrive,
   testDriveController.scheduleTestDrive
 );

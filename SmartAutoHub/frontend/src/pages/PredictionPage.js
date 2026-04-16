@@ -75,32 +75,10 @@ const PredictionPage = () => {
       const { data } = await api.post('/prediction/estimate', formData);
       setPrediction(data.data);
     } catch (err) {
-      // Generate mock prediction for demo
-      const basePrice = 3000000; // 3M LKR
-      const yearFactor = (formData.year - 2000) * 100000;
-      const mileageFactor = -Number(formData.mileage) * 5;
-      const conditionFactor = formData.condition === 'New' ? 500000 : formData.condition === 'Certified Pre-Owned' ? 200000 : 0;
-      const transmissionFactor = formData.transmission === 'Automatic' ? 300000 : 0;
-      const hybridFactor = formData.fuelType === 'Hybrid' ? 500000 : formData.fuelType === 'Electric' ? 800000 : 0;
-      
-      const estimatedPrice = Math.max(500000, basePrice + yearFactor + mileageFactor + conditionFactor + transmissionFactor + hybridFactor);
-      
-      setPrediction({
-        estimatedPrice: Math.round(estimatedPrice),
-        priceRange: {
-          min: Math.round(estimatedPrice * 0.85),
-          max: Math.round(estimatedPrice * 1.15),
-        },
-        factors: {
-          year: yearFactor > 0 ? 'positive' : 'negative',
-          mileage: 'negative',
-          condition: conditionFactor > 0 ? 'positive' : 'neutral',
-          transmission: transmissionFactor > 0 ? 'positive' : 'neutral',
-          fuelType: hybridFactor > 0 ? 'positive' : 'neutral',
-        },
-        confidence: 85,
-        marketTrend: 'stable',
-      });
+      console.error('❌ Failed to fetch prediction:', err.message);
+      // Show proper error instead of generating mock prediction
+      setError('Failed to calculate price prediction. Please check your input and try again or contact support.');
+      setPrediction(null); // Clear any previous prediction
     }
     setLoading(false);
   };

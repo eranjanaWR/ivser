@@ -3,7 +3,7 @@
  * User profile management
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -20,6 +20,10 @@ import {
   Chip,
   Card,
   CardContent,
+  CardMedia,
+  Switch,
+  FormControlLabel,
+  FormGroup,
 } from '@mui/material';
 import {
   Edit,
@@ -31,14 +35,21 @@ import {
   Badge,
   Face,
   Warning,
+  NotificationsActive,
+  Mail,
+  Favorite,
+  Close,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getImageUrl } from '../utils/imageUrl';
 
 const ProfilePage = () => {
   const { user, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const wishlistRef = useRef(null);
   
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -50,6 +61,66 @@ const ProfilePage = () => {
     phone: user?.phone || '',
     address: user?.address || '',
   });
+
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    systemAlerts: true,
+    emailNotifications: true,
+  });
+
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
+  const [wishlistVehicles, setWishlistVehicles] = useState([]);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+
+  useEffect(() => {
+    fetchNotificationPreferences();
+    fetchWishlistVehicles();
+  }, []);
+
+  const fetchNotificationPreferences = async () => {
+    try {
+      setPreferencesLoading(true);
+      const response = await api.get('/notifications/preferences');
+      if (response.data.success) {
+        setNotificationPreferences(response.data.preferences);
+      }
+    } catch (err) {
+      console.error('Failed to fetch notification preferences:', err);
+    } finally {
+      setPreferencesLoading(false);
+    }
+  };
+
+  const fetchWishlistVehicles = async () => {
+    try {
+      setWishlistLoading(true);
+      const { data } = await api.get('/vehicles/saved');
+      setWishlistVehicles(data.data || []);
+    } catch (err) {
+      console.error('Failed to fetch wishlist:', err);
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
+
+  const handlePreferenceChange = async (event) => {
+    const { name, checked } = event.target;
+    const updatedPreferences = {
+      ...notificationPreferences,
+      [name]: checked,
+    };
+    setNotificationPreferences(updatedPreferences);
+
+    try {
+      await api.put('/notifications/preferences', {
+        [name]: checked,
+      });
+      setSuccess('Notification preferences updated successfully');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to update notification preferences');
+      // Revert the change if update fails
+      setNotificationPreferences(notificationPreferences);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -74,11 +145,11 @@ const ProfilePage = () => {
     if (!file) return;
     
     setLoading(true);
-    const formData = new FormData();
-    formData.append('avatar', file);
+    const formDataFD = new FormData();
+    formDataFD.append('avatar', file);
     
     try {
-      await api.post('/users/avatar', formData, {
+      await api.post('/users/avatar', formDataFD, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       await refreshUser();
@@ -87,6 +158,30 @@ const ProfilePage = () => {
       setError(err.response?.data?.message || 'Failed to update avatar');
     }
     setLoading(false);
+  };
+
+  const handleRemoveFromWishlist = async (vehicleId) => {
+    try {
+      await api.post(`/vehicles/${vehicleId}/save`);
+      setWishlistVehicles(wishlistVehicles.filter(v => v._id !== vehicleId));
+      setSuccess('Removed from wishlist');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to remove from wishlist');
+    }
+  };
+
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('en-LK', {
+      style: 'currency',
+      currency: 'LKR',
+      maximumFractionDigits: 0,
+    }).format(price);
+  };
+
+  const scrollToWishlist = () => {
+    if (wishlistRef.current) {
+      wishlistRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const getVerificationStatus = () => {
@@ -346,6 +441,21 @@ const ProfilePage = () => {
                   Complete Verification
                 </Button>
               )}
+              <Button
+                component={Link}
+                to="/vehicles/saved"
+                variant="outlined"
+                startIcon={<Favorite />}
+                fullWidth
+                sx={{ 
+                  mt: 3,
+                  color: 'primary.main',
+                  borderColor: 'primary.main',
+                  fontWeight: 600,
+                }}
+              >
+                My Wishlist
+              </Button>
             </Paper>
 
             {/* Account Stats */}
@@ -369,6 +479,66 @@ const ProfilePage = () => {
                   {user?.role}
                 </Typography>
               </Box>
+            </Paper>
+
+            {/* Notification Preferences */}
+            <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'grey.200', mt: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <NotificationsActive sx={{ color: 'primary.main' }} />
+                <Typography variant="h6" fontWeight="bold">
+                  Notification Preferences
+                </Typography>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+
+              {preferencesLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+                  <CircularProgress size={40} />
+                </Box>
+              ) : (
+                <FormGroup>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="systemAlerts"
+                        checked={notificationPreferences.systemAlerts}
+                        onChange={handlePreferenceChange}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="500">
+                          System Alerts
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Show pop-up notifications when vehicles become available
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ mb: 2, alignItems: 'flex-start' }}
+                  />
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="emailNotifications"
+                        checked={notificationPreferences.emailNotifications}
+                        onChange={handlePreferenceChange}
+                      />
+                    }
+                    label={
+                      <Box>
+                        <Typography variant="body2" fontWeight="500">
+                          Email Notifications
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Receive email alerts about available vehicles
+                        </Typography>
+                      </Box>
+                    }
+                    sx={{ alignItems: 'flex-start' }}
+                  />
+                </FormGroup>
+              )}
             </Paper>
           </Grid>
         </Grid>

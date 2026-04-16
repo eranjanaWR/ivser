@@ -66,18 +66,19 @@ export const AuthProvider = ({ children }) => {
     try {
       setError(null);
 
-      // Determine headers: if FormData use multipart, else JSON
+      // Determine config: if FormData, let axios/browser handle Content-Type
+      // (should NOT be set explicitly, browser will add boundary)
       const isFormData = userData instanceof FormData;
       const config = isFormData
-        ? { headers: { 'Content-Type': 'multipart/form-data' } }
+        ? { headers: {} }
         : {};
 
       const response = await api.post('/auth/register', userData, config);
 
-      // Defensive: check if response.data.data exists
+      // Check if response is successful
       if (!response.data || !response.data.data) {
-        setError('Route not found or server error');
-        return { success: false, message: 'Route not found or server error' };
+        // If registration succeeds but data is malformed, throw error
+        throw new Error('Invalid response from server');
       }
       const { user, token, emailSent } = response.data.data;
       
@@ -91,7 +92,19 @@ export const AuthProvider = ({ children }) => {
         emailSent,
       };
     } catch (err) {
-      const message = err.response?.data?.message || 'Signup failed';
+      // Handle validation errors with specific field messages
+      let message = 'Signup failed';
+      
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        // Extract specific validation errors
+        const fieldErrors = err.response.data.errors
+          .map(err => `${err.field}: ${err.message}`)
+          .join(', ');
+        message = fieldErrors || err.response.data.message || message;
+      } else {
+        message = err.response?.data?.message || message;
+      }
+      
       setError(message);
       return { success: false, message };
     }

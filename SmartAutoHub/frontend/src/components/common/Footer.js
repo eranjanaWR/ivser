@@ -23,12 +23,19 @@ const Footer = () => {
         <Grid container spacing={4}>
           {/* Brand */}
           <Grid item xs={12} md={4}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <DirectionsCar />
-              <Typography variant="h6" fontWeight="bold">
-                SmartAuto Hub
-              </Typography>
-            </Box>
+            <Box
+              component="img"
+              src="/images/takgaala-logo.png"
+              alt="TakGaala"
+              sx={{
+                maxWidth: 220,
+                height: 'auto',
+                mb: 2,
+              }}
+              onError={(e) => {
+                e.target.style.display = 'none';
+              }}
+            />
             <Typography variant="body2" color="grey.400" sx={{ mb: 2 }}>
               Your trusted platform for buying, selling, and repairing vehicles.
               Professional service, transparent pricing.
@@ -110,19 +117,19 @@ const Footer = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Email fontSize="small" sx={{ color: 'grey.400' }} />
                 <Typography variant="body2" color="grey.400">
-                  support@smartautohub.com
+                  itpproject34@gmail.com
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Phone fontSize="small" sx={{ color: 'grey.400' }} />
                 <Typography variant="body2" color="grey.400">
-                  +1 (555) 123-4567
+                  0764518239
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <LocationOn fontSize="small" sx={{ color: 'grey.400' }} />
                 <Typography variant="body2" color="grey.400">
-                  123 Auto Street, Car City, CC 12345
+                  No 667 Kandy road, Malabe, Sri Lanka
                 </Typography>
               </Box>
             </Box>
@@ -133,7 +140,7 @@ const Footer = () => {
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
           <Typography variant="body2" color="grey.500">
-            © {new Date().getFullYear()} SmartAuto Hub. All rights reserved.
+            © {new Date().getFullYear()} TakGaala.lk. All rights reserved.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Typography

@@ -64,11 +64,26 @@ const TestDrivesPage = () => {
   const fetchTestDrives = async () => {
     setLoading(true);
     try {
-      const endpoint = tab === 0 ? '/test-drives/my-requests' : '/test-drives/seller-requests';
+      let endpoint = '';
+      
+      if (tab === 0) {
+        // My Requests (Buyer perspective) - only active/pending/approved
+        endpoint = '/test-drives/my-requests';
+      } else if (tab === 1) {
+        // Received Requests (Seller perspective) - only pending/approved (not completed/rejected/cancelled)
+        endpoint = '/test-drives/my-vehicles?status=active';
+      } else {
+        // Booking History (Seller perspective) - only rejected/cancelled/completed
+        endpoint = '/test-drives/my-vehicles?status=history';
+      }
+      
       const { data } = await api.get(endpoint);
       setTestDrives(data.data || []);
+      setError('');
     } catch (err) {
+      console.error('Fetch test drives error:', err);
       setError(err.response?.data?.message || 'Failed to fetch test drives');
+      setTestDrives([]);
     }
     setLoading(false);
   };
@@ -76,9 +91,9 @@ const TestDrivesPage = () => {
   const handleResponse = async (status) => {
     setResponding(true);
     try {
-      await api.patch(`/test-drives/${selectedDrive._id}`, {
+      await api.put(`/test-drives/${selectedDrive._id}/status`, {
         status,
-        sellerResponse: responseMessage,
+        sellerNotes: responseMessage,
       });
       setSuccess(`Test drive ${status}`);
       setResponseOpen(false);
@@ -137,6 +152,7 @@ const TestDrivesPage = () => {
           <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 3 }}>
             <Tab label="My Requests" icon={<Schedule />} iconPosition="start" />
             <Tab label="Received Requests" icon={<Person />} iconPosition="start" />
+            <Tab label="Booking History" icon={<Schedule />} iconPosition="start" />
           </Tabs>
         )}
 
@@ -152,7 +168,9 @@ const TestDrivesPage = () => {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               {tab === 0 
                 ? 'Browse vehicles and request a test drive'
-                : 'No one has requested a test drive for your vehicles yet'
+                : tab === 1
+                ? 'No active bookings. All pending and approved bookings appear here'
+                : 'No past bookings. Rejected, cancelled, or completed bookings appear here'
               }
             </Typography>
             {tab === 0 && (
@@ -180,17 +198,17 @@ const TestDrivesPage = () => {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                         <Avatar
                           variant="rounded"
-                          src={drive.vehicle?.images?.[0]}
+                          src={drive.vehicleId?.images?.[0]}
                           sx={{ width: 60, height: 45 }}
                         >
                           <DirectionsCar />
                         </Avatar>
                         <Box>
                           <Typography fontWeight="medium">
-                            {drive.vehicle?.brand} {drive.vehicle?.model}
+                            {drive.vehicleId?.brand} {drive.vehicleId?.model}
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {drive.vehicle?.year}
+                            {drive.vehicleId?.year}
                           </Typography>
                         </Box>
                       </Box>
@@ -198,14 +216,19 @@ const TestDrivesPage = () => {
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                          {(tab === 0 ? drive.seller?.name : drive.buyer?.name)?.[0]}
+                          {(tab === 0 
+                            ? `${drive.sellerId?.firstName} ${drive.sellerId?.lastName}` 
+                            : `${drive.buyerId?.firstName} ${drive.buyerId?.lastName}`
+                          )?.[0]}
                         </Avatar>
                         <Box>
                           <Typography variant="body2">
-                            {tab === 0 ? drive.seller?.name : drive.buyer?.name}
+                            {tab === 0 
+                              ? `${drive.sellerId?.firstName} ${drive.sellerId?.lastName}` 
+                              : `${drive.buyerId?.firstName} ${drive.buyerId?.lastName}`}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {tab === 0 ? drive.seller?.phone : drive.buyer?.phone}
+                            {tab === 0 ? drive.sellerId?.phone : drive.buyerId?.phone}
                           </Typography>
                         </Box>
                       </Box>
@@ -215,20 +238,26 @@ const TestDrivesPage = () => {
                         <CalendarToday fontSize="small" color="action" />
                         <Box>
                           <Typography variant="body2">
-                            {formatDate(drive.preferredDate)}
+                            {formatDate(drive.date)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {drive.preferredTime}
+                            {drive.time}
                           </Typography>
                         </Box>
                       </Box>
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={drive.status}
+                        label={drive.status.charAt(0).toUpperCase() + drive.status.slice(1)}
                         size="small"
                         color={getStatusColor(drive.status)}
+                        variant="filled"
                       />
+                      {drive.status === 'pending' && (
+                        <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
+                          Waiting for seller approval
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell>
                       {tab === 1 && drive.status === 'pending' && (
@@ -240,6 +269,7 @@ const TestDrivesPage = () => {
                               setSelectedDrive(drive);
                               setResponseOpen(true);
                             }}
+                            title="Approve"
                           >
                             <Check />
                           </IconButton>
@@ -250,6 +280,7 @@ const TestDrivesPage = () => {
                               setSelectedDrive(drive);
                               handleResponse('rejected');
                             }}
+                            title="Reject"
                           >
                             <Close />
                           </IconButton>
@@ -273,9 +304,7 @@ const TestDrivesPage = () => {
                         </Button>
                       )}
                       {drive.status === 'approved' && (
-                        <Typography variant="caption" color="success.main">
-                          Approved
-                        </Typography>
+                        <Chip label="Confirmed" size="small" color="success" />
                       )}
                     </TableCell>
                   </TableRow>
@@ -290,8 +319,8 @@ const TestDrivesPage = () => {
           <DialogTitle>Approve Test Drive</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Approve test drive request from {selectedDrive?.buyer?.name} for{' '}
-              {selectedDrive?.vehicle?.brand} {selectedDrive?.vehicle?.model}
+              Approve test drive request from {selectedDrive?.buyerId?.firstName} {selectedDrive?.buyerId?.lastName} for{' '}
+              {selectedDrive?.vehicleId?.brand} {selectedDrive?.vehicleId?.model}
             </Typography>
             <TextField
               fullWidth

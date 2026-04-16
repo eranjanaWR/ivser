@@ -89,36 +89,10 @@ const RepairmanMapPage = () => {
       const { data } = await api.get(`/users/repairmen${params}`);
       setRepairmen(data.data || []);
     } catch (err) {
-      // If API fails, show mock data for demo
-      setRepairmen([
-        {
-          _id: '1',
-          name: 'John Mechanic',
-          phone: '+94 77 123 4567',
-          rating: 4.5,
-          isAvailable: true,
-          isFaceVerified: true,
-          location: { coordinates: [79.8700, 6.9200] },
-        },
-        {
-          _id: '2',
-          name: 'Kumar Auto Care',
-          phone: '+94 77 234 5678',
-          rating: 4.8,
-          isAvailable: true,
-          isFaceVerified: true,
-          location: { coordinates: [79.8500, 6.9350] },
-        },
-        {
-          _id: '3',
-          name: 'Quick Fix Motors',
-          phone: '+94 77 345 6789',
-          rating: 4.2,
-          isAvailable: false,
-          isFaceVerified: true,
-          location: { coordinates: [79.8800, 6.9100] },
-        },
-      ]);
+      console.error('❌ Failed to fetch repairmen:', err.message);
+      // Show empty array instead of mock data
+      setRepairmen([]);
+      setError('Failed to load repairmen. Please check backend connection or try again later.');
     }
     setLoading(false);
   };

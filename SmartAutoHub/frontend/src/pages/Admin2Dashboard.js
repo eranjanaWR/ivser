@@ -81,27 +81,10 @@ const Admin2Dashboard = () => {
       const { data } = await api.get(`/admin/pending-verifications?type=${verificationType}`);
       setPendingUsers(data.data || []);
     } catch (err) {
-      // Mock data for demo
-      setPendingUsers([
-        {
-          _id: '1',
-          name: 'John Doe',
-          email: 'john@example.com',
-          role: 'seller',
-          idDocumentImage: '/uploads/sample-id.jpg',
-          selfieImage: '/uploads/sample-selfie.jpg',
-          submittedAt: new Date(),
-        },
-        {
-          _id: '2',
-          name: 'Jane Smith',
-          email: 'jane@example.com',
-          role: 'buyer',
-          idDocumentImage: '/uploads/sample-id-2.jpg',
-          selfieImage: '/uploads/sample-selfie-2.jpg',
-          submittedAt: new Date(),
-        },
-      ]);
+      console.error('❌ Failed to fetch pending verifications:', err.message);
+      // Show empty array instead of mock data
+      setPendingUsers([]);
+      setError(`Failed to load ${tab === 0 ? 'ID' : 'Face'} verifications. Please check backend connection.`);
     }
     setLoading(false);
   };

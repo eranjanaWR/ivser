@@ -8,11 +8,13 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
 const { uploadID, uploadSelfie, uploadProfileImage } = require('../middlewares/upload');
-const { validateLogin, validateOTP } = require('../middlewares/validation');
+const { validateLogin, validateOTP, validateRegistration } = require('../middlewares/validation');
 
 // Public routes
 // Registration accepts optional profile image
-router.post('/register', uploadProfileImage, authController.register);
+// ⚠️ IMPORTANT: uploadProfileImage (multer) must come BEFORE validateRegistration
+// because validation needs req.body to be populated by multer
+router.post('/register', uploadProfileImage, validateRegistration, authController.register);
 router.post('/login', validateLogin, authController.login);
 
 // Protected routes (requires authentication)
