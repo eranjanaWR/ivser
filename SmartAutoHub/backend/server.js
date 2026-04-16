@@ -48,6 +48,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Static files for uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Serve frontend build files
+const frontendPath = path.join(__dirname, '../frontend/build');
+app.use(express.static(frontendPath));
+
 // Make io accessible to routes
 app.set('io', io);
 
@@ -134,12 +138,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found'
-  });
+// Serve React frontend for any non-API route (must be after API routes)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 // Start server
