@@ -152,7 +152,7 @@ const RepairmanDashboard = () => {
     }
 
     // Socket connection for real-time updates
-    const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5001');
+    const socket = io(process.env.REACT_APP_API_URL || window.location.origin);
     socketRef.current = socket;
 
     socket.on('newBreakdownRequest', (data) => {
