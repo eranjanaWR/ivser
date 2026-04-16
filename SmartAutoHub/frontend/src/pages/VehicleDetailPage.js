@@ -44,6 +44,7 @@ import {
   CompareArrows,
   Favorite,
   FavoriteBorder,
+  AttachMoney,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -475,6 +476,24 @@ const VehicleDetailPage = () => {
                   }}
                 >
                   {isSaved ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                </Button>
+
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  startIcon={<AttachMoney />}
+                  onClick={() => navigate(`/financial-aids`)}
+                  sx={{
+                    backgroundColor: '#16a34a',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    '&:hover': {
+                      backgroundColor: '#9CA3AF'
+                    }
+                  }}
+                >
+                  Financial Aids
                 </Button>
               </Box>
             )}
