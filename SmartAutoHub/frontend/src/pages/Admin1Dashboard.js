@@ -88,6 +88,17 @@ const Admin1Dashboard = () => {
   const [paymentProofDialogOpen, setPaymentProofDialogOpen] = useState(false);
   const [selectedPaymentProofRequest, setSelectedPaymentProofRequest] = useState(null);
 
+  const getUploadUrl = (uploadPath) => {
+    if (!uploadPath) return '';
+    if (uploadPath.startsWith('http://') || uploadPath.startsWith('https://')) {
+      return uploadPath;
+    }
+
+    const backendUrl = process.env.REACT_APP_API_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+    const normalizedPath = uploadPath.replace(/^\/+/, '').replace(/^uploads\//, '');
+    return `${backendUrl}/uploads/${normalizedPath}`;
+  };
+
   useEffect(() => {
     fetchData();
   }, [tab]);
@@ -1543,7 +1554,7 @@ const Admin1Dashboard = () => {
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Bank transfer proof document</Typography>
                         <Button 
                           variant="contained" 
-                          href={`http://localhost:5000/uploads/${selectedPaymentProofRequest.bankSlipPath}`}
+                          href={getUploadUrl(selectedPaymentProofRequest.bankSlipPath)}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1553,7 +1564,7 @@ const Admin1Dashboard = () => {
                     ) : (
                       <Box
                         component="img"
-                        src={`http://localhost:5000/uploads/${selectedPaymentProofRequest.bankSlipPath}`}
+                        src={getUploadUrl(selectedPaymentProofRequest.bankSlipPath)}
                         alt="Bank Slip"
                         onError={(e) => {
                           console.error('Bank slip load error:', e, 'URL:', e.target.src);
@@ -1580,7 +1591,7 @@ const Admin1Dashboard = () => {
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Card payment proof document</Typography>
                         <Button 
                           variant="contained" 
-                          href={`http://localhost:5000/uploads/${selectedPaymentProofRequest.cardProofPath}`}
+                          href={getUploadUrl(selectedPaymentProofRequest.cardProofPath)}
                           target="_blank"
                           rel="noopener noreferrer"
                         >
@@ -1590,7 +1601,7 @@ const Admin1Dashboard = () => {
                     ) : (
                       <Box
                         component="img"
-                        src={`http://localhost:5000/uploads/${selectedPaymentProofRequest.cardProofPath}`}
+                        src={getUploadUrl(selectedPaymentProofRequest.cardProofPath)}
                         alt="Card Proof"
                         onError={(e) => {
                           console.error('Card proof load error:', e, 'URL:', e.target.src);

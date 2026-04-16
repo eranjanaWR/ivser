@@ -8,6 +8,18 @@
  * @param {string|object} imagePath - Relative path, Image object (with or without imageData), or full URL
  * @returns {string} - Full URL to the image
  */
+const getBackendUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+
+  return '';
+};
+
 export const getImageUrl = (imagePath) => {
   if (!imagePath) {
     return '/images/placeholder.png';
@@ -21,14 +33,14 @@ export const getImageUrl = (imagePath) => {
   
   // Handle Image objects with _id (list view - fetched via populate with imageData excluded)
   if (typeof imagePath === 'object' && imagePath._id) {
-    const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const backendUrl = getBackendUrl();
     return `${backendUrl}/api/images/${imagePath._id}`;
   }
   
   // Handle string IDs directly
   if (typeof imagePath === 'string' && imagePath.match(/^[a-f\d]{24}$/i)) {
     // This is a MongoDB ObjectId
-    const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const backendUrl = getBackendUrl();
     return `${backendUrl}/api/images/${imagePath}`;
   }
   
@@ -55,8 +67,8 @@ export const getImageUrl = (imagePath) => {
   
   // If string is provided but doesn't match any pattern
   if (typeof imagePath === 'string' && imagePath.length > 0) {
-    // Get backend URL from environment or use default
-    const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    // Get backend URL from environment or same-origin fallback
+    const backendUrl = getBackendUrl();
     
     // Prepend backend URL to relative paths
     const normalizedPath = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
