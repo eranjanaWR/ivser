@@ -18,11 +18,11 @@ exports.sendNotificationToUser = async (userId, title, message, metadata = {}) =
     const alert = await UserAlert.create({
       userId: userId,
       vehicleId: metadata.vehicleId || null,
-      vehicleBrand: metadata.vehicleBrand || 'SmartAuto Hub',
+      vehicleBrand: metadata.vehicleBrand || 'TakGaala.lk',
       vehicleModel: metadata.vehicleModel || '',
       vehiclePrice: metadata.vehiclePrice || 0,
       vehicleImage: metadata.vehicleImage || null,
-      sellerName: metadata.sellerName || 'SmartAuto Hub',
+      sellerName: metadata.sellerName || 'TakGaala.lk',
       alertType: metadata.type || 'notification',
       message: message,
       isSeen: false
@@ -108,7 +108,7 @@ exports.subscribe = async (req, res) => {
     // Send confirmation email
     const emailResult = await sendEmail({
       to: email,
-      subject: 'Notification Subscription Confirmed - SmartAuto Hub',
+      subject: 'Notification Subscription Confirmed - TakGaala.lk',
       template: 'notification-subscription',
       data: {
         email,
@@ -257,7 +257,7 @@ exports.checkAndNotify = async (vehicle) => {
           try {
             const emailResult = await sendEmail({
               to: subscription.email,
-              subject: `🚗 ${vehicle.brand} ${vehicle.model} Available - SmartAuto Hub`,
+              subject: `🚗 ${vehicle.brand} ${vehicle.model} Available - TakGaala.lk`,
               template: 'vehicle-notification',
               data: {
                 vehicle: {

@@ -1319,12 +1319,12 @@ const approveBoostRequest = async (req, res) => {
             <li><strong>Start Date:</strong> ${startDateFormatted}</li>
           </ul>
           <p>Your ad will now get increased visibility on our platform! Your customers will see it more prominently in search results and featured listings.</p>
-          <p>Thank you for boosting your ad with SmartAuto Hub! 🚗</p>
+          <p>Thank you for boosting your ad with TakGaala.lk! 🚗</p>
         `;
         
         const emailResult = await sendNotificationEmail(
           notificationsEmail,
-          'Boost Request Approved! 🎉 - SmartAuto Hub',
+          'Boost Request Approved! 🎉 - TakGaala.lk',
           message,
           boost.userId?.firstName || 'User'
         );
@@ -1447,7 +1447,7 @@ const rejectBoostRequest = async (req, res) => {
       let message;
       
       if (isDeactivation) {
-        emailSubject = 'Your Boost Has Been Deactivated - SmartAuto Hub';
+        emailSubject = 'Your Boost Has Been Deactivated - TakGaala.lk';
         message = `
           <p>We wanted to notify you that your boost post has been <strong>deactivated</strong> by our admin team.</p>
           <p><strong>Reason:</strong> ${adminNotes}</p>
@@ -1460,7 +1460,7 @@ const rejectBoostRequest = async (req, res) => {
           <p>Thank you for your understanding.</p>
         `;
       } else {
-        emailSubject = 'Boost Request Rejected - SmartAuto Hub';
+        emailSubject = 'Boost Request Rejected - TakGaala.lk';
         message = `
           <p>Unfortunately, your boost request has been <strong>rejected</strong> by our admin team.</p>
           <p><strong>Reason:</strong> ${adminNotes}</p>

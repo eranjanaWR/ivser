@@ -142,10 +142,10 @@ exports.submitPackageRequest = async (req, res) => {
 
             <div style="background-color: #f9f9f9; padding: 15px; margin: 20px 0; border-radius: 4px; text-align: center;">
               <p style="margin: 5px 0; font-size: 12px;">
-                <strong>SmartAutoHub Advertising Team</strong>
+                <strong>TakGaala.lk Advertising Team</strong>
               </p>
               <p style="margin: 5px 0; font-size: 12px; color: #666;">
-                📧 support@smartautohub.com<br>
+                📬 support@takgaala.lk<br>
                 📱 +1-800-SMART-AUTO
               </p>
             </div>
