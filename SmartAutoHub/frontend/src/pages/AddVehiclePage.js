@@ -123,6 +123,17 @@ const AddVehiclePage = () => {
       return;
     }
     
+    // Validate numeric fields
+    if (parseFloat(formData.price) < 0) {
+      setError('Price cannot be negative');
+      return;
+    }
+    
+    if (parseFloat(formData.mileage) < 0) {
+      setError('Mileage cannot be negative');
+      return;
+    }
+    
     if (imageFiles.length === 0) {
       setError('Please upload at least one image');
       return;
@@ -378,6 +389,7 @@ const AddVehiclePage = () => {
                       required
                       type="number"
                       placeholder="25000"
+                      inputProps={{ min: 0 }}
                     />
                   </Grid>
                   <Grid item xs={12} sm={6} md={4}>
@@ -458,6 +470,7 @@ const AddVehiclePage = () => {
                       required
                       type="number"
                       placeholder="15000"
+                      inputProps={{ min: 0 }}
                     />
                   </Grid>
                 </Grid>
