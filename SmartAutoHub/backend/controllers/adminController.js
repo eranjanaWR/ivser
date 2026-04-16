@@ -710,6 +710,50 @@ const rejectUser = async (req, res) => {
  * @route   GET /api/admin/dashboard
  * @access  Private (Admin1)
  */
+/**
+ * @desc    Get admin dashboard stats (simplified format for Admin1Dashboard)
+ * @route   GET /api/admin/stats
+ * @access  Private (Admin1)
+ */
+const getStats = async (req, res) => {
+  try {
+    const [
+      totalUsers,
+      totalVehicles,
+      totalBreakdowns,
+      pendingVerifications
+    ] = await Promise.all([
+      User.countDocuments(),
+      Vehicle.countDocuments(),
+      Breakdown.countDocuments(),
+      User.countDocuments({
+        $or: [
+          { isEmailVerified: false },
+          { isIDVerified: false },
+          { isFaceVerified: false }
+        ]
+      })
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        totalUsers,
+        totalVehicles,
+        totalBreakdowns,
+        pendingVerifications
+      }
+    });
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching stats',
+      error: error.message
+    });
+  }
+};
+
 const getDashboard = async (req, res) => {
   try {
     const today = new Date();
@@ -1421,6 +1465,7 @@ module.exports = {
   getAllBreakdowns,
   getAllTestDrives,
   generateReports,
+  getStats,
   updateUserStatus,
   deleteUser,
   getDashboard,
