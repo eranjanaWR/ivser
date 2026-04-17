@@ -63,10 +63,16 @@ const sendOTPEmail = async (email, otp, firstName) => {
   try {
     const transporter = createTransporter();
     
+    // Check if transporter is null (email credentials not configured)
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping OTP email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
+    
     const mailOptions = {
-      from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: 'Email Verification - SmartAuto Hub',
+      subject: 'Email Verification - TakGaala.lk',
       html: `
         <!DOCTYPE html>
         <html>
@@ -84,11 +90,11 @@ const sendOTPEmail = async (email, otp, firstName) => {
         <body>
           <div class="container">
             <div class="header">
-              <h1>SmartAuto Hub</h1>
+              <h1>TakGaala.lk</h1>
             </div>
             <div class="content">
               <h2>Hello ${firstName},</h2>
-              <p>Thank you for registering with SmartAuto Hub. Please use the following OTP to verify your email address:</p>
+              <p>Thank you for registering with TakGaala.lk. Please use the following OTP to verify your email address:</p>
               <div class="otp-box">
                 <div class="otp-code">${otp}</div>
               </div>
@@ -96,7 +102,7 @@ const sendOTPEmail = async (email, otp, firstName) => {
               <p>If you didn't request this verification, please ignore this email.</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} SmartAuto Hub. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -105,10 +111,10 @@ const sendOTPEmail = async (email, otp, firstName) => {
     };
     
     const result = await transporter.sendMail(mailOptions);
-    console.log('OTP email sent:', result.messageId);
+    console.log('✅ OTP email sent successfully to:', email, '| Message ID:', result.messageId);
     return { success: true, messageId: result.messageId };
   } catch (error) {
-    console.error('Error sending OTP email:', error);
+    console.error('❌ Error sending OTP email to', email, ':', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -120,8 +126,14 @@ const sendNotificationEmail = async (email, subject, message, firstName) => {
   try {
     const transporter = createTransporter();
     
+    // Check if transporter is null (email credentials not configured)
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
+    
     const mailOptions = {
-      from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: subject,
       html: `
@@ -139,14 +151,14 @@ const sendNotificationEmail = async (email, subject, message, firstName) => {
         <body>
           <div class="container">
             <div class="header">
-              <h1>SmartAuto Hub</h1>
+              <h1>TakGaala.lk</h1>
             </div>
             <div class="content">
               <h2>Hello ${firstName},</h2>
               <p>${message}</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} SmartAuto Hub. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -155,9 +167,10 @@ const sendNotificationEmail = async (email, subject, message, firstName) => {
     };
     
     const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Notification email sent successfully to:', email, '| Message ID:', result.messageId);
     return { success: true, messageId: result.messageId };
   } catch (error) {
-    console.error('Error sending notification email:', error);
+    console.error('❌ Error sending notification email to', email, ':', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -166,7 +179,7 @@ const sendNotificationEmail = async (email, subject, message, firstName) => {
  * Send test drive notification to seller
  */
 const sendTestDriveNotification = async (sellerEmail, sellerName, buyerName, vehicleName, date, time) => {
-  const subject = 'New Test Drive Request - SmartAuto Hub';
+  const subject = 'New Test Drive Request - TakGaala.lk';
   const message = `
     You have received a new test drive request!<br><br>
     <strong>Buyer:</strong> ${buyerName}<br>
@@ -183,7 +196,7 @@ const sendTestDriveNotification = async (sellerEmail, sellerName, buyerName, veh
  * Send breakdown notification to repairman
  */
 const sendBreakdownNotification = async (repairmanEmail, repairmanName, location, description, category) => {
-  const subject = 'New Breakdown Request - SmartAuto Hub';
+  const subject = 'New Breakdown Request - TakGaala.lk';
   const message = `
     You have received a new breakdown assistance request!<br><br>
     <strong>Location:</strong> ${location}<br>
@@ -214,7 +227,7 @@ const sendEmail = async (options) => {
     // If HTML is provided directly, use it
     if (html) {
       const mailOptions = {
-        from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
+        from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
         to: to || email,
         subject: subject,
         html: html,
@@ -244,7 +257,7 @@ const sendEmail = async (options) => {
         <body>
           <div class="container">
             <div class="header">
-              <h1>SmartAuto Hub</h1>
+              <h1>TakGaala.lk</h1>
             </div>
             <div class="content">
               <h2>Subscription Confirmed! 🎉</h2>
@@ -263,7 +276,7 @@ const sendEmail = async (options) => {
               <p>You can manage your notifications anytime from your account dashboard.</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} SmartAuto Hub. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -306,7 +319,7 @@ const sendEmail = async (options) => {
             </div>
             <div class="content">
               <h2>Great News!</h2>
-              <p>A vehicle matching your search criteria has been added to SmartAuto Hub.</p>
+              <p>A vehicle matching your search criteria has been added to TakGaala.lk.</p>
               
               <div class="vehicle-card">
                 ${vehicle.image ? `<img src="${vehicle.image}" alt="${vehicle.brand} ${vehicle.model}" class="vehicle-image">` : ''}
@@ -340,7 +353,7 @@ const sendEmail = async (options) => {
               <p>Contact the seller directly to arrange a test drive or get more information about this vehicle.</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} SmartAuto Hub. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -349,7 +362,7 @@ const sendEmail = async (options) => {
     }
 
     const mailOptions = {
-      from: `"SmartAuto Hub" <${process.env.EMAIL_USER}>`,
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
       to: to || email,
       subject: subject,
       html: emailHtml,

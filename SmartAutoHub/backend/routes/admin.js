@@ -15,6 +15,13 @@ router.use(protect);
 // ==================== ADMIN1 ROUTES ====================
 // Full access to all data
 
+// Get dashboard stats
+router.get(
+  '/stats',
+  authorize('admin1'),
+  adminController.getStats
+);
+
 // Get all users
 router.get(
   '/users',

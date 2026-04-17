@@ -263,12 +263,13 @@ const WishlistPage = () => {
                   <CardActions>
                     <Button
                       size="small"
-                      variant="outlined"
+                      variant="contained"
                       fullWidth
                       onClick={(e) => {
                         e.stopPropagation();
                         navigate(`/vehicles/${vehicle._id}`);
                       }}
+                      sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#333' } }}
                     >
                       View Details
                     </Button>

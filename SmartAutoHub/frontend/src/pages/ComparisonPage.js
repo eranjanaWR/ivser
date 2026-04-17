@@ -825,7 +825,7 @@ export default function ComparisonPage() {
 
                       <Button
                         variant="contained"
-                        sx={{ bgcolor: '#9e9e9e', color: 'white', fontWeight: 700, width: '100%', py: 1.5 }}
+                        sx={{ bgcolor: '#000', color: 'white', fontWeight: 700, width: '100%', py: 1.5, '&:hover': { bgcolor: '#333' } }}
                       >
                         View Details
                       </Button>

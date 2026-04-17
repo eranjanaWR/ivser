@@ -21,6 +21,14 @@ import api from '../services/api';
 const AlertsModal = ({ open, onClose, alerts = [] }) => {
   const [displayAlerts, setDisplayAlerts] = useState(alerts);
 
+  const getAlertImageUrl = (path) => {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+      return path;
+    }
+    return `/${path.replace(/^\/+/, '')}`;
+  };
+
   useEffect(() => {
     setDisplayAlerts(alerts);
     if (alerts && alerts.length > 0) {
@@ -131,7 +139,7 @@ const AlertsModal = ({ open, onClose, alerts = [] }) => {
                 <CardMedia
                   component="img"
                   height="180"
-                  image={`http://localhost:5000/${alert.vehicleImage}`}
+                  image={getAlertImageUrl(alert.vehicleImage)}
                   alt={`${alert.vehicleBrand} ${alert.vehicleModel}`}
                   sx={{ objectFit: 'cover' }}
                 />

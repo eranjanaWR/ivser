@@ -261,8 +261,9 @@ const MyVehiclesPage = () => {
                     <Button
                       component={Link}
                       to={`/vehicles/${vehicle._id}`}
-                      variant="outlined"
+                      variant="contained"
                       fullWidth
+                      sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#333' } }}
                     >
                       View Details
                     </Button>

@@ -1,10 +1,11 @@
 /**
- * Script to create test user for development
+ * Script to create test users for development
  * Run: node scripts/createTestUser.js
  */
 
 require('dotenv').config();
 const mongoose = require('mongoose');
+const User = require('../models/User');
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
@@ -14,17 +15,16 @@ mongoose.connect(process.env.MONGODB_URI)
     process.exit(1);
   });
 
-// Import the User model (includes pre-save password hashing hook)
-const User = require('../models/User');
-
-const createTestUser = async () => {
+const createTestUsers = async () => {
   try {
-    // Delete existing test user if any
-    await User.deleteMany({ email: 'dinethmalaka2004@gmail.com' });
-    console.log('Cleaned up existing test user');
     
-    // Create test buyer
-    const testUser = new User({
+    await User.deleteMany({ 
+      email: { $in: ['dinethmalaka2004@gmail.com', 'udakarasachith19@gmail.com'] } 
+    });
+    console.log('Cleaned up existing test users');
+    
+    
+    const userDineth = new User({
       firstName: 'Dineth',
       lastName: 'Malaka',
       email: 'dinethmalaka2004@gmail.com',
@@ -36,20 +36,35 @@ const createTestUser = async () => {
       isIDVerified: true,
       isFaceVerified: true
     });
-    await testUser.save();
-    console.log('✅ Test user created successfully');
+
     
-    console.log('\n=== Test User Credentials ===');
-    console.log('Email: dinethmalaka2004@gmail.com');
+    const userOther = new User({
+      firstName: 'Test',
+      lastName: 'User',
+      email: 'udakarasachith19@gmail.com',
+      password: 'test123456',
+      phone: '1234567890',
+      role: 'buyer',
+      isActive: true,
+      isEmailVerified: true,
+      isIDVerified: true,
+      isFaceVerified: true
+    });
+
+    await Promise.all([userDineth.save(), userOther.save()]);
+    
+    console.log('✅ Both test users created successfully');
+    console.log('\n--- Credentials ---');
+    console.log('User 1: dinethmalaka2004@gmail.com');
+    console.log('User 2: udakarasachith19@gmail.com');
     console.log('Password: test123456');
-    console.log('Role: buyer');
-    console.log('================================\n');
+    console.log('-------------------\n');
     
     process.exit(0);
   } catch (error) {
-    console.error('Error creating test user:', error);
+    console.error('Error creating test users:', error);
     process.exit(1);
   }
 };
 
-createTestUser();
+createTestUsers();

@@ -123,6 +123,17 @@ const AddVehiclePage = () => {
       return;
     }
     
+    // Validate numeric fields
+    if (parseFloat(formData.price) < 0) {
+      setError('Price cannot be negative');
+      return;
+    }
+    
+    if (parseFloat(formData.mileage) < 0) {
+      setError('Mileage cannot be negative');
+      return;
+    }
+    
     if (imageFiles.length === 0) {
       setError('Please upload at least one image');
       return;
@@ -378,6 +389,7 @@ const AddVehiclePage = () => {
                       required
                       type="number"
                       placeholder="25000"
+                      inputProps={{ min: 0 }}
                     />
                   </Grid>
                   <Grid item xs={12} sm={6} md={4}>
@@ -458,6 +470,7 @@ const AddVehiclePage = () => {
                       required
                       type="number"
                       placeholder="15000"
+                      inputProps={{ min: 0 }}
                     />
                   </Grid>
                 </Grid>
@@ -547,6 +560,16 @@ const AddVehiclePage = () => {
                   <Button
                     variant="outlined"
                     onClick={() => navigate('/')}
+                    sx={{ 
+                      color: '#efe8e8',
+                      borderColor: '#080808',
+                      backgroundColor: '#ea1b1b',
+                      fontWeight: 600,
+                      '&:hover': {
+                        borderColor: '#080808',
+                        backgroundColor: '#0a0a0a',
+                      }
+                    }}
                   >
                     Cancel
                   </Button>
@@ -554,7 +577,15 @@ const AddVehiclePage = () => {
                     variant="contained"
                     type="submit"
                     disabled={loading}
-                    sx={{ minWidth: 120 }}
+                    sx={{ 
+                      minWidth: 120,
+                      backgroundColor: '#1976d2',
+                      color: '#ffffff',
+                      fontWeight: 600,
+                      '&:hover': {
+                        backgroundColor: '#0a0a0b',
+                      }
+                    }}
                   >
                     {loading ? <CircularProgress size={24} /> : 'List Vehicle'}
                   </Button>

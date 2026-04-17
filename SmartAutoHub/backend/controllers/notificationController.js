@@ -1,6 +1,46 @@
 const { Notification, Vehicle, UserAlert } = require('../models');
 const { sendEmail } = require('../utils/email');
 
+/**
+ * Send notification to a specific user
+ * @param {string} userId - User ID
+ * @param {string} title - Notification title
+ * @param {string} message - Notification message
+ * @param {object} metadata - Additional metadata (optional)
+ */
+exports.sendNotificationToUser = async (userId, title, message, metadata = {}) => {
+  try {
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+
+    // Create in-app notification/alert
+    const alert = await UserAlert.create({
+      userId: userId,
+      vehicleId: metadata.vehicleId || null,
+      vehicleBrand: metadata.vehicleBrand || 'TakGaala.lk',
+      vehicleModel: metadata.vehicleModel || '',
+      vehiclePrice: metadata.vehiclePrice || 0,
+      vehicleImage: metadata.vehicleImage || null,
+      sellerName: metadata.sellerName || 'TakGaala.lk',
+      alertType: metadata.type || 'notification',
+      message: message,
+      isSeen: false
+    });
+
+    console.log(`✓ In-app notification created for user ${userId}: ${title}`);
+
+    return {
+      success: true,
+      notificationId: alert._id,
+      message: `Notification sent to user`
+    };
+  } catch (err) {
+    console.error(`✗ Failed to send notification to user ${userId}:`, err.message);
+    throw err;
+  }
+};
+
 exports.subscribe = async (req, res) => {
   try {
     const { email, phone, searchCriteria } = req.body;
@@ -68,7 +108,7 @@ exports.subscribe = async (req, res) => {
     // Send confirmation email
     const emailResult = await sendEmail({
       to: email,
-      subject: 'Notification Subscription Confirmed - SmartAuto Hub',
+      subject: 'Notification Subscription Confirmed - TakGaala.lk',
       template: 'notification-subscription',
       data: {
         email,
@@ -128,14 +168,19 @@ exports.checkAndNotify = async (vehicle) => {
     console.log(`Price: ${vehicle.price}`);
     console.log(`Location: ${vehicle.location?.city || 'N/A'}`);
     
-    if (!vehicle || !vehicle.location || !vehicle.location.city) {
+  if (!vehicle || !vehicle.location || !vehicle.location.city) {
       console.log('❌ Vehicle missing location info for notifications');
-      return;
+      return; 
     }
 
+    // Validate vehicle has minimum required data
+    if (!vehicle || !vehicle.brand || !vehicle.model) {
+      console.log('❌ Vehicle missing required fields (brand/model)');
+      return;
+    }
     const vehicleBrand = (vehicle.brand || '').toLowerCase();
     const vehicleModel = (vehicle.model || '').toLowerCase();
-    const vehicleCity = (vehicle.location.city || '').toLowerCase();
+    const vehicleCity = (vehicle.location?.city || 'Not specified').toLowerCase();
 
     console.log(`\nSearching for subscriptions matching: ${vehicleBrand} ${vehicleModel}`);
 
@@ -216,7 +261,7 @@ exports.checkAndNotify = async (vehicle) => {
           try {
             const emailResult = await sendEmail({
               to: subscription.email,
-              subject: `🚗 ${vehicle.brand} ${vehicle.model} Available - SmartAuto Hub`,
+              subject: `🚗 ${vehicle.brand} ${vehicle.model} Available - TakGaala.lk`,
               template: 'vehicle-notification',
               data: {
                 vehicle: {
@@ -228,7 +273,7 @@ exports.checkAndNotify = async (vehicle) => {
                   image: vehicle.images?.[0],
                   condition: vehicle.condition,
                   fuelType: vehicle.fuelType,
-                  city: vehicle.location.city,
+                  city: vehicle.location?.city || 'Not specified',
                 },
               },
             });

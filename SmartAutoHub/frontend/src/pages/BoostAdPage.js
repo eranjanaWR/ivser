@@ -32,7 +32,6 @@ import {
   MenuItem,
 } from '@mui/material';
 import {
-  ArrowBack,
   CheckCircle,
   Bolt,
   Star,
@@ -45,10 +44,10 @@ const boostPackages = [
   {
     id: 'free',
     name: 'Free Boost',
-    duration: 1,
+    duration: 28,
     price: 0,
     icon: <Bolt sx={{ fontSize: 32, color: '#9e9e9e' }} />,
-    features: ['1 day featured listing', 'Basic listing visibility', 'Email alert to seller'],
+    features: ['28 days featured listing', 'Basic listing visibility', 'Email alert to seller', '⭐ One time redeemable'],
     isFree: true,
   },
   {
@@ -87,22 +86,26 @@ const BoostAdPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [selectedPackage, setSelectedPackage] = useState('premium');
+  const [selectedPackage, setSelectedPackage] = useState('free'); // Default to FREE not PREMIUM
   const [activeStep, setActiveStep] = useState(0);
   const [bankSlipPreview, setBankSlipPreview] = useState(null);
+  const [cardProofPreview, setCardProofPreview] = useState(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [formData, setFormData] = useState({
     startDate: new Date().toISOString().split('T')[0],
     paymentMethod: 'credit_card',
     contactPerson: '',
     contactPhone: '',
+    notificationEmail: user?.email || '',
     additionalNotes: '',
     cardNumber: '',
     cardHolder: '',
     expiryDate: '',
     cvv: '',
     bankSlip: null,
+    cardProof: null,
   });
+  const [paymentRefNumber, setPaymentRefNumber] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -124,6 +127,15 @@ const BoostAdPage = () => {
     setLoading(false);
   };
 
+  const generatePaymentRefNumber = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    return `SAH-${year}${month}${day}-${random}`;
+  };
+
   const handlePackageSelect = (packageId) => {
     setSelectedPackage(packageId);
     // Automatically set payment method to 'free' for free packages
@@ -134,15 +146,28 @@ const BoostAdPage = () => {
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const updatedData = { ...formData, [name]: value };
+    
+    // Clear file uploads when payment method changes
+    if (name === 'paymentMethod') {
+      updatedData.bankSlip = null;
+      updatedData.cardProof = null;
+      setBankSlipPreview(null);
+      setCardProofPreview(null);
+    }
+    
+    setFormData(updatedData);
   };
 
   const handleBankSlipUpload = (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        setError('Please upload an image file (PNG, JPG, etc.)');
+      // Validate file type - accept images and PDFs
+      const isImage = file.type.startsWith('image/');
+      const isPdf = file.type === 'application/pdf';
+      
+      if (!isImage && !isPdf) {
+        setError('Please upload an image file (PNG, JPG, GIF) or PDF document');
         return;
       }
       
@@ -155,11 +180,51 @@ const BoostAdPage = () => {
       setFormData({ ...formData, bankSlip: file });
       
       // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setBankSlipPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setBankSlipPreview(reader.result);
+        };
+        reader.readAsDataURL(file);
+      } else if (isPdf) {
+        // For PDF, store filename as preview indicator
+        setBankSlipPreview(`pdf:${file.name}`);
+      }
+      setError('');
+    }
+  };
+
+  const handleCardProofUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type - accept images and PDFs
+      const isImage = file.type.startsWith('image/');
+      const isPdf = file.type === 'application/pdf';
+      
+      if (!isImage && !isPdf) {
+        setError('Please upload an image file (PNG, JPG, GIF) or PDF document');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('File size must be less than 5MB');
+        return;
+      }
+
+      setFormData({ ...formData, cardProof: file });
+      
+      // Create preview
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setCardProofPreview(reader.result);
+        };
+        reader.readAsDataURL(file);
+      } else if (isPdf) {
+        // For PDF, store filename as preview indicator
+        setCardProofPreview(`pdf:${file.name}`);
+      }
       setError('');
     }
   };
@@ -170,24 +235,50 @@ const BoostAdPage = () => {
         setError('Please select a boost package');
         return;
       }
-    }
-    
-    // Skip payment step for free packages
-    if (activeStep === 1 && selectedPackage === 'free') {
-      setActiveStep(3);
+      setActiveStep(1);
       setError('');
       return;
     }
     
-    if (activeStep < 2 || (activeStep === 2 && selectedPackage !== 'free')) {
-      setActiveStep(activeStep + 1);
+    // From Contact Details to Payment/Confirmation
+    if (activeStep === 1) {
+      if (!formData.contactPerson || !formData.contactPhone || !formData.notificationEmail || !formData.startDate) {
+        setError('Please fill in all contact details');
+        return;
+      }
+      // Validate email format
+      const emailRegex = /^\S+@\S+\.\S+$/;
+      if (!emailRegex.test(formData.notificationEmail)) {
+        setError('Please enter a valid email address');
+        return;
+      }
+      // Generate payment reference number for paid boosts
+      if (selectedPackage !== 'free') {
+        const refNumber = generatePaymentRefNumber();
+        console.log('📋 Generated Payment Ref Number:', refNumber);
+        setPaymentRefNumber(refNumber);
+        setActiveStep(2);
+      } else {
+        setActiveStep(3);
+      }
       setError('');
+      return;
+    }
+    
+    // From Payment to Confirmation
+    if (activeStep === 2) {
+      setActiveStep(3);
+      setError('');
+      return;
     }
   };
 
   const handleBack = () => {
     if (activeStep > 0) {
       setActiveStep(activeStep - 1);
+    } else {
+      // On first step, navigate back to vehicle page
+      navigate(`/vehicles/${vehicleId}`);
     }
   };
 
@@ -241,35 +332,69 @@ const BoostAdPage = () => {
       setSubmitting(true);
       const selectedPkg = boostPackages.find(p => p.id === selectedPackage);
 
+      console.log('🚀 [BOOST FORM] Submitting boost request');
+      console.log('  - Selected Package ID:', selectedPackage);
+      console.log('  - Package Name:', selectedPkg.name);
+      console.log('  - Duration:', selectedPkg.duration);
+      console.log('  - Price:', selectedPkg.price);
+      console.log('  - Payment Method:', formData.paymentMethod);
+      console.log('  - Has bankSlip:', formData.bankSlip instanceof File);
+      console.log('  - Has cardProof:', formData.cardProof instanceof File);
+
       // Create FormData for multipart upload
       const submitData = new FormData();
+      
+      // Always append these text fields
       submitData.append('vehicleId', vehicleId);
       submitData.append('packageType', selectedPackage);
       submitData.append('duration', selectedPkg.duration);
       submitData.append('amount', selectedPkg.price);
       submitData.append('startDate', formData.startDate);
       submitData.append('paymentMethod', selectedPackage === 'free' ? 'free' : formData.paymentMethod);
-      submitData.append('contactPerson', formData.contactPerson);
-      submitData.append('contactPhone', formData.contactPhone);
-      submitData.append('additionalNotes', formData.additionalNotes);
+      submitData.append('contactPerson', formData.contactPerson || '');
+      submitData.append('contactPhone', formData.contactPhone || '');
+      submitData.append('notificationEmail', formData.notificationEmail || '');
+      submitData.append('additionalNotes', formData.additionalNotes || '');
+      
+      // Add payment reference number for paid boosts
+      if (selectedPackage !== 'free' && paymentRefNumber) {
+        submitData.append('paymentRefNumber', paymentRefNumber);
+      }
       
       // Add card details only for credit card payments
       if (formData.paymentMethod === 'credit_card' && selectedPackage !== 'free') {
-        submitData.append('cardLast4', formData.cardNumber.replace(/\s/g, '').slice(-4));
-        submitData.append('cardHolder', formData.cardHolder);
+        const cardLast4 = formData.cardNumber?.replace(/\s/g, '')?.slice(-4);
+        if (cardLast4) submitData.append('cardLast4', cardLast4);
+        if (formData.cardHolder) submitData.append('cardHolder', formData.cardHolder);
       }
 
-      // Add bank slip for bank transfer
-      if (formData.paymentMethod === 'bank_transfer' && formData.bankSlip && selectedPackage !== 'free') {
+      // Always append files if they exist, regardless of payment method
+      console.log('📝 [SUBMIT] Checking files to append:');
+      console.log('  - bankSlip exists:', !!formData.bankSlip, formData.bankSlip?.name);
+      console.log('  - cardProof exists:', !!formData.cardProof, formData.cardProof?.name);
+      
+      if (formData.bankSlip && formData.bankSlip instanceof File) {
+        console.log('📎 [SUBMIT] Appending bankSlip file');
         submitData.append('bankSlip', formData.bankSlip);
+      }
+      
+      if (formData.cardProof && formData.cardProof instanceof File) {
+        console.log('📎 [SUBMIT] Appending cardProof file');
+        submitData.append('cardProof', formData.cardProof);
+      }
+
+      console.log('📤 [SUBMIT] FormData contents:');
+      for (let [key, value] of submitData.entries()) {
+        if (value instanceof File) {
+          console.log(`  - ${key}: [File] ${value.name} (${value.size} bytes, type: ${value.type})`);
+        } else {
+          console.log(`  - ${key}:`, value);
+        }
       }
 
       // Send boost request to backend
-      const { data } = await api.post(`/vehicles/${vehicleId}/boost`, submitData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      console.log('🚀 [SUBMIT] Sending POST to /vehicles/' + vehicleId + '/boost');
+      const { data } = await api.post(`/vehicles/${vehicleId}/boost`, submitData);
 
       // Move to success step
       setActiveStep(3);
@@ -303,15 +428,6 @@ const BoostAdPage = () => {
   return (
     <Box sx={{ py: 4, bgcolor: '#fafafa', minHeight: '90vh' }}>
       <Container maxWidth="md">
-        {/* Back Button */}
-        <Button
-          startIcon={<ArrowBack />}
-          onClick={() => navigate(`/vehicles/${vehicleId}`)}
-          sx={{ mb: 3 }}
-        >
-          Back to Vehicle
-        </Button>
-
         {/* Header */}
         <Box sx={{ mb: 4 }}>
           <Typography variant="h4" fontWeight="bold" gutterBottom>
@@ -352,6 +468,11 @@ const BoostAdPage = () => {
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
               Choose Your Boost Package
             </Typography>
+            {selectedPackage && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                ✅ Selected: <strong>{boostPackages.find(p => p.id === selectedPackage)?.name}</strong>
+              </Alert>
+            )}
             <Grid container spacing={3}>
               {boostPackages.map((pkg) => (
                 <Grid item xs={12} sm={6} md={3} lg={3} key={pkg.id}>
@@ -371,28 +492,6 @@ const BoostAdPage = () => {
                       position: 'relative',
                     }}
                   >
-                    {pkg.popular && (
-                      <Chip
-                        label="Most Popular"
-                        color="primary"
-                        sx={{
-                          position: 'absolute',
-                          top: -12,
-                          right: 12,
-                        }}
-                      />
-                    )}
-                    {pkg.isFree && (
-                      <Chip
-                        label="FREE"
-                        color="success"
-                        sx={{
-                          position: 'absolute',
-                          top: -12,
-                          right: 12,
-                        }}
-                      />
-                    )}
                     <CardContent>
                       <Box sx={{ textAlign: 'center', mb: 2 }}>
                         {pkg.icon}
@@ -430,6 +529,28 @@ const BoostAdPage = () => {
             <Typography variant="h6" fontWeight="bold" sx={{ mb: 3 }}>
               Contact Details
             </Typography>
+
+            {/* Package Summary */}
+            <Alert severity="success" sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+                <Box>
+                  <Typography variant="body2" fontWeight="bold">
+                    Package: {selectedPkg.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {selectedPkg.duration} days • {selectedPackage === 'free' ? 'FREE' : `LKR ${selectedPkg.price.toLocaleString()}`}
+                  </Typography>
+                </Box>
+                <Button 
+                  size="small" 
+                  variant="outlined"
+                  onClick={() => setActiveStep(0)}
+                >
+                  Change Package
+                </Button>
+              </Box>
+            </Alert>
+
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <TextField
@@ -449,6 +570,19 @@ const BoostAdPage = () => {
                   value={formData.contactPhone}
                   onChange={handleFormChange}
                   placeholder="+94 7X XXX XXXX"
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Notification Email"
+                  name="notificationEmail"
+                  type="email"
+                  value={formData.notificationEmail}
+                  onChange={handleFormChange}
+                  placeholder="email@example.com"
+                  helperText="Where should we send boost-related notifications?"
                   required
                 />
               </Grid>
@@ -506,6 +640,23 @@ const BoostAdPage = () => {
                   <Typography variant="body2" color="text.secondary">Vehicle</Typography>
                   <Typography variant="h6">{vehicle.brand} {vehicle.model}</Typography>
                 </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="body2" color="text.secondary">Payment Reference Number</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="h6" fontWeight="bold" sx={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                      {paymentRefNumber}
+                    </Typography>
+                    <Chip 
+                      label="Unique ID" 
+                      size="small" 
+                      color="primary" 
+                      variant="outlined"
+                    />
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                    Keep this reference number for your records
+                  </Typography>
+                </Grid>
               </Grid>
             </Box>
 
@@ -521,7 +672,7 @@ const BoostAdPage = () => {
                 onChange={handleFormChange}
               >
                 <MenuItem value="credit_card">💳 Credit/Debit Card</MenuItem>
-                <MenuItem value="bank_transfer">🏦 Bank Transfer</MenuItem>
+                <MenuItem value="bank_transfer">🏦 Online Bank Transfer</MenuItem>
                 <MenuItem value="paypal">🌐 PayPal</MenuItem>
                 <MenuItem value="cash">💵 Cash Payment</MenuItem>
               </Select>
@@ -596,34 +747,149 @@ const BoostAdPage = () => {
                     />
                   </Grid>
                 </Grid>
+                
+                {/* Card Payment Proof Upload (Optional) */}
+                <Box sx={{ mt: 3, p: 2, bgcolor: 'white', borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}>
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 2 }}>
+                    📄 Card Payment Proof (Optional)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    You may optionally upload a screenshot or PDF of your card payment confirmation for our records.
+                  </Typography>
+                  
+                  {cardProofPreview ? (
+                    <Box sx={{ mb: 2 }}>
+                      {cardProofPreview.startsWith('pdf:') ? (
+                        <Box
+                          sx={{
+                            p: 3,
+                            bgcolor: 'success.50',
+                            border: '2px solid',
+                            borderColor: 'success.main',
+                            borderRadius: 2,
+                            textAlign: 'center',
+                          }}
+                        >
+                          <Typography variant="h4" sx={{ mb: 1, color: 'success.main' }}>📄</Typography>
+                          <Typography variant="subtitle2" fontWeight="bold">
+                            PDF Document Uploaded
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {cardProofPreview.replace('pdf:', '')}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Box
+                          component="img"
+                          src={cardProofPreview}
+                          alt="Card Proof Preview"
+                          sx={{
+                            width: '100%',
+                            maxHeight: 300,
+                            borderRadius: 2,
+                            border: '2px solid',
+                            borderColor: 'success.main',
+                            objectFit: 'contain',
+                          }}
+                        />
+                      )}
+                      <Button
+                        size="small"
+                        color="error"
+                        onClick={() => {
+                          setCardProofPreview(null);
+                          setFormData({ ...formData, cardProof: null });
+                        }}
+                        sx={{ mt: 1 }}
+                      >
+                        {cardProofPreview.startsWith('pdf:') ? 'Remove PDF' : 'Remove Image'}
+                      </Button>
+                    </Box>
+                  ) : (
+                    <Box
+                      sx={{
+                        border: '2px dashed',
+                        borderColor: 'primary.main',
+                        borderRadius: 2,
+                        p: 3,
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        bgcolor: 'primary.50',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          bgcolor: 'primary.100',
+                          borderColor: 'primary.main',
+                        },
+                      }}
+                    >
+                      <input
+                        accept="image/*,.pdf"
+                        hidden
+                        id="card-proof-input"
+                        type="file"
+                        onChange={handleCardProofUpload}
+                      />
+                      <label htmlFor="card-proof-input" style={{ cursor: 'pointer', width: '100%', display: 'block' }}>
+                        <Typography variant="h6" sx={{ mb: 1 }}>📄 Upload Payment Proof</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Click to upload or drag and drop
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                          Screenshot or PDF of card payment confirmation (PNG, JPG, GIF, PDF up to 5MB)
+                        </Typography>
+                      </label>
+                    </Box>
+                  )}
+                </Box>
               </Box>
             )}
 
-            {/* Bank Transfer Info */}
+            {/* Online Bank Transfer Info */}
             {formData.paymentMethod === 'bank_transfer' && (
               <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 2, border: '1px solid', borderColor: 'grey.200' }}>
                 <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 2 }}>
-                  Bank Slip/Receipt Upload
+                  📄 Online Bank Transfer Payment Proof Upload
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  After transferring funds, upload a clear photo of your bank slip or payment receipt for verification.
+                  Upload a screenshot, photo, or PDF document of your bank transfer confirmation, payment receipt, or transaction proof for verification.
                 </Typography>
                 
                 {bankSlipPreview ? (
                   <Box sx={{ mb: 2 }}>
-                    <Box
-                      component="img"
-                      src={bankSlipPreview}
-                      alt="Bank Slip Preview"
-                      sx={{
-                        width: '100%',
-                        maxHeight: 300,
-                        borderRadius: 2,
-                        border: '2px solid',
-                        borderColor: 'success.main',
-                        objectFit: 'contain',
-                      }}
-                    />
+                    {bankSlipPreview.startsWith('pdf:') ? (
+                      <Box
+                        sx={{
+                          p: 3,
+                          bgcolor: 'success.50',
+                          border: '2px solid',
+                          borderColor: 'success.main',
+                          borderRadius: 2,
+                          textAlign: 'center',
+                        }}
+                      >
+                        <Typography variant="h4" sx={{ mb: 1, color: 'success.main' }}>📄</Typography>
+                        <Typography variant="subtitle2" fontWeight="bold">
+                          PDF Document Uploaded
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {bankSlipPreview.replace('pdf:', '')}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Box
+                        component="img"
+                        src={bankSlipPreview}
+                        alt="Bank Slip Preview"
+                        sx={{
+                          width: '100%',
+                          maxHeight: 300,
+                          borderRadius: 2,
+                          border: '2px solid',
+                          borderColor: 'success.main',
+                          objectFit: 'contain',
+                        }}
+                      />
+                    )}
                     <Button
                       size="small"
                       color="error"
@@ -633,7 +899,7 @@ const BoostAdPage = () => {
                       }}
                       sx={{ mt: 1 }}
                     >
-                      Remove Image
+                      {bankSlipPreview.startsWith('pdf:') ? 'Remove PDF' : 'Remove Image'}
                     </Button>
                   </Box>
                 ) : (
@@ -649,12 +915,12 @@ const BoostAdPage = () => {
                       transition: 'all 0.3s ease',
                       '&:hover': {
                         bgcolor: 'primary.100',
-                        borderColor: 'primary.dark',
+                        borderColor: 'primary.main',
                       },
                     }}
                   >
                     <input
-                      accept="image/*"
+                      accept="image/*,.pdf"
                       hidden
                       id="bank-slip-input"
                       type="file"
@@ -662,13 +928,13 @@ const BoostAdPage = () => {
                     />
                     <label htmlFor="bank-slip-input" style={{ cursor: 'pointer', width: '100%', display: 'block' }}>
                       <Typography variant="h6" sx={{ mb: 1 }}>
-                        📸 Upload Bank Slip
+                        📄 Upload Transfer Proof
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Click to upload or drag and drop
                       </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                        PNG, JPG, GIF up to 5MB
+                        Screenshot, receipt, PDF, or proof of online bank transfer (PNG, JPG, GIF, PDF up to 5MB)
                       </Typography>
                     </label>
                   </Box>
@@ -729,9 +995,22 @@ const BoostAdPage = () => {
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
               Your ad boost request for {vehicle.brand} {vehicle.model} has been {selectedPackage === 'free' ? 'activated' : 'received'}.
             </Typography>
+            {selectedPackage !== 'free' && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'white', borderRadius: 1, border: '1px solid', borderColor: 'grey.300' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Reference Number
+                </Typography>
+                <Typography variant="h6" fontWeight="bold" sx={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                  {paymentRefNumber}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Keep this for your records and payment verification
+                </Typography>
+              </Box>
+            )}
             <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
               {selectedPackage === 'free' 
-                ? 'Your vehicle will be featured for 1 day starting today. Thank you for using SmartAuto Hub!'
+                ? `Your vehicle will be featured for ${selectedPkg.duration} days starting today. Thank you for using SmartAuto Hub!`
                 : `Our team will contact you at ${formData.contactPhone} within 2 hours to confirm the booking and process your payment.`}
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -757,7 +1036,6 @@ const BoostAdPage = () => {
             <Button
               variant="outlined"
               onClick={handleBack}
-              disabled={activeStep === 0}
             >
               Back
             </Button>

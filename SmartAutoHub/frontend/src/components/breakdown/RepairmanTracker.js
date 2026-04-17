@@ -132,7 +132,7 @@ const RepairmanTracker = ({
   useEffect(() => {
     if (!breakdownId) return;
 
-    const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5001', {
+    const socket = io(process.env.REACT_APP_API_URL || window.location.origin, {
       transports: ['websocket', 'polling'],
     });
 
@@ -463,10 +463,10 @@ const RepairmanTracker = ({
       {breakdown?.finalCost && currentStatus === 'completed' && (
         <Box sx={{ p: 2, bgcolor: 'success.lighter', borderTop: '1px solid', borderColor: 'divider' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="body2" color="success.dark">
+            <Typography variant="body2" color="success.main">
               Final Cost
             </Typography>
-            <Typography variant="h5" fontWeight="bold" color="success.dark">
+            <Typography variant="h5" fontWeight="bold" color="success.main">
               Rs. {breakdown.finalCost.toLocaleString()}
             </Typography>
           </Box>

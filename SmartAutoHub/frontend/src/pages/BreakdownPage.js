@@ -158,7 +158,7 @@ const BreakdownPage = () => {
   // Connect to socket when breakdown is created
   useEffect(() => {
     if (breakdownId) {
-      const socket = io(process.env.REACT_APP_API_URL || 'http://localhost:5001', {
+      const socket = io(process.env.REACT_APP_API_URL || window.location.origin, {
         transports: ['websocket', 'polling'],
       });
       
@@ -398,7 +398,7 @@ const BreakdownPage = () => {
                 right: -8,
                 bgcolor: 'error.main',
                 color: 'white',
-                '&:hover': { bgcolor: 'error.dark' },
+                '&:hover': { bgcolor: 'error.main' },
                 width: 20,
                 height: 20,
               }}

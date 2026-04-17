@@ -44,9 +44,13 @@ const AdvertisePackagesPage = () => {
   const navigate = useNavigate();
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
+  const [openPaymentDialog, setOpenPaymentDialog] = useState(false);
   const [openPlacementDialog, setOpenPlacementDialog] = useState(false);
   const [selectedPlacement, setSelectedPlacement] = useState('home');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [paymentSlipPreview, setPaymentSlipPreview] = useState(null);
+  const [paymentRefNumber, setPaymentRefNumber] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -54,6 +58,11 @@ const AdvertisePackagesPage = () => {
     company: '',
     message: '',
     adPhoto: null,
+    cardholderName: '',
+    cardNumber: '',
+    expiryDate: '',
+    cvv: '',
+    paymentSlip: null,
   });
 
   const packages = [
@@ -139,16 +148,12 @@ const AdvertisePackagesPage = () => {
     setOpenDialog(true);
   };
 
-  const handleClosePlacementDialog = () => {
-    setOpenPlacementDialog(false);
-    setSelectedPackage(null);
-    setSelectedPlacement('home');
-  };
-
-  const handleCloseDialog = () => {
+  const handleCloseContactDialog = () => {
     setOpenDialog(false);
     setSelectedPackage(null);
     setSelectedPlacement('home');
+    setPreviewImage(null);
+    setPaymentSlipPreview(null);
     setFormData({
       name: '',
       email: '',
@@ -156,7 +161,57 @@ const AdvertisePackagesPage = () => {
       company: '',
       message: '',
       adPhoto: null,
+      cardholderName: '',
+      cardNumber: '',
+      expiryDate: '',
+      cvv: '',
+      paymentSlip: null,
     });
+  };
+
+  const handleClosePlacementDialog = () => {
+    setOpenPlacementDialog(false);
+    setSelectedPackage(null);
+    setSelectedPlacement('home');
+  };
+
+  const handleClosePaymentDialog = () => {
+    setOpenPaymentDialog(false);
+  };
+
+  const handleBackToContact = () => {
+    setOpenPaymentDialog(false);
+    setOpenDialog(true);
+  };
+
+  const generatePaymentRefNumber = () => {
+    // Format: SAH-YYYYMMDD-XXXXXX (SAH = SmartAutoHub, date, and 6 random alphanumeric)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const refNum = `SAH-${year}${month}${day}-${random}`;
+    console.log('🎫 Generated Payment Reference Number:', refNum);
+    return refNum;
+  };
+
+  const handleNextToPayment = () => {
+    if (!formData.name || !formData.email || !formData.phone) {
+      alert('Please fill in all required contact details');
+      return;
+    }
+
+    if (!formData.adPhoto) {
+      alert('Please upload an ad photo to proceed');
+      return;
+    }
+
+    setOpenDialog(false);
+    const newRefNumber = generatePaymentRefNumber();
+    console.log('Setting paymentRefNumber to:', newRefNumber);
+    setPaymentRefNumber(newRefNumber);
+    setOpenPaymentDialog(true);
   };
 
   const handleInputChange = (e) => {
@@ -170,9 +225,33 @@ const AdvertisePackagesPage = () => {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewImage(reader.result);
+      };
+      reader.readAsDataURL(file);
+      
       setFormData({
         ...formData,
         adPhoto: file,
+      });
+    }
+  };
+
+  const handlePaymentSlipChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // Create preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPaymentSlipPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+      
+      setFormData({
+        ...formData,
+        paymentSlip: file,
       });
     }
   };
@@ -222,14 +301,28 @@ const AdvertisePackagesPage = () => {
   };
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.email || !formData.phone) {
-      alert('Please fill in all required fields');
-      return;
-    }
+    // Validate payment details for paid plans
+    if (selectedPackage?.name !== 'Free Trial') {
+      if (!formData.cardholderName || !formData.cardNumber || !formData.expiryDate || !formData.cvv) {
+        alert('Please fill in all payment details');
+        return;
+      }
 
-    if (!formData.adPhoto) {
-      alert('Please upload an ad photo to proceed');
-      return;
+      // Basic card validation
+      if (formData.cardNumber.replace(/\s/g, '').length !== 16) {
+        alert('Please enter a valid card number (16 digits)');
+        return;
+      }
+
+      if (!/^\d{2}\/\d{2}$/.test(formData.expiryDate)) {
+        alert('Please enter expiry date in MM/YY format');
+        return;
+      }
+
+      if (!/^\d{3,4}$/.test(formData.cvv)) {
+        alert('Please enter a valid CVV (3-4 digits)');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -239,6 +332,12 @@ const AdvertisePackagesPage = () => {
       let adPhotoBase64 = null;
       if (formData.adPhoto) {
         adPhotoBase64 = await compressImage(formData.adPhoto);
+      }
+
+      // Compress payment slip if provided
+      let paymentSlipBase64 = null;
+      if (formData.paymentSlip) {
+        paymentSlipBase64 = await compressImage(formData.paymentSlip);
       }
 
       // Prepare form data
@@ -251,8 +350,26 @@ const AdvertisePackagesPage = () => {
         packageName: selectedPackage.name,
         placement: selectedPlacement || 'Not specified',
         adPhoto: true,
-        adPhotoBase64: adPhotoBase64
+        adPhotoBase64: adPhotoBase64,
+        paymentRefNumber: selectedPackage?.name !== 'Free Trial' ? paymentRefNumber : null,
+        paymentSlipBase64: paymentSlipBase64,
+        ...(selectedPackage?.name !== 'Free Trial' && {
+          cardholderName: formData.cardholderName,
+          cardNumber: formData.cardNumber.replace(/\s/g, ''),
+          expiryDate: formData.expiryDate,
+          cvv: formData.cvv,
+        }),
       };
+      console.log('📤 Submitting advertising request with data:', submitData);
+      console.log('Payment Ref Number:', paymentRefNumber);
+      console.log('Package Name:', selectedPackage.name);
+      console.log('✅ FINAL SUBMIT DATA:', {
+        paymentRefNumber: submitData.paymentRefNumber,
+        packageName: submitData.packageName,
+        cardholderName: submitData.cardholderName,
+        cardNumber: submitData.cardNumber,
+        email: submitData.email
+      });
 
       // Make API call to submit advertising request
       const response = await api.post(
@@ -262,7 +379,8 @@ const AdvertisePackagesPage = () => {
 
       if (response.data.success) {
         alert(`Thank you! We've sent a confirmation email to ${formData.email}. Our team will contact you soon!`);
-        handleCloseDialog();
+        handleClosePaymentDialog();
+        handleCloseContactDialog();
       } else {
         alert(response.data.error || 'Error submitting request');
       }
@@ -530,7 +648,7 @@ const AdvertisePackagesPage = () => {
       {/* Contact Form Dialog */}
       <Dialog
         open={openDialog}
-        onClose={handleCloseDialog}
+        onClose={handleCloseContactDialog}
         maxWidth="sm"
         fullWidth
       >
@@ -650,30 +768,352 @@ const AdvertisePackagesPage = () => {
               PNG, JPG, GIF up to 5MB
             </Typography>
             {formData.adPhoto && (
-              <Typography
-                variant="body2"
+              <Box
                 sx={{
                   mt: 1.5,
                   p: 1,
                   bgcolor: '#f0f0f0',
                   borderRadius: 1,
-                  color: '#000000',
-                  fontWeight: 500,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                 }}
               >
-                ✓ {formData.adPhoto.name}
-              </Typography>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: '#000000',
+                    fontWeight: 500,
+                  }}
+                >
+                  ✓ {formData.adPhoto.name}
+                </Typography>
+                <Button
+                  size="small"
+                  sx={{ 
+                    color: '#d32f2f',
+                    minWidth: 'auto',
+                    ml: 1,
+                  }}
+                  onClick={() => {
+                    setFormData({ ...formData, adPhoto: null });
+                    setPreviewImage(null);
+                  }}
+                >
+                  Remove
+                </Button>
+              </Box>
             )}
+          </Box>
+
+          {/* Preview Section - Show how ad will look in carousel */}
+          {previewImage && (
+            <Box sx={{ mt: 3 }}>
+              <Typography
+                variant="subtitle2"
+                sx={{
+                  fontWeight: 600,
+                  color: '#000000',
+                  mb: 1.5,
+                }}
+              >
+                Preview: How Your Ad Will Appear
+              </Typography>
+              <Box
+                sx={{
+                  border: '2px solid #000000',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                  maxWidth: '100%',
+                }}
+              >
+                <Box
+                  component="img"
+                  src={previewImage}
+                  alt="Ad Preview"
+                  sx={{
+                    width: '100%',
+                    height: 'auto',
+                    maxHeight: 280,
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              </Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: '#666',
+                  mt: 1,
+                  display: 'block',
+                }}
+              >
+                Image will be optimized to 90% quality for best balance of file size and visual quality
+              </Typography>
+              <Button
+                size="small"
+                sx={{ mt: 2, color: '#d32f2f' }}
+                onClick={() => {
+                  setFormData({ ...formData, adPhoto: null });
+                  setPreviewImage(null);
+                }}
+              >
+                Remove Photo
+              </Button>
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={handleCloseContactDialog}
+            sx={{ color: '#000000' }}
+          >
+            Cancel
+          </Button>
+          {selectedPackage?.name === 'Free Trial' ? (
+            <Button
+              onClick={handleSubmit}
+              variant="contained"
+              disabled={isSubmitting}
+              sx={{
+                bgcolor: selectedPackage?.color,
+                color: 'white',
+                fontWeight: 600,
+                minWidth: 120,
+              }}
+            >
+              {isSubmitting ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <CircularProgress size={20} color="inherit" />
+                  Submitting...
+                </Box>
+              ) : (
+                'Submit Request'
+              )}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleNextToPayment}
+              variant="contained"
+              sx={{
+                bgcolor: selectedPackage?.color,
+                color: 'white',
+                fontWeight: 600,
+                minWidth: 120,
+              }}
+            >
+              Next: Payment Details
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Payment Details Dialog */}
+      <Dialog
+        open={openPaymentDialog}
+        onClose={handleClosePaymentDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle
+          sx={{
+            fontWeight: 700,
+            fontSize: '1.25rem',
+            bgcolor: '#f5f5f5',
+            borderBottom: '1px solid #000000',
+            color: '#000000',
+          }}
+        >
+          Payment Details - {selectedPackage?.name} Plan
+        </DialogTitle>
+
+        <DialogContent sx={{ pt: 3 }}>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Your payment information is secure and encrypted. We accept all major credit cards.
+          </Alert>
+
+          {/* Payment Reference Number */}
+          <Box
+            sx={{
+              p: 2,
+              bgcolor: '#e3f2fd',
+              border: '2px solid #2196f3',
+              borderRadius: 1,
+              mb: 3,
+            }}
+          >
+            <Typography variant="caption" sx={{ color: '#1976d2', fontWeight: 600, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '1px' }}>
+              Payment Reference Number
+            </Typography>
+            <Typography
+              variant="h5"
+              sx={{
+                color: '#1565c0',
+                fontWeight: 700,
+                fontFamily: 'monospace',
+                mt: 1,
+                letterSpacing: '1px',
+                wordBreak: 'break-all'
+              }}
+            >
+              {paymentRefNumber}
+            </Typography>
+            <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 1 }}>
+              Please save this reference number for your records
+            </Typography>
+          </Box>
+
+          <Box
+            sx={{
+              p: 2,
+              bgcolor: '#f9f9f9',
+              border: '1px solid #e0e0e0',
+              borderRadius: 1,
+              mb: 3,
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+              Package: <strong>{selectedPackage?.name}</strong>
+            </Typography>
+            <Typography variant="h6" sx={{ color: '#000000', fontWeight: 600 }}>
+              {selectedPackage?.price}
+              <Typography variant="body2" component="span" sx={{ color: '#666', ml: 1 }}>
+                {selectedPackage?.period}
+              </Typography>
+            </Typography>
+          </Box>
+
+          <TextField
+            fullWidth
+            label="Cardholder Name"
+            name="cardholderName"
+            value={formData.cardholderName}
+            onChange={handleInputChange}
+            margin="normal"
+            required
+            placeholder="John Doe"
+          />
+
+          <TextField
+            fullWidth
+            label="Card Number"
+            name="cardNumber"
+            value={formData.cardNumber}
+            onChange={(e) => {
+              // Format as card number with spaces
+              const value = e.target.value.replace(/\s/g, '').slice(0, 16);
+              const formatted = value.replace(/(\d{4})/g, '$1 ').trim();
+              setFormData({
+                ...formData,
+                cardNumber: formatted,
+              });
+            }}
+            margin="normal"
+            placeholder="1234 5678 9012 3456"
+            required
+          />
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField
+              label="Expiry Date"
+              name="expiryDate"
+              value={formData.expiryDate}
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                if (value.length >= 2) {
+                  value = value.slice(0, 2) + '/' + value.slice(2);
+                }
+                setFormData({
+                  ...formData,
+                  expiryDate: value,
+                });
+              }}
+              placeholder="MM/YY"
+              required
+            />
+
+            <TextField
+              label="CVV"
+              name="cvv"
+              value={formData.cvv}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setFormData({
+                  ...formData,
+                  cvv: value,
+                });
+              }}
+              placeholder="123"
+              type="password"
+              required
+            />
+          </Box>
+
+          {/* Payment Slip Upload */}
+          <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid #e0e0e0' }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1, color: '#000' }}>
+              📎 Payment Proof (Optional)
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#666', mb: 2 }}>
+              Upload bank transfer receipt, cheque image, or payment screenshot
+            </Typography>
+
+            {paymentSlipPreview && (
+              <Box sx={{ mb: 2, p: 2, bgcolor: '#f0f0f0', borderRadius: 1 }}>
+                <Typography variant="body2" sx={{ color: '#666', mb: 1 }}>
+                  Preview:
+                </Typography>
+                <Box
+                  component="img"
+                  src={paymentSlipPreview}
+                  alt="Payment Slip"
+                  sx={{
+                    maxWidth: '100%',
+                    maxHeight: '200px',
+                    borderRadius: 1,
+                    border: '1px solid #ddd',
+                  }}
+                />
+                <Button
+                  size="small"
+                  sx={{ mt: 1, color: '#d32f2f' }}
+                  onClick={() => {
+                    setFormData({ ...formData, paymentSlip: null });
+                    setPaymentSlipPreview(null);
+                  }}
+                >
+                  Remove
+                </Button>
+              </Box>
+            )}
+
+            <Button
+              variant="outlined"
+              component="label"
+              fullWidth
+              sx={{ textTransform: 'none', py: 1.5, mb: 2 }}
+              startIcon={<CloudUpload />}
+            >
+              {paymentSlipPreview ? 'Change Payment Proof' : 'Upload Payment Proof'}
+              <input
+                hidden
+                accept="image/*,.pdf"
+                type="file"
+                onChange={handlePaymentSlipChange}
+              />
+            </Button>
           </Box>
         </DialogContent>
 
         <DialogActions sx={{ p: 2 }}>
           <Button
-            onClick={handleCloseDialog}
+            onClick={handleBackToContact}
             sx={{ color: '#000000' }}
             disabled={isSubmitting}
           >
-            Cancel
+            Back
           </Button>
           <Button
             onClick={handleSubmit}
@@ -689,10 +1129,10 @@ const AdvertisePackagesPage = () => {
             {isSubmitting ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <CircularProgress size={20} color="inherit" />
-                Submitting...
+                Processing...
               </Box>
             ) : (
-              'Submit Request'
+              'Complete Payment'
             )}
           </Button>
         </DialogActions>

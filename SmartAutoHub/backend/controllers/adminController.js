@@ -710,6 +710,50 @@ const rejectUser = async (req, res) => {
  * @route   GET /api/admin/dashboard
  * @access  Private (Admin1)
  */
+/**
+ * @desc    Get admin dashboard stats (simplified format for Admin1Dashboard)
+ * @route   GET /api/admin/stats
+ * @access  Private (Admin1)
+ */
+const getStats = async (req, res) => {
+  try {
+    const [
+      totalUsers,
+      totalVehicles,
+      totalBreakdowns,
+      pendingVerifications
+    ] = await Promise.all([
+      User.countDocuments(),
+      Vehicle.countDocuments(),
+      Breakdown.countDocuments(),
+      User.countDocuments({
+        $or: [
+          { isEmailVerified: false },
+          { isIDVerified: false },
+          { isFaceVerified: false }
+        ]
+      })
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        totalUsers,
+        totalVehicles,
+        totalBreakdowns,
+        pendingVerifications
+      }
+    });
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching stats',
+      error: error.message
+    });
+  }
+};
+
 const getDashboard = async (req, res) => {
   try {
     const today = new Date();
@@ -1150,6 +1194,12 @@ const getAllAdvertisingRequests = async (req, res) => {
 
     console.log(`✓ Found ${requests.length} advertising requests out of ${total} total`);
 
+    
+    if (requests.length > 0) {
+      console.log('Sample request data keys:', Object.keys(requests[0]));
+      console.log('Sample request photo field:', requests[0].adPhotoBase64 ? `Present (${String(requests[0].adPhotoBase64).length} chars)` : 'Missing/null');
+    }
+
     res.json({
       success: true,
       ...formatPaginationResponse(requests, total, pageNum, limitNum)
@@ -1226,7 +1276,7 @@ const updateAdvertisingRequestStatus = async (req, res) => {
             <p style="font-size: 16px; color: #333;">Hi <strong>${request.company}</strong>,</p>
             
             <p style="font-size: 16px; color: #333; line-height: 1.6;">
-              Congratulations! Your advertising request has been <span style="color: #4caf50; font-weight: bold;">APPROVED</span> and your ad is now live on SmartAuto Hub!
+              Congratulations! Your advertising request has been <span style="color: #4caf50; font-weight: bold;">APPROVED</span> and your ad is now live on TakGaala.lk!
             </p>
 
             <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; padding: 15px; margin: 20px 0; border-radius: 4px;">
@@ -1249,7 +1299,7 @@ const updateAdvertisingRequestStatus = async (req, res) => {
             </div>
 
             <p style="font-size: 16px; color: #333; line-height: 1.6;">
-              Your ad will be displayed on the SmartAuto Hub platform and will reach thousands of car buyers daily. You can view your ad live on the platform now!
+              Your ad will be displayed on the TakGaala.lk platform and will reach thousands of car buyers daily. You can view your ad live on the platform now!
             </p>
 
             <p style="font-size: 14px; color: #666; line-height: 1.6;">
@@ -1263,10 +1313,10 @@ const updateAdvertisingRequestStatus = async (req, res) => {
 
             <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
               <p style="font-size: 14px; color: #666;">
-                Questions? Contact us at support@smartautohub.com or reply to this email.
+                Questions? Contact us at support@takgaala.lk or reply to this email.
               </p>
               <p style="font-size: 12px; color: #999;">
-                SmartAuto Hub | The Complete Vehicle Marketplace
+                TakGaala.lk | The Complete Vehicle Marketplace
               </p>
             </div>
           </div>
@@ -1317,10 +1367,10 @@ const updateAdvertisingRequestStatus = async (req, res) => {
 
             <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
               <p style="font-size: 14px; color: #666;">
-                Questions? Contact us at support@smartautohub.com or reply to this email.
+                Questions? Contact us at support@takgaala.lk or reply to this email.
               </p>
               <p style="font-size: 12px; color: #999;">
-                SmartAuto Hub | The Complete Vehicle Marketplace
+                TakGaala.lk | The Complete Vehicle Marketplace
               </p>
             </div>
           </div>
@@ -1371,10 +1421,10 @@ const updateAdvertisingRequestStatus = async (req, res) => {
 
             <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
               <p style="font-size: 14px; color: #666;">
-                Questions? Contact us at support@smartautohub.com or reply to this email.
+                Questions? Contact us at support@takgaala.lk or reply to this email.
               </p>
               <p style="font-size: 12px; color: #999;">
-                SmartAuto Hub | The Complete Vehicle Marketplace
+                TakGaala.lk | The Complete Vehicle Marketplace
               </p>
             </div>
           </div>
@@ -1419,6 +1469,7 @@ module.exports = {
   getAllBreakdowns,
   getAllTestDrives,
   generateReports,
+  getStats,
   updateUserStatus,
   deleteUser,
   getDashboard,

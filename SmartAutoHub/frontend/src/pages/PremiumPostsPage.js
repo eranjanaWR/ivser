@@ -49,14 +49,14 @@ const PremiumPostsPage = () => {
   return (
     <Box>
       {/* Page Header */}
-      <Box sx={{ bgcolor: 'primary.main', color: 'white', py: 4 }}>
+      <Box sx={{ bgcolor: '#9e9e9e', color: 'black', py: 4 }}>
         <Container maxWidth="lg">
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
             <Button
               component={Link}
               to="/"
               startIcon={<ArrowBack />}
-              sx={{ color: 'white', '&:hover': { bgcolor: 'rgba(255,255,255,0.1)' } }}
+              sx={{ color: 'black', '&:hover': { bgcolor: 'rgba(0,0,0,0.1)' } }}
             >
               Back
             </Button>
@@ -64,7 +64,7 @@ const PremiumPostsPage = () => {
           <Typography variant="h3" fontWeight="bold" sx={{ mb: 1 }}>
             Premium Posts
           </Typography>
-          <Typography variant="h6" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+          <Typography variant="h6" sx={{ color: 'rgba(0,0,0,0.7)' }}>
             Browse all featured vehicles with maximum visibility
           </Typography>
         </Container>
@@ -192,6 +192,7 @@ const PremiumPostsPage = () => {
                           variant="contained"
                           fullWidth
                           size="small"
+                          sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#333' } }}
                         >
                           View Details
                         </Button>
