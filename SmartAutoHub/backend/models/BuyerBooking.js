@@ -101,7 +101,7 @@ buyerBookingSchema.pre('save', async function (next) {
   }
 
   // Validate that scheduled date matches the allowed days
-  const dayOfWeek = this.scheduledDate.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const dayOfWeek = this.scheduledDate.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
   const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to 0 = Monday format
 
   if (!this.selectedSlot.days[adjustedDay]) {

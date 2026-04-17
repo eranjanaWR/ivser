@@ -36,6 +36,21 @@ const testDriveSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Time is required']
   },
+
+  // Buyer's Preferred Date (submitted from the no-slot modal form)
+  preferredDate: {
+    type: Date,
+    required: [true, 'Preferred date is required'],
+    validate: {
+      validator: function (value) {
+        // Must not be in the past (compare date only, ignore time)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return value >= today;
+      },
+      message: 'Preferred date cannot be in the past'
+    }
+  },
   
   // Duration (in minutes)
   duration: {

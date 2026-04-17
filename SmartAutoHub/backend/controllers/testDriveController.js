@@ -16,7 +16,7 @@ const { sendTestDriveNotification, sendTestDriveApprovedEmail, sendTestDriveReje
  */
 const scheduleTestDrive = async (req, res) => {
   try {
-    const { vehicleId, date, time, buyerNotes, location, contactPreference, duration } = req.body;
+    const { vehicleId, date, time, preferredDate, buyerNotes, location, contactPreference, duration } = req.body;
     
     // Get vehicle and seller info
     const vehicle = await Vehicle.findById(vehicleId).populate('sellerId', 'email firstName');
@@ -50,6 +50,25 @@ const scheduleTestDrive = async (req, res) => {
       });
     }
     
+    // Validate preferredDate is provided
+    if (!preferredDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Preferred date is required'
+      });
+    }
+
+    // Validate preferredDate is not in the past
+    const parsedPreferredDate = new Date(preferredDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (isNaN(parsedPreferredDate.getTime()) || parsedPreferredDate < today) {
+      return res.status(400).json({
+        success: false,
+        message: 'Preferred date must be today or a future date'
+      });
+    }
+
     // Create test drive
     const testDrive = await TestDrive.create({
       vehicleId,
@@ -57,6 +76,7 @@ const scheduleTestDrive = async (req, res) => {
       sellerId: vehicle.sellerId._id,
       date: new Date(date),
       time,
+      preferredDate: parsedPreferredDate,
       duration: duration || 30,
       location: location ? JSON.parse(location) : undefined,
       buyerNotes,
@@ -118,14 +138,15 @@ const getMyTestDriveRequests = async (req, res) => {
     const filter = { buyerId: req.user._id };
     if (status) filter.status = status;
     
+    const BuyerBooking = require('../models/BuyerBooking');
     const [testDrives, total] = await Promise.all([
-      TestDrive.find(filter)
+      BuyerBooking.find(filter)
         .populate('vehicleId', 'brand model year price images')
         .populate('sellerId', 'firstName lastName phone email')
-        .sort({ date: -1 })
+        .sort({ scheduledDate: -1 })
         .skip(skip)
         .limit(limitNum),
-      TestDrive.countDocuments(filter)
+      BuyerBooking.countDocuments(filter)
     ]);
     
     res.json({
@@ -154,28 +175,26 @@ const getTestDrivesForMyVehicles = async (req, res) => {
     
     const filter = { sellerId: req.user._id };
     
-    // Handle status aliases
+    // Handle status aliases (BuyerBooking uses capitalized statuses: 'Pending', 'Accepted', 'Rejected', 'Completed', 'Cancelled')
     if (status === 'active') {
-      // Active requests: pending or approved (not completed/rejected/cancelled)
-      filter.status = { $in: ['pending', 'approved'] };
+      filter.status = { $in: ['Pending', 'Accepted', 'pending', 'approved'] };
     } else if (status === 'history') {
-      // History: rejected, cancelled, or completed
-      filter.status = { $in: ['rejected', 'cancelled', 'completed'] };
+      filter.status = { $in: ['Rejected', 'Cancelled', 'Completed', 'rejected', 'cancelled', 'completed'] };
     } else if (status) {
-      // Specific status
       filter.status = status;
     }
     
     if (vehicleId) filter.vehicleId = vehicleId;
     
+    const BuyerBooking = require('../models/BuyerBooking');
     const [testDrives, total] = await Promise.all([
-      TestDrive.find(filter)
+      BuyerBooking.find(filter)
         .populate('vehicleId', 'brand model year price images')
         .populate('buyerId', 'firstName lastName phone email profileImage isFullyVerified')
-        .sort({ date: 1 })
+        .sort({ scheduledDate: 1 })
         .skip(skip)
         .limit(limitNum),
-      TestDrive.countDocuments(filter)
+      BuyerBooking.countDocuments(filter)
     ]);
     
     res.json({
@@ -201,15 +220,22 @@ const updateTestDriveStatus = async (req, res) => {
   try {
     const { status, sellerNotes } = req.body;
     
-    const allowedStatuses = ['approved', 'rejected', 'completed', 'cancelled'];
-    if (!allowedStatuses.includes(status)) {
+    // Accept lowercase or capitalized statuses, but normalize them to the BuyerBooking enum
+    const normalizedStatus = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+    
+    // Map 'Approved' to 'Accepted'
+    const finalStatus = normalizedStatus === 'Approved' ? 'Accepted' : normalizedStatus;
+
+    const allowedStatuses = ['Accepted', 'Rejected', 'Completed', 'Cancelled'];
+    if (!allowedStatuses.includes(finalStatus)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid status'
+        message: 'Invalid status. Must be Accepted, Rejected, Completed, or Cancelled.'
       });
     }
     
-    let testDrive = await TestDrive.findById(req.params.id)
+    const BuyerBooking = require('../models/BuyerBooking');
+    let testDrive = await BuyerBooking.findById(req.params.id)
       .populate('buyerId', 'firstName lastName email')
       .populate('vehicleId', 'brand model year')
       .populate('sellerId', 'firstName lastName phone');
@@ -233,7 +259,7 @@ const updateTestDriveStatus = async (req, res) => {
     }
     
     // Only seller can approve/reject/complete
-    if (['approved', 'rejected', 'completed'].includes(status) && !isSeller) {
+    if (['Accepted', 'Rejected', 'Completed'].includes(finalStatus) && !isSeller) {
       return res.status(403).json({
         success: false,
         message: 'Only the seller can perform this action'
@@ -242,30 +268,16 @@ const updateTestDriveStatus = async (req, res) => {
     
     // Update test drive
     const previousStatus = testDrive.status;
-    testDrive.status = status;
+    testDrive.status = finalStatus;
     if (sellerNotes) testDrive.sellerNotes = sellerNotes;
-    testDrive.respondedAt = new Date();
-    if (status === 'completed') testDrive.completedAt = new Date();
     
     await testDrive.save();
     
     // ========== EMAIL NOTIFICATION SECTION ==========
-    // Send email notifications to buyer based on the booking status change
-    // This section handles three types of emails:
-    // 1. APPROVAL EMAIL - When seller approves the test drive request (status = 'approved')
-    // 2. REJECTION/CANCELLATION EMAIL - When seller rejects or cancels the test drive request
     
-    if (status === 'approved' && previousStatus !== 'approved') {
-      // ===== APPROVAL EMAIL BLOCK =====
-      // Condition: Only send approval email if new status is 'approved' AND previous status was NOT 'approved'
-      // (This prevents duplicate emails if status is updated multiple times)
-      
-      // Step 1: Create full vehicle name by combining year, brand, and model
-      // Example: "2023 Honda Civic" or "2020 Toyota Camry"
+    if (finalStatus === 'Accepted' && previousStatus !== 'Accepted') {
       const vehicleName = `${testDrive.vehicleId.year} ${testDrive.vehicleId.brand} ${testDrive.vehicleId.model}`;
       
-      // Step 2: Format the test drive date into a readable format
-      // Example: "Monday, January 15, 2024" instead of "2024-01-15"
       const formatDate = (date) => new Date(date).toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
@@ -273,36 +285,23 @@ const updateTestDriveStatus = async (req, res) => {
         day: 'numeric'
       });
       
-      // Step 3: Call the email function to send approval email
-      // Parameters being passed:
-      // - Buyer's email address
-      // - Buyer's first name (personalization)
-      // - Full vehicle name with year, brand, model
-      // - Object containing test drive details: formatted date, time, seller's name and phone
       await sendTestDriveApprovedEmail(
-        testDrive.buyerId.email,          // WHERE to send email (buyer's email)
-        testDrive.buyerId.firstName,      // WHO to greet (buyer's name)
-        vehicleName,                      // WHAT vehicle (full name)
+        testDrive.buyerId.email,
+        testDrive.buyerId.firstName,
+        vehicleName,
         {
-          date: formatDate(testDrive.date),                                          // WHEN scheduled
-          time: testDrive.time,                                                      // WHAT TIME
-          sellerName: `${testDrive.sellerId.firstName} ${testDrive.sellerId.lastName}`, // WHO is seller
-          sellerPhone: testDrive.sellerId.phone                                       // HOW to contact seller
+          date: formatDate(testDrive.scheduledDate),
+          time: testDrive.scheduledTime,
+          sellerName: `${testDrive.sellerId.firstName} ${testDrive.sellerId.lastName}`,
+          sellerPhone: testDrive.sellerId.phone
         }
       );
       
-      // Log successful email send for debugging
       console.log('✅ Approval email sent to buyer:', testDrive.buyerId.email);
       
-    } else if ((status === 'rejected' || status === 'cancelled') && previousStatus !== 'rejected' && previousStatus !== 'cancelled') {
-      // ===== REJECTION/CANCELLATION EMAIL BLOCK =====
-      // Condition: Send rejection email if status changed to 'rejected' OR 'cancelled'
-      // AND it wasn't already in rejected/cancelled status (prevents duplicate emails)
-      
-      // Step 1: Create full vehicle name (same as approval)
+    } else if ((finalStatus === 'Rejected' || finalStatus === 'Cancelled') && previousStatus !== 'Rejected' && previousStatus !== 'Cancelled') {
       const vehicleName = `${testDrive.vehicleId.year} ${testDrive.vehicleId.brand} ${testDrive.vehicleId.model}`;
       
-      // Step 2: Format the test drive date into readable format
       const formatDate = (date) => new Date(date).toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',
@@ -310,31 +309,23 @@ const updateTestDriveStatus = async (req, res) => {
         day: 'numeric'
       });
       
-      // Step 3: Call the email function to send rejection/cancellation email
-      // Parameters being passed (similar to approval but fewer details):
-      // - Buyer's email address
-      // - Buyer's first name
-      // - Full vehicle name
-      // - Object containing test drive date, time, and seller's name (phone not needed for rejection)
       await sendTestDriveRejectedEmail(
-        testDrive.buyerId.email,          // WHERE to send email (buyer's email)
-        testDrive.buyerId.firstName,      // WHO to greet (buyer's name)
-        vehicleName,                      // WHAT vehicle (full name)
+        testDrive.buyerId.email,
+        testDrive.buyerId.firstName,
+        vehicleName,
         {
-          date: formatDate(testDrive.date),                                          // WHEN it was scheduled
-          time: testDrive.time,                                                      // WHAT TIME it was
-          sellerName: `${testDrive.sellerId.firstName} ${testDrive.sellerId.lastName}` // WHO rejected it (seller)
+          date: formatDate(testDrive.scheduledDate),
+          time: testDrive.scheduledTime,
+          sellerName: `${testDrive.sellerId.firstName} ${testDrive.sellerId.lastName}`
         }
       );
       
-      // Log successful email send for debugging
       console.log('❌ Rejection/Cancellation email sent to buyer:', testDrive.buyerId.email);
     }
-    // ========== END EMAIL NOTIFICATION SECTION ==========
     
     res.json({
       success: true,
-      message: `Test drive ${status}`,
+      message: `Test drive ${finalStatus.toLowerCase()}`,
       data: testDrive
     });
   } catch (error) {
@@ -399,7 +390,8 @@ const getTestDriveById = async (req, res) => {
  */
 const deleteTestDrive = async (req, res) => {
   try {
-    const testDrive = await TestDrive.findById(req.params.id);
+    const BuyerBooking = require('../models/BuyerBooking');
+    const testDrive = await BuyerBooking.findById(req.params.id);
     
     if (!testDrive) {
       return res.status(404).json({
@@ -420,14 +412,14 @@ const deleteTestDrive = async (req, res) => {
     }
     
     // Only allow deletion if status is pending
-    if (testDrive.status !== 'pending' && !isAdmin) {
+    if (testDrive.status.toLowerCase() !== 'pending' && !isAdmin) {
       return res.status(400).json({
         success: false,
         message: 'Can only delete pending test drives'
       });
     }
     
-    await TestDrive.findByIdAndDelete(req.params.id);
+    await BuyerBooking.findByIdAndDelete(req.params.id);
     
     res.json({
       success: true,

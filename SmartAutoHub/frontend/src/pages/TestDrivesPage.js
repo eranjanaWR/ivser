@@ -238,29 +238,29 @@ const TestDrivesPage = () => {
                         <CalendarToday fontSize="small" color="action" />
                         <Box>
                           <Typography variant="body2">
-                            {formatDate(drive.date)}
+                            {formatDate(drive.scheduledDate || drive.date)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {drive.time}
+                            {drive.scheduledTime || drive.time}
                           </Typography>
                         </Box>
                       </Box>
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={drive.status.charAt(0).toUpperCase() + drive.status.slice(1)}
+                        label={drive.status.charAt(0).toUpperCase() + drive.status.slice(1).toLowerCase()}
                         size="small"
-                        color={getStatusColor(drive.status)}
+                        color={getStatusColor(drive.status.toLowerCase())}
                         variant="filled"
                       />
-                      {drive.status === 'pending' && (
+                      {drive.status.toLowerCase() === 'pending' && (
                         <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
                           Waiting for seller approval
                         </Typography>
                       )}
                     </TableCell>
                     <TableCell>
-                      {tab === 1 && drive.status === 'pending' && (
+                      {tab === 1 && drive.status.toLowerCase() === 'pending' && (
                         <Box sx={{ display: 'flex', gap: 1 }}>
                           <IconButton
                             size="small"
@@ -286,7 +286,7 @@ const TestDrivesPage = () => {
                           </IconButton>
                         </Box>
                       )}
-                      {tab === 0 && drive.status === 'pending' && (
+                      {tab === 0 && drive.status.toLowerCase() === 'pending' && (
                         <Button
                           size="small"
                           color="error"
@@ -303,7 +303,7 @@ const TestDrivesPage = () => {
                           Cancel
                         </Button>
                       )}
-                      {drive.status === 'approved' && (
+                      {(drive.status.toLowerCase() === 'approved' || drive.status.toLowerCase() === 'accepted') && (
                         <Chip label="Confirmed" size="small" color="success" />
                       )}
                     </TableCell>

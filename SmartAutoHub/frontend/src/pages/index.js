@@ -13,7 +13,6 @@ export { default as BoostAdPage } from './BoostAdPage';
 export { default as AddVehiclePage } from './AddVehiclePage';
 export { default as MyVehiclesPage } from './MyVehiclesPage';
 export { default as TestDrivesPage } from './TestDrivesPage';
-export { default as TestDriveBookingForm } from './TestDriveBookingForm';
 export { default as BreakdownPage } from './BreakdownPage';
 export { default as RepairmanMapPage } from './RepairmanMapPage';
 export { default as RepairmanDashboard } from './RepairmanDashboard';

@@ -464,17 +464,18 @@ const sendTestDriveCancellationEmail = async (buyerEmail, buyerName, vehicleName
               <h2>Test Drive Booking Cancelled</h2>
               <p>Hello ${buyerName},</p>
               
+              <p>Thank you for your interest in scheduling a test drive with SmartAuto Hub.</p>
+              
               <div class="alert">
-                <strong>⚠ Your test drive booking has been cancelled</strong><br><br>
+                <strong>⚠ Your test drive booking has been automatically cancelled</strong><br><br>
                 <strong>Vehicle:</strong> ${vehicleName}<br>
-                <strong>Reason:</strong> ${reason}<br><br>
               </div>
               
-              <p>Unfortunately, the vehicle you had booked a test drive for is no longer available because it has been ${reason}. This booking was automatically cancelled by our system.</p>
+              <p>Unfortunately, we must inform you that the vehicle you booked a test drive for is no longer available because it has been ${reason}. As a result, your booking has been cancelled by our system.</p>
               
-              <p>We apologize for any inconvenience this may cause. We have many other similar vehicles available on our platform. We encourage you to browse our listings and find another vehicle that matches your preferences.</p>
+              <p>We sincerely apologize for any inconvenience this may cause you. We have many other similar vehicles available on our platform, and we encourage you to explore our listings to find another vehicle that matches your preferences!</p>
               
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/vehicles" class="button">Browse Similar Vehicles</a>
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/vehicles" class="button">Browse Available Vehicles</a>
               
               <p style="margin-top: 30px; color: #666;">If you have any questions, please don't hesitate to contact our support team.</p>
             </div>

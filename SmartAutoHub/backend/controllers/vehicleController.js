@@ -464,8 +464,12 @@ const updateVehicle = async (req, res) => {
     });
 
     // Check if status is changing to 'available' to trigger notifications
-    const wasUnavailable = vehicle.status !== 'available';
-    const isBecomingAvailable = req.body.status === 'available';
+    const wasUnavailable = vehicle.status !== 'active';
+    const isBecomingAvailable = req.body.status === 'active';
+    
+    // Check if status is changing to unavailable/sold to cancel test drives
+    const wasAvailable = ['active', 'pending'].includes(vehicle.status);
+    const isBecomingUnavailable = ['sold', 'removed', 'inactive'].includes(req.body.status);
     
     // Update other fields
     Object.assign(vehicle, req.body);
@@ -475,6 +479,38 @@ const updateVehicle = async (req, res) => {
     if (isBecomingAvailable && wasUnavailable) {
       console.log(`Vehicle ${vehicle._id} is now available. Checking for subscriptions...`);
       notificationController.checkAndNotify(vehicle);
+    }
+    
+    // Cancel active test drives if vehicle becomes sold/removed
+    if (wasAvailable && isBecomingUnavailable) {
+      try {
+        const vehicleName = `${vehicle.brand} ${vehicle.model} (${vehicle.year})`;
+        const BuyerBooking = require('../models/BuyerBooking');
+        const activeTestDrives = await BuyerBooking.find({
+          vehicleId: vehicle._id,
+          status: { $in: ['Pending', 'Accepted'] }
+        }).populate('buyerId', 'firstName lastName email');
+        
+        for (const testDrive of activeTestDrives) {
+          try {
+            if (testDrive.buyerId && testDrive.buyerId.email) {
+              const buyerName = `${testDrive.buyerId.firstName} ${testDrive.buyerId.lastName}`;
+              await sendTestDriveCancellationEmail(
+                testDrive.buyerId.email,
+                buyerName,
+                vehicleName,
+                req.body.status === 'sold' ? 'sold' : 'removed from the platform'
+              );
+            }
+            testDrive.status = 'Cancelled';
+            await testDrive.save();
+          } catch (emailError) {
+            console.warn('⚠️ Failed to send cancellation email:', emailError.message);
+          }
+        }
+      } catch (tdError) {
+        console.warn('⚠️ Error cancelling test drives on vehicle update:', tdError.message);
+      }
     }
     
     res.json({
@@ -539,9 +575,10 @@ const deleteVehicle = async (req, res) => {
     
     // Find all active test drive bookings for this vehicle
     try {
-      const activeTestDrives = await TestDrive.find({
+      const BuyerBooking = require('../models/BuyerBooking');
+      const activeTestDrives = await BuyerBooking.find({
         vehicleId: req.params.id,
-        status: { $in: ['pending', 'approved'] }
+        status: { $in: ['Pending', 'Accepted'] }
       }).populate('buyerId', 'firstName lastName email');
       
       console.log('📋 Found', activeTestDrives.length, 'active test drives');
@@ -555,13 +592,13 @@ const deleteVehicle = async (req, res) => {
               testDrive.buyerId.email,
               buyerName,
               vehicleName,
-              'sold out'
+              'sold or removed from the platform'
             );
             console.log('✉️  Email sent to', buyerName);
           }
           
           // Update test drive status to cancelled
-          testDrive.status = 'cancelled';
+          testDrive.status = 'Cancelled';
           await testDrive.save();
         } catch (emailError) {
           console.warn('⚠️  Failed to send email for test drive:', emailError.message);

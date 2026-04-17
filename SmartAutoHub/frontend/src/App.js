@@ -39,7 +39,7 @@ import FinancialAidsPage from './pages/FinancialAidsPage';
 
 // Pages - Your Features (Test Drive & Bidding)
 import TestDrivesPage from './pages/TestDrivesPage';
-import TestDriveBookingForm from './pages/TestDriveBookingForm';
+import BookTestDrivePage from './pages/BookTestDrivePage';
 import SellerAvailability from './pages/SellerAvailability';
 import BiddingPage from './pages/BiddingPage';
 import MyAuctionsPage from './pages/MyAuctionsPage';
@@ -128,7 +128,7 @@ function App() {
 
                 {/* Test Drive Routes */}
                 <Route path="/test-drives" element={<PrivateRoute><TestDrivesPage /></PrivateRoute>} />
-                <Route path="/book-test-drive/:vehicleId" element={<PrivateRoute><TestDriveBookingForm /></PrivateRoute>} />
+                <Route path="/book-test-drive/:vehicleId" element={<PrivateRoute><BookTestDrivePage /></PrivateRoute>} />
                 <Route path="/seller-availability" element={<PrivateRoute roles={['seller', 'buyer/seller', 'admin1']}><SellerAvailability /></PrivateRoute>} />
 
                 {/* Bidding Protected Routes */}

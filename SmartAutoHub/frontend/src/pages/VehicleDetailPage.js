@@ -32,7 +32,6 @@ import {
   Settings,
   ColorLens,
   DirectionsCar,
-  Person,
   Phone,
   Email,
   Event,
@@ -47,7 +46,7 @@ import {
   FavoriteBorder,
   AttachMoney,
 } from '@mui/icons-material';
-import { Select, MenuItem, FormControl, InputLabel } from '@mui/material';
+
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import EditVehicleModal from '../components/EditVehicleModal';
@@ -75,9 +74,6 @@ const VehicleDetailPage = () => {
   const [testDriveMessage, setTestDriveMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState('');
-  const [availabilitySlots, setAvailabilitySlots] = useState([]);
-  const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
-  const [loadingSlots, setLoadingSlots] = useState(false);
   
   // Admin actions
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -170,152 +166,38 @@ const VehicleDetailPage = () => {
     alert('Vehicle updated successfully!');
   };
 
-  // Fetch seller's availability slots
-  const fetchSellerAvailability = async (sellerId) => {
-    setLoadingSlots(true);
-    try {
-      console.log('🔍 Fetching availability for seller:', sellerId);
-      const { data } = await api.get(`/availability/seller/${sellerId}`);
-      console.log('📦 Full API Response:', data);
-      console.log('📦 Response status:', data.success);
-      console.log('📦 Response data prop:', data.data);
-      
-      const slots = data.data?.availabilitySlots || [];
-      console.log('📅 Available slots found:', slots.length, 'slots');
-      if (slots.length > 0) {
-        console.log('📋 Slots structure:', slots.map(s => ({
-          id: s.id,
-          startTime: s.startTime,
-          endTime: s.endTime,
-          enabled: s.enabled,
-          days: s.days
-        })));
-      } else {
-        console.log('⚠️  No slots in response. Full data:', data.data);
-      }
-      setAvailabilitySlots(slots);
-    } catch (err) {
-      console.error('❌ Failed to fetch availability:', err);
-      console.error('Error response:', err.response?.data);
-      console.error('Error message:', err.message);
-      setAvailabilitySlots([]);
-    }
-    setLoadingSlots(false);
-  };
-
-  // Get available time slots for a selected date
-  const getAvailableTimesForDate = (date) => {
-    if (!date || availabilitySlots.length === 0) {
-      console.log('⏹️  No date selected or no slots available. date:', date, 'slots:', availabilitySlots.length);
-      return [];
-    }
-
-    const dateObj = new Date(date);
-    const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    // Convert to Mon-Sun format (0-6) where Mon = 0
-    const adjustedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-
-    console.log('📅 Selected date:', date, 'Day of week:', dayOfWeek, 'Adjusted day:', adjustedDay);
-
-    const times = [];
-    
-    availabilitySlots.forEach((slot) => {
-      if (!slot.enabled) {
-        console.log('⏭️  Slot disabled:', slot);
-        return;
-      }
-      
-      // Check if this slot is open on the selected day
-      if (!slot.days[adjustedDay]) {
-        console.log('❌ Slot not open on day', adjustedDay, ':', slot);
-        return;
-      }
-      
-      console.log('✅ Processing slot:', slot);
-
-      // Convert 12-hour format (e.g., "09:00 AM") to 24-hour format
-      const convertTo24Hour = (timeStr) => {
-        const [time, period] = timeStr.split(' ');
-        let [hour, min] = time.split(':').map(Number);
-        
-        if (period === 'PM' && hour !== 12) {
-          hour += 12;
-        } else if (period === 'AM' && hour === 12) {
-          hour = 0;
-        }
-        
-        return { hour, min };
-      };
-
-      const startTime = convertTo24Hour(slot.startTime);
-      const endTime = convertTo24Hour(slot.endTime);
-
-      let currentHour = startTime.hour;
-      let currentMin = startTime.min;
-
-      while (currentHour < endTime.hour || (currentHour === endTime.hour && currentMin < endTime.min)) {
-        const timeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMin).padStart(2, '0')}`;
-        times.push(timeStr);
-
-        // Add 30 minutes
-        currentMin += 30;
-        if (currentMin >= 60) {
-          currentMin = 0;
-          currentHour += 1;
-        }
-      }
-    });
-
-    // Remove duplicates and sort
-    const uniqueTimes = Array.from(new Set(times)).sort();
-    console.log('🕐 Available times for date:', uniqueTimes);
-    return uniqueTimes;
-  };
-
-  // Fetch availability when test drive dialog opens
-  useEffect(() => {
-    if (testDriveOpen && vehicle?.sellerId) {
-      const sellerId = typeof vehicle.sellerId === 'string' ? vehicle.sellerId : vehicle.sellerId._id;
-      console.log('🔑 Vehicle seller ID:', { raw: vehicle.sellerId, extracted: sellerId, type: typeof sellerId });
-      fetchSellerAvailability(sellerId);
-    }
-  }, [testDriveOpen, vehicle?.sellerId]);
-
-  // Update available times when date changes
-  useEffect(() => {
-    if (testDriveDate) {
-      const times = getAvailableTimesForDate(testDriveDate);
-      setAvailableTimeSlots(times);
-      // Reset time selection if current time is no longer available
-      if (testDriveTime && !times.includes(testDriveTime)) {
-        setTestDriveTime('');
-      }
-    } else {
-      setAvailableTimeSlots([]);
-    }
-  }, [testDriveDate, availabilitySlots]);
 
   const handleTestDriveSubmit = async () => {
     if (!isAuthenticated) {
       navigate('/login');
       return;
     }
+
+    if (!testDriveDate) {
+      setError('Please select a preferred date.');
+      return;
+    }
+    if (!testDriveTime) {
+      setError('Please select a preferred time.');
+      return;
+    }
     
     setSubmitting(true);
     try {
       await api.post('/test-drives', {
-        vehicle: id,
-        preferredDate: testDriveDate,
-        preferredTime: testDriveTime,
-        message: testDriveMessage,
+        vehicleId: id,
+        date: testDriveDate,        // maps to the required 'date' field in schema
+        time: testDriveTime,        // maps to the required 'time' field in schema
+        preferredDate: testDriveDate, // new explicit preferredDate field
+        buyerNotes: testDriveMessage,
       });
-      setSuccess('Test drive booked successfully!');
+      setSuccess('Test drive request sent successfully!');
       setTestDriveOpen(false);
       setTestDriveDate('');
       setTestDriveTime('');
       setTestDriveMessage('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to book test drive');
+      setError(err.response?.data?.message || 'Failed to send test drive request');
     }
     setSubmitting(false);
   };
@@ -558,7 +440,7 @@ const VehicleDetailPage = () => {
                   fullWidth
                   size="large"
                   startIcon={<Event />}
-                  onClick={() => setTestDriveOpen(true)}
+                  onClick={() => navigate(`/book-test-drive/${id}`)}
                   sx={{
                     backgroundColor: '#4281da',
                     color: '#ffffff',
@@ -905,11 +787,12 @@ const VehicleDetailPage = () => {
 
         {/* Test Drive Dialog */}
         <Dialog open={testDriveOpen} onClose={() => setTestDriveOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Book Vehicle for Test Drive</DialogTitle>
+          <DialogTitle>Request Test Drive</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Book a test drive for {vehicle.brand} {vehicle.model}
+              Request a test drive for {vehicle.brand} {vehicle.model}
             </Typography>
+            {/* Preferred Date Field with min date set to today */}
             <TextField
               fullWidth
               label="Preferred Date"
@@ -917,54 +800,34 @@ const VehicleDetailPage = () => {
               value={testDriveDate}
               onChange={(e) => setTestDriveDate(e.target.value)}
               InputLabelProps={{ shrink: true }}
-              sx={{ mb: 2 }}
+              inputProps={{
+                min: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+              }}
+              sx={{ 
+                mb: 2,
+                '& input[type="date"]': {
+                  fontSize: '1rem',
+                  padding: '8px 12px',
+                }
+              }}
             />
-            {loadingSlots ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-                <CircularProgress size={24} />
-              </Box>
-            ) : availabilitySlots.length > 0 ? (
-              // Slots are configured - show dropdown with available times
-              <>
-                {testDriveDate ? (
-                  availableTimeSlots.length > 0 ? (
-                    <FormControl fullWidth sx={{ mb: 2 }}>
-                      <InputLabel>Preferred Time</InputLabel>
-                      <Select
-                        value={testDriveTime}
-                        onChange={(e) => setTestDriveTime(e.target.value)}
-                        label="Preferred Time"
-                      >
-                        {availableTimeSlots.map((time) => (
-                          <MenuItem key={time} value={time}>
-                            {time}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  ) : (
-                    <Alert severity="error" sx={{ mb: 2 }}>
-                      ❌ No available slots on this date
-                    </Alert>
-                  )
-                ) : (
-                  <Alert severity="info" sx={{ mb: 2 }}>
-                    📅 Select a date above to see available time slots
-                  </Alert>
-                )}
-              </>
-            ) : (
-              // No slots configured - show simple time input
-              <TextField
-                fullWidth
-                label="Preferred Time"
-                type="time"
-                value={testDriveTime}
-                onChange={(e) => setTestDriveTime(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                sx={{ mb: 2 }}
-              />
-            )}
+            {/* Preferred Time Field */}
+            <TextField
+              fullWidth
+              label="Preferred Time"
+              type="time"
+              value={testDriveTime}
+              onChange={(e) => setTestDriveTime(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              sx={{ 
+                mb: 2,
+                '& input[type="time"]': {
+                  fontSize: '1rem',
+                  padding: '8px 12px',
+                }
+              }}
+            />
+            {/* Message to Seller */}
             <TextField
               fullWidth
               label="Message to Seller (Optional)"
@@ -972,6 +835,8 @@ const VehicleDetailPage = () => {
               rows={3}
               value={testDriveMessage}
               onChange={(e) => setTestDriveMessage(e.target.value)}
+              placeholder="Add any additional details or preferences..."
+              sx={{ mb: 2 }}
             />
           </DialogContent>
           <DialogActions>

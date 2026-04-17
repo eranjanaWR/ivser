@@ -41,8 +41,8 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // Fetch vehicle to get seller ID
-    const vehicle = await Vehicle.findById(vehicleId);
+    // Fetch vehicle to get seller ID and populate seller info for email
+    const vehicle = await Vehicle.findById(vehicleId).populate('sellerId', 'email firstName lastName');
     if (!vehicle) {
       return res.status(404).json({
         success: false,
@@ -50,11 +50,8 @@ exports.createBooking = async (req, res) => {
       });
     }
 
-    // Extract seller ID (might be populated as object)
-    const sellerId =
-      typeof vehicle.sellerId === 'object' && vehicle.sellerId._id
-        ? vehicle.sellerId._id
-        : vehicle.sellerId;
+    // Extract seller ID (since it's populated, we take the _id)
+    const sellerId = vehicle.sellerId._id;
 
     if (!sellerId) {
       return res.status(400).json({
@@ -79,6 +76,34 @@ exports.createBooking = async (req, res) => {
     await booking.save();
 
     console.log('✅ Booking created successfully:', booking._id);
+
+    // ===== EMAIL NOTIFICATION =====
+    try {
+      const { sendTestDriveNotification } = require('../utils/email');
+      const vehicleName = `${vehicle.year} ${vehicle.brand} ${vehicle.model}`;
+      const buyerName = `${req.user.firstName} ${req.user.lastName}`;
+      
+      // Since we populated sellerId above, we can safely access email and firstName
+      const sellerEmail = vehicle.sellerId.email;
+      const sellerFirstName = vehicle.sellerId.firstName;
+      
+      const displayDate = new Date(scheduledDate).toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
+      });
+      
+      await sendTestDriveNotification(
+        sellerEmail,
+        sellerFirstName,
+        buyerName,
+        vehicleName,
+        displayDate,
+        scheduledTime
+      );
+      console.log('✉️ Email notification sent successfully to seller:', sellerEmail);
+    } catch (emailErr) {
+      console.error('❌ Failed to send email notification:', emailErr.message);
+      // We don't fail the booking if email fails
+    }
 
     res.status(201).json({
       success: true,
