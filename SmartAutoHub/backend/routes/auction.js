@@ -18,6 +18,9 @@ router.get('/', validatePagination, auctionController.getAuctionVehicles);
 // Get current user's personal auctions
 router.get('/my-auctions', protect, auctionController.getMyAuctions);
 
+// Get current user's won auctions
+router.get('/won-bids', protect, auctionController.getMyWonBids);
+
 // Get seller's auction vehicles
 router.get('/seller/:sellerId', protect, validateObjectId('sellerId'), auctionController.getSellerAuctionVehicles);
 

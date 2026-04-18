@@ -4,7 +4,7 @@
  * Shows live bid tracking, price performance chart, and top bidders
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Box,
   Container,
@@ -23,6 +23,8 @@ import {
   Stack,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
+import { toast } from 'react-toastify';
+import ConfirmationModal from '../components/ConfirmationModal';
 import {
   ArrowBack,
   LocalOffer as BiddingIcon,
@@ -42,6 +44,7 @@ import {
   Schedule as ExtendTimeIcon,
   CheckCircle as AcceptBidIcon,
   Cancel as CancelIcon,
+  EmojiEvents as TrophyIcon,
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -49,7 +52,7 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import PricePerformanceChart from '../components/PricePerformanceChart';
 import BidPlacementForm from '../components/BidPlacementForm';
-import BiddingConsentModal from '../components/BiddingConsentModal';
+import BiddingPartnerRegistrationModal from '../components/BiddingPartnerRegistrationModal';
 import BidderLeaderboard from '../components/BidderLeaderboard';
 import LiveBidHistory from '../components/LiveBidHistory';
 import AuctionMap from '../components/AuctionMap';
@@ -78,25 +81,86 @@ const LiveAuctionDashboard = () => {
   const [bidDialogOpen, setBidDialogOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]); // NEW: Store initial chat messages
   const [showConsentModal, setShowConsentModal] = useState(false); // ✅ NEW: Consent modal state
-  const [isPartner, setIsPartner] = useState(null); // ✅ NEW: Track if user is already a partner
-  const [checkingPartnerStatus, setCheckingPartnerStatus] = useState(false); // ✅ NEW: Loading state
+  const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(null); // ✅ PERSISTENT: Track if user is registered for this specific vehicle
+  const [checkingPartnerStatus, setCheckingPartnerStatus] = useState(false); // ✅ Loading state
+  const [partners, setPartners] = useState([]); // ✅ NEW: Store all registered bidding partners for the map
+  const [currentImageIndex, setCurrentImageIndex] = useState(0); // ✅ NEW: Image Carousel State
 
-  // ✅ FORCE FIX: Bulletproof ownership check with multiple fallbacks
-  const isSeller = 
-    user?._id?.toString() === vehicle?.sellerId?.toString() || 
-    user?._id?.toString() === vehicle?.sellerId?._id?.toString() ||
-    user?.id?.toString() === vehicle?.sellerId?.toString() ||
-    user?.id?.toString() === vehicle?.sellerId?._id?.toString();
-  
-  console.log('🔍 [FORCE FIX - Ownership Check]', {
-    userId: user?._id,
-    userIdString: user?._id?.toString(),
-    sellerId: vehicle?.sellerId,
-    sellerIdString: vehicle?.sellerId?.toString(),
-    sellerIdObjectId: vehicle?.sellerId?._id?.toString(),
-    isSeller,
-    vehicle: vehicle ? `${vehicle.year} ${vehicle.brand} ${vehicle.model}` : 'N/A'
+  // ✅ NEW: Confirmation Modal State
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    message: '',
+    type: 'primary',
+    onConfirm: () => {},
   });
+
+  // ✅ Image Carousel Handlers
+  const handlePrevImage = () => {
+    if (!vehicle?.images?.length) return;
+    setCurrentImageIndex((prev) => (prev === 0 ? vehicle.images.length - 1 : prev - 1));
+  };
+
+  const handleNextImage = () => {
+    if (!vehicle?.images?.length) return;
+    setCurrentImageIndex((prev) => (prev + 1) % vehicle.images.length);
+  };
+
+  // ✅ Auto-rotate images every 4 seconds
+  useEffect(() => {
+    if (!vehicle?.images?.length || vehicle.images.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentImageIndex((prev) => (prev + 1) % vehicle.images.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [vehicle]);
+
+  // ✅ AUTHORIZATION CHECK: Bulletproof ownership verification
+  const isOwner = useMemo(() => {
+    // 1. Both user and vehicle data must be present
+    if (!user || !vehicle || !vehicle.sellerId) return false;
+
+    // 2. Extract IDs from potential object or string formats
+    const loggedInId = (user._id || user.id)?.toString();
+    const sellerId = (vehicle.sellerId._id || vehicle.sellerId)?.toString();
+
+    // 3. Ensure both IDs are valid strings before comparing
+    if (!loggedInId || !sellerId) return false;
+
+    // 4. Return comparison result
+    return loggedInId === sellerId;
+  }, [user, vehicle]);
+
+  // ✅ WINNER CHECK: Checks ALL possible winner fields in the vehicle model
+  const isWinner = useMemo(() => {
+    if (!user || !vehicle) return false;
+    const loggedInId = (user._id || user.id)?.toString();
+    if (!loggedInId) return false;
+
+    // Field 1: vehicle.highestBidder (populated User object — the main field in AuctionVehicle model)
+    const highestBidderObjId = (vehicle.highestBidder?._id || vehicle.highestBidder)?.toString();
+    // Field 2: vehicle.highestBidderId (alternative flat ID field)
+    const highestBidderFlatId = (vehicle.highestBidderId?._id || vehicle.highestBidderId)?.toString();
+    // Field 3: vehicle.winnerId (explicit winner set after 'Accept Bid')
+    const winnerIdStr = (vehicle.winnerId?._id || vehicle.winnerId)?.toString();
+
+    const matched = (
+      (highestBidderObjId && loggedInId === highestBidderObjId) ||
+      (highestBidderFlatId && loggedInId === highestBidderFlatId) ||
+      (winnerIdStr && loggedInId === winnerIdStr)
+    );
+
+    console.log('🏆 [WINNER CHECK]', { loggedInId, highestBidderObjId, highestBidderFlatId, winnerIdStr, matched });
+    return matched;
+  }, [user, vehicle]);
+
+  // Debug logging for development (optional)
+  useEffect(() => {
+    console.log('🔒 [AUTH CHECK] isOwner:', isOwner, {
+      userId: user?._id || user?.id,
+      sellerId: vehicle?.sellerId?._id || vehicle?.sellerId
+    });
+  }, [isOwner, user, vehicle]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -110,7 +174,7 @@ const LiveAuctionDashboard = () => {
     const fetchChatHistory = async () => {
       try {
         console.log('📥 [PERSISTENCE] Fetching chat history from database for:', vehicleId);
-        const response = await api.get(`/api/bidding/${vehicleId}/chat-history`);
+        const response = await api.get(`/bidding/${vehicleId}/chat-history`);
         
         if (response.data.success) {
           const restoredMessages = response.data.history || [];
@@ -125,15 +189,17 @@ const LiveAuctionDashboard = () => {
     };
     
     fetchChatHistory();
+    checkPartnerStatus(); // ✅ PERSISTENCE: Check registration status on page load
   }, [isAuthenticated, vehicleId, navigate]);
 
   // Socket.io connection
   useEffect(() => {
     if (!vehicle) return;
 
-    // ✅ NEW: Skip Socket.io for closed auctions
-    if (vehicle?.status === 'closed') {
-      console.log('🔒 Auction is closed, skipping real-time updates');
+    // ✅ Skip Socket.io for auctions that are already in a terminal state
+    const statusLower = vehicle?.status?.toLowerCase() || '';
+    if (['closed', 'completed', 'cancelled'].includes(statusLower)) {
+      console.log('🔒 Auction is in terminal state, skipping real-time socket connection');
       return;
     }
 
@@ -199,6 +265,62 @@ const LiveAuctionDashboard = () => {
       setIsLive(data.isLive);
       if (!data.isLive) {
         setError('Auction has ended');
+      }
+    });
+
+    // ✅ NEW: Listen for time extensions
+    socketRef.current.on('auctionUpdated', (data) => {
+      console.log('⏱️ Auction extended:', data);
+      if (data.auctionEndDate) {
+        setVehicle(prev => ({ ...prev, auctionEndDate: data.auctionEndDate }));
+        console.log(`✅ [SOCKET] UI updated with new end date: ${data.auctionEndDate}`);
+      }
+    });
+
+    // ✅ Listen for auction ending/cancellation
+    socketRef.current.on('auctionEnded', async (data) => {
+      console.log('🏁 Auction ended event received:', data);
+      setIsLive(false);
+
+      // CRITICAL FIX: Re-fetch the full vehicle object from the server.
+      // The socket event only carries the new status, NOT the winner data.
+      // We need the populated highestBidder / winnerId to show the correct button.
+      try {
+        const refreshed = await api.get(`/auction-vehicles/${vehicleId}`);
+        if (refreshed.data?.data) {
+          const updatedVehicle = refreshed.data.data;
+          setVehicle(updatedVehicle);
+          setHighestBidder(updatedVehicle.highestBidder);
+          console.log('✅ [SOCKET] Vehicle refreshed after auction end:', {
+            status: updatedVehicle.status,
+            highestBidder: updatedVehicle.highestBidder?._id,
+            winnerId: updatedVehicle.winnerId,
+          });
+        }
+      } catch (err) {
+        // Fallback: at minimum patch the status so isClosed becomes true
+        console.warn('⚠️ Could not refresh vehicle, patching status only:', err.message);
+        if (data.status) {
+          setVehicle(prev => ({ ...prev, status: data.status }));
+        }
+      }
+    });
+    
+    // ✅ NEW: Listen for new partner registrations to update map in real-time
+    socketRef.current.on('newPartnerLocation', (data) => {
+      console.log('📍 [REAL-TIME] New partner location received:', data);
+      if (data.vehicleId === vehicleId && data.partner) {
+        setPartners(prev => {
+          // Unify structure: Ensure ID is always at top level as 'userId' for comparison
+          const newPartnerId = (data.partner.userId?._id || data.partner.userId || data.partner.id)?.toString();
+          
+          // Prevent duplicates
+          const exists = prev.some(p => (p.id || p.userId?._id || p.userId)?.toString() === newPartnerId);
+          if (exists) return prev;
+          
+          return [...prev, { ...data.partner, id: newPartnerId }];
+        });
+        toast.info(`📍 New bidder joined from ${data.partner.town || 'unknown location'}!`);
       }
     });
 
@@ -268,11 +390,13 @@ const LiveAuctionDashboard = () => {
 
       // STEP 2: Fetch COMBINED bidding history from database (CRITICAL FOR PERSISTENCE)
       try {
-        const biddingDetailsResponse = await api.get(`/api/bidding/${vehicleId}/combined`);
+        const biddingDetailsResponse = await api.get(`/bidding/${vehicleId}/combined`);
         if (biddingDetailsResponse.data.success) {
-          const { bidHistory, chatMessages: persistedMessages } = biddingDetailsResponse.data.data;
+          const { bidHistory, chatMessages: persistedMessages, partners: dbPartners } = biddingDetailsResponse.data.data;
 
-          console.log(`✅ [PERSISTENCE] Fetched ${bidHistory.length} bids and ${persistedMessages.length} messages from database`);
+          console.log(`✅ [PERSISTENCE] Fetched ${bidHistory.length} bids, ${persistedMessages.length} messages, and ${dbPartners?.length || 0} partners`);
+          
+          if (dbPartners) setPartners(dbPartners);
 
           // Restore price history from database bids
           if (bidHistory && bidHistory.length > 0) {
@@ -287,12 +411,11 @@ const LiveAuctionDashboard = () => {
             setPriceHistory(priceHistoryFromDB);
             console.log(`📊 Price history restored from ${priceHistoryFromDB.length} database records`);
           } else {
-            // Fallback: Start with the starting price
             setPriceHistory([
               {
                 bidLabel: 'Starting Price',
                 price: vehicleData.startingPrice,
-                timestamp: vehicleData.auctionStartDate || new Date().toISOString(),
+                timestamp: vehicleData.auctionStartDate || vehicleData.createdAt || new Date().toISOString(),
                 bidderName: 'System',
                 bidIndex: 0,
               },
@@ -306,6 +429,11 @@ const LiveAuctionDashboard = () => {
           } else {
             setChatMessages([]);
             console.log(`💬 [PERSISTENCE] No previous messages in database, starting fresh`);
+          }
+
+          // ✅ NEW: Check registration status on mount
+          if (isAuthenticated) {
+            checkPartnerStatus();
           }
         }
       } catch (bidErr) {
@@ -349,56 +477,99 @@ const LiveAuctionDashboard = () => {
     setTotalBids(updatedVehicle.bids?.length || 0);
   };
 
-  // ✅ NEW: Check if user is already a partner for this auction
+  // ✅ PERSISTENCE: Check if user is already a registered partner for this specific vehicle
   const checkPartnerStatus = async () => {
     if (!vehicleId || !isAuthenticated) return;
 
     setCheckingPartnerStatus(true);
     try {
-      const response = await api.get(`/bidding/partner-status/${vehicleId}`);
+      const response = await api.get(`/bidding/check-registration/${vehicleId}`);
       if (response.data.success) {
-        setIsPartner(response.data.isPartner);
+        setIsAlreadyRegistered(response.data.isPartner);
         console.log(
-          `✅ Partner status checked: ${response.data.isPartner ? 'Already a partner' : 'First time bidding'}`
+          `✅ Registration status checked: ${response.data.isPartner ? 'Already registered' : 'Not registered yet'}`
         );
       }
     } catch (err) {
-      console.warn('⚠️ Could not check partner status:', err.message);
-      // Assume not a partner on error, show consent modal
-      setIsPartner(false);
+      console.warn('⚠️ Could not check registration status:', err.message);
+      // Assume not registered on error to show the form
+      setIsAlreadyRegistered(false);
     } finally {
       setCheckingPartnerStatus(false);
     }
   };
 
-  // ✅ NEW: Handle consent modal completion
+  // ✅ POST-REGISTRATION: Update state immediately after successful form submission
   const handleConsentComplete = () => {
-    console.log('✅ Consent completed, opening bid dialog');
-    setIsPartner(true);
+    console.log('✅ Registration completed, opening bid dialog');
+    setIsAlreadyRegistered(true); // Update state so modal doesn't show again
     setBidDialogOpen(true);
     setShowConsentModal(false);
   };
 
-  // ✅ NEW: Handle "Place Your Bid" button click
+  // ✅ BID HANDLER: Enforce Bidding Partner Registration
   const handlePlaceBidClick = async () => {
-    // ✅ FORCE FIX: Prevent sellers from bidding on their own auctions
-    if (isSeller) {
-      console.log('🚫 [SELLER] Cannot bid on own auction');
-      alert('As the seller, you cannot bid on your own auction. Use the Seller Controls instead.');
+    console.log('--- DEBUG BID ATTEMPT ---');
+    console.log('Vehicle ID:', vehicleId);
+    console.log('Authenticated:', isAuthenticated);
+    console.log('User Object:', user);
+    
+    const loggedInUserId = (user?._id || user?.id)?.toString();
+    console.log('Logged-in User ID (parsed):', loggedInUserId);
+
+    // 1. SECURITY: Prevent sellers from bidding on their own auctions
+    if (isOwner) {
+      console.warn('🚫 [BID-BLOCK] User is owner');
+      toast.warning('🚫 As the owner, you cannot bid on your own auction.');
       return;
     }
 
-    if (isPartner === null) {
-      // Check partner status first if not already determined
-      await checkPartnerStatus();
+    if (!isAuthenticated) {
+      console.warn('🚫 [BID-BLOCK] Not authenticated');
+      navigate('/login');
+      return;
     }
 
-    if (!isPartner) {
-      // First time bidding - show consent modal
+    // 2. REGISTRATION CHECK: Verify if already a partner for THIS vehicle
+    setCheckingPartnerStatus(true);
+    try {
+      console.log('🔍 [BID-LOGIC] Current Partners List:', partners);
+      
+      // Strict ID comparison using the local partners list
+      // Note: Backend maps userId to 'id' in the combined details response
+      const localCheck = partners.some(p => {
+        const pId = (p.id || p.userId?._id || p.userId)?.toString();
+        const match = pId === loggedInUserId;
+        if (match) console.log(`✅ [LOCAL-MATCH] Found user in partners: ${pId}`);
+        return match;
+      });
+      
+      if (localCheck) {
+        console.log('✅ [BID-LOGIC] Local check passed. Opening dialog.');
+        setIsAlreadyRegistered(true);
+        setBidDialogOpen(true);
+      } else {
+        console.log('🔄 [BID-LOGIC] Local check failed. Querying server...');
+        // Fallback to API check for final confirmation
+        const response = await api.get(`/bidding/check-registration/${vehicleId}`);
+        const isPartner = response.data.isPartner;
+        
+        console.log('📡 [SERVER-RESPONSE] isPartner:', isPartner);
+        setIsAlreadyRegistered(isPartner);
+        
+        if (isPartner) {
+          setBidDialogOpen(true);
+        } else {
+          console.log('⚠️ [BID-LOGIC] Not registered. Redirecting to modal...');
+          setShowConsentModal(true);
+        }
+      }
+    } catch (err) {
+      console.error('❌ [BID-LOGIC] Critical status check failure:', err);
+      // On error, show registration modal to be safe (enforce location capture)
       setShowConsentModal(true);
-    } else {
-      // Already a partner - open bid dialog directly
-      setBidDialogOpen(true);
+    } finally {
+      setCheckingPartnerStatus(false);
     }
   };
 
@@ -420,53 +591,103 @@ const LiveAuctionDashboard = () => {
 
   const handleExtendTime = async () => {
     try {
-      console.log('⏱️ [SELLER] Extending auction time by 5 minutes...');
-      const response = await api.put(`/api/auction-vehicles/${vehicleId}/extend-time`, {
+      console.log('⏱️ [SELLER] Extending auction time by 5 minutes for:', vehicleId);
+      const response = await api.put(`/bidding/${vehicleId}/extend-time`, {
         minutes: 5
       });
       if (response.data.success) {
-        setVehicle({ ...vehicle, auctionEndDate: response.data.data.auctionEndDate });
-        console.log('✅ [SELLER] Auction extended successfully');
+        const rawEndTime = response.data.endTime || response.data.data?.auctionEndDate;
+        console.log('✅ [SELLER] Time extension successful:', rawEndTime);
+        
+        // Format the new end time safely to avoid "Invalid Date"
+        const formattedTime = rawEndTime 
+          ? new Date(rawEndTime).toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              hour12: true 
+            }) 
+          : 'N/A';
+
+        toast.success(
+          <div>
+            <strong>Auction extended by 5 minutes!</strong>
+            <br />
+            New End Time: {formattedTime}
+          </div>
+        );
       }
     } catch (error) {
-      console.error('❌ [SELLER] Failed to extend time:', error.message);
-      alert('Failed to extend time: ' + error.response?.data?.message);
+      console.error('❌ [SELLER] Failed to extend time:', error.response?.data || error.message);
+      alert('Failed to extend time: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  const handleAcceptHighestBid = async () => {
+  // ✅ SELLER ACTION EXECUTION: Accept Bid
+  const executeAcceptBid = async () => {
+    try {
+      console.log('✅ [SELLER] Executing accept bid for:', vehicleId);
+      const response = await api.put(`/bidding/${vehicleId}/accept-bid`);
+      if (response.data.success) {
+        console.log('✅ [SELLER] Bid accepted successfully');
+        toast.success('Auction closed! Highest bid accepted.');
+      }
+    } catch (error) {
+      console.error('❌ [SELLER] Failed to accept bid:', error.response?.data || error.message);
+      alert('Failed to accept bid: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleAcceptHighestBid = () => {
     if (!highestBidder) {
       alert('No bids yet to accept');
       return;
     }
-    if (!window.confirm(`Accept bid of LKR ${currentBid?.toLocaleString()} from ${highestBidder.firstName}?`)) return;
+
+    setConfirmDialog({
+      open: true,
+      title: 'Accept Highest Bid',
+      message: `Accept bid of LKR ${currentBid?.toLocaleString()} from ${highestBidder.firstName}?`,
+      type: 'success',
+      confirmText: 'Confirm',
+      cancelText: 'Cancel',
+      onConfirm: () => {
+        executeAcceptBid();
+        setConfirmDialog((prev) => ({ ...prev, open: false }));
+      },
+    });
+  };
+
+  const handleCancelAuction = () => {
+    setConfirmDialog({
+      open: true,
+      title: 'Cancel Auction',
+      message: '⚠️ Warning: Are you sure you want to cancel this auction? This action cannot be undone.',
+      type: 'danger',
+      confirmText: 'Yes, Cancel Auction',
+      cancelText: 'No, Keep It',
+      onConfirm: () => {
+        executeCancelAuction();
+        setConfirmDialog((prev) => ({ ...prev, open: false }));
+      },
+    });
+  };
+
+  // ✅ SELLER ACTION EXECUTION: Cancel Auction
+  const executeCancelAuction = async () => {
     try {
-      console.log('✅ [SELLER] Accepting highest bid...');
-      const response = await api.put(`/api/auction-vehicles/${vehicleId}/accept-bid`);
+      console.log('🚫 [SELLER] Executing cancel auction for:', vehicleId);
+      const response = await api.put(`/bidding/${vehicleId}/cancel-auction`);
       if (response.data.success) {
-        setVehicle({ ...vehicle, status: 'closed' });
-        console.log('✅ [SELLER] Bid accepted - auction closed');
+        console.log('✅ [SELLER] Auction cancelled successfully');
+        toast.info('Auction has been cancelled.');
       }
     } catch (error) {
-      console.error('❌ [SELLER] Failed to accept bid:', error.message);
-      alert('Failed to accept bid: ' + error.response?.data?.message);
+      console.error('❌ [SELLER] Failed to cancel auction:', error.response?.data || error.message);
+      alert('Failed to cancel auction: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  const handleCancelAuction = async () => {
-    if (!window.confirm('Are you sure you want to cancel this auction? This action cannot be undone.')) return;
-    try {
-      console.log('🚫 [SELLER] Cancelling auction...');
-      const response = await api.put(`/api/auction-vehicles/${vehicleId}/cancel-auction`);
-      if (response.data.success) {
-        setVehicle({ ...vehicle, status: 'cancelled' });
-        console.log('✅ [SELLER] Auction cancelled successfully');
-      }
-    } catch (error) {
-      console.error('❌ [SELLER] Failed to cancel auction:', error.message);
-      alert('Failed to cancel auction: ' + error.response?.data?.message);
-    }
-  };
+
 
   // ✅ NEW: Check partner status on mount
   useEffect(() => {
@@ -495,11 +716,26 @@ const LiveAuctionDashboard = () => {
     );
   }
 
-  // ✅ NEW: Check if auction is closed
-  const isClosed = vehicle?.status === 'closed';
+  // ✅ isClosed: catches ALL terminal statuses (case-insensitive) + time expiry
+  const statusLower = vehicle?.status?.toLowerCase() || '';
+  const isClosed = ['closed', 'completed', 'cancelled'].includes(statusLower) || new Date(vehicle?.auctionEndDate) <= new Date();
+  // isOwner and isWinner are memoized at the top of the component
+  console.log('🔍 [DASHBOARD STATE]', { status: vehicle?.status, isClosed, isOwner, isWinner, winnerId: vehicle?.winnerId, highestBidder: vehicle?.highestBidder });
 
   return (
     <Box sx={{ bgcolor: theme.palette.background.default, minHeight: 'calc(100vh - 80px)', py: 4 }}>
+      {/* ✅ NEW: Reusable Confirmation Modal */}
+      <ConfirmationModal
+        open={confirmDialog.open}
+        onClose={() => setConfirmDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        type={confirmDialog.type}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+      />
+
       <Container maxWidth="xl">
         {/* Header */}
         <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -543,20 +779,139 @@ const LiveAuctionDashboard = () => {
           }}
         >
           <Grid container spacing={3} alignItems="flex-start">
-            {/* LEFT: Vehicle Image - Large & Prominent */}
+            {/* LEFT: Vehicle Image Carousel - Large & Prominent */}
             <Grid item xs={12} sm={4}>
               <Box
-                component="img"
-                src={vehicle.images?.[0]?.url || 'https://via.placeholder.com/300x300?text=Vehicle'}
                 sx={{
+                  position: 'relative',
                   width: '100%',
                   height: 320,
                   borderRadius: 2,
-                  objectFit: 'cover',
+                  overflow: 'hidden',
                   border: `2px solid ${theme.palette.primary.light}`,
                   boxShadow: 2,
+                  '&:hover .nav-arrow': {
+                    opacity: 1, // Show arrows on hover
+                  }
                 }}
-              />
+              >
+                {/* Main Image */}
+                <Box
+                  component="img"
+                  src={(() => {
+                    const img = vehicle.images && vehicle.images[currentImageIndex];
+                    if (!img) return 'https://via.placeholder.com/300x300?text=No+Image';
+                    if (typeof img === 'string') {
+                      return img.startsWith('http') ? img : `http://localhost:5000${img.startsWith('/') ? '' : '/'}${img}`;
+                    }
+                    if (img.url) return img.url;
+                    if (img._id) return `http://localhost:5000/api/images/${img._id}`;
+                    return 'https://via.placeholder.com/300x300?text=Image+Format+Unknown';
+                  })()}
+                  alt={`${vehicle.year} ${vehicle.brand} ${vehicle.model}`}
+                  sx={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    transition: 'opacity 0.3s ease-in-out',
+                  }}
+                  onError={(e) => {
+                    // Fallback to placeholder if image fails to load
+                    e.target.onerror = null;
+                    e.target.src = 'https://via.placeholder.com/300x300?text=Image+Not+Found';
+                  }}
+                />
+
+                {/* Left Arrow */}
+                {vehicle.images && vehicle.images.length > 1 && (
+                  <Box
+                    className="nav-arrow"
+                    onClick={handlePrevImage}
+                    sx={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: 10,
+                      transform: 'translateY(-50%)',
+                      bgcolor: 'rgba(0, 0, 0, 0.4)',
+                      color: 'white',
+                      borderRadius: '50%',
+                      width: 36,
+                      height: 36,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      opacity: 0,
+                      transition: 'opacity 0.3s ease, background-color 0.2s',
+                      '&:hover': {
+                        bgcolor: 'rgba(0, 0, 0, 0.7)',
+                      },
+                    }}
+                  >
+                    &#10094;
+                  </Box>
+                )}
+
+                {/* Right Arrow */}
+                {vehicle.images && vehicle.images.length > 1 && (
+                  <Box
+                    className="nav-arrow"
+                    onClick={handleNextImage}
+                    sx={{
+                      position: 'absolute',
+                      top: '50%',
+                      right: 10,
+                      transform: 'translateY(-50%)',
+                      bgcolor: 'rgba(0, 0, 0, 0.4)',
+                      color: 'white',
+                      borderRadius: '50%',
+                      width: 36,
+                      height: 36,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      opacity: 0,
+                      transition: 'opacity 0.3s ease, background-color 0.2s',
+                      '&:hover': {
+                        bgcolor: 'rgba(0, 0, 0, 0.7)',
+                      },
+                    }}
+                  >
+                    &#10095;
+                  </Box>
+                )}
+                
+                {/* Image Dots Indicator */}
+                {vehicle.images && vehicle.images.length > 1 && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      bottom: 15,
+                      width: '100%',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      gap: 1,
+                    }}
+                  >
+                    {vehicle.images.map((_, idx) => (
+                      <Box
+                        key={idx}
+                        onClick={() => setCurrentImageIndex(idx)}
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          bgcolor: idx === currentImageIndex ? 'white' : 'rgba(255, 255, 255, 0.5)',
+                          cursor: 'pointer',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                          transition: 'background-color 0.2s',
+                        }}
+                      />
+                    ))}
+                  </Box>
+                )}
+              </Box>
             </Grid>
 
             {/* MIDDLE: Detailed Vehicle Specifications & Features - Two Columns */}
@@ -783,6 +1138,8 @@ const LiveAuctionDashboard = () => {
                 <PricePerformanceChart
                   priceHistory={priceHistory}
                   highestBidder={highestBidder}
+                  startingPrice={vehicle?.startingPrice}
+                  startTime={vehicle?.createdAt}
                 />
               </Box>
             </Paper>
@@ -810,6 +1167,7 @@ const LiveAuctionDashboard = () => {
                 <AuctionMap 
                   vehicle={vehicle} 
                   socketRef={socketRef}
+                  initialPartners={partners}
                 />
               </Paper>
             </Box>
@@ -874,35 +1232,60 @@ const LiveAuctionDashboard = () => {
                   vehicleId={vehicleId}
                   highestBidder={highestBidder}
                   socketUrl={process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000'}
-                  onPlaceBid={() => setBidDialogOpen(true)}
+                  onPlaceBid={handlePlaceBidClick}
                   isLive={isLive}
                 />
               </Box>
 
               {/* Fixed Footer: Place Your Bid Button or Seller Controls */}
-              {!isClosed ? (
+              {isClosed ? (
+                <Box sx={{ p: 3, flexShrink: 0, borderTop: `1px solid ${theme.palette.divider}`, bgcolor: '#f0f9ff' }}>
+                  {(isOwner || isWinner) ? (
+                    // ✅ WINNER or SELLER: Show Contact Button
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      size="large"
+                      startIcon={<TrophyIcon />}
+                      sx={{ 
+                        py: 2.5, 
+                        fontWeight: 800, 
+                        fontSize: '1.1rem',
+                        borderRadius: 3,
+                        bgcolor: isWinner ? '#22c55e' : '#1976d2',
+                        color: 'white',
+                        textTransform: 'none',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                        transition: 'all 0.3s ease',
+                        '&:hover': { 
+                          bgcolor: isWinner ? '#16a34a' : '#1565c0',
+                          boxShadow: '0 6px 16px rgba(0, 0, 0, 0.2)',
+                          transform: 'translateY(-2px)'
+                        },
+                        '&:active': {
+                          transform: 'translateY(0px)'
+                        }
+                      }}
+                      onClick={() => navigate(`/auction-result/${vehicleId}`)}
+                    >
+                      {isWinner ? '🏆 You Won! Contact Seller' : '🤝 Auction Won! Contact Winner'}
+                    </Button>
+                  ) : (
+                    // ✅ OTHER BIDDERS: Show Auction Ended Message
+                    <Alert severity="info" sx={{ borderRadius: 3, fontSize: '1rem', fontWeight: 600 }}>
+                      This auction has ended.
+                    </Alert>
+                  )}
+                </Box>
+              ) : (
                 <Box sx={{ p: 3, flexShrink: 0, borderTop: `1px solid ${theme.palette.divider}`, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.02)' }}>
-                  {isSeller ? (
+                  {isOwner ? (
                     // ✅ SELLER CONTROLS PANEL
                     <Box>
                       <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 2, color: theme.palette.primary.main }}>
                         👤 SELLER CONTROLS
                       </Typography>
-                      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-                        <Button 
-                          variant="contained" 
-                          size="small"
-                          startIcon={<EndAuctionIcon />}
-                          sx={{ 
-                            flex: 1,
-                            minWidth: 120,
-                            backgroundColor: '#ff9800',
-                            '&:hover': { backgroundColor: '#f57c00' }
-                          }}
-                          onClick={handleEndAuctionNow}
-                        >
-                          End Auction Now
-                        </Button>
+                      <Stack direction="row" spacing={2}>
                         <Button 
                           variant="contained" 
                           size="small"
@@ -948,143 +1331,25 @@ const LiveAuctionDashboard = () => {
                       </Stack>
                     </Box>
                   ) : (
-                    // ✅ BUYER BID BUTTON
-                    <Button 
-                      fullWidth 
-                      variant="contained" 
-                      disabled={checkingPartnerStatus}
+                    // ✅ BIDDER: Place Bid Button
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      size="large"
+                      startIcon={<BiddingIcon />}
+                      disabled={!isLive}
                       sx={{ 
-                        background: 'linear-gradient(135deg, #1976d2 0%, #1565c0 100%)',
-                        fontWeight: 700,
-                        py: 1.5,
-                        fontSize: '1rem',
-                        '&:hover': {
-                          background: 'linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)',
-                        }
+                        py: 2, 
+                        fontWeight: 800, 
+                        fontSize: '1.1rem',
+                        borderRadius: 3,
+                        boxShadow: '0 4px 12px rgba(25, 118, 210, 0.3)',
+                        '&:hover': { boxShadow: '0 6px 16px rgba(25, 118, 210, 0.4)' }
                       }}
                       onClick={handlePlaceBidClick}
                     >
-                      💰 Place Your Bid
+                      {isLive ? 'PLACE YOUR BID NOW' : 'AUCTION ENDED'}
                     </Button>
-                  )}
-                </Box>
-              ) : (
-                // ✅ POST-AUCTION CONTACT BRIDGE UI
-                <Box sx={{ p: 3, flexShrink: 0, borderTop: `1px solid ${theme.palette.divider}`, bgcolor: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.02)' }}>
-                  {isSeller ? (
-                    // 🏁 SELLER VIEW: Contact Winner
-                    <Card sx={{ p: 2.5, bgcolor: '#fff3cd', border: '1px solid #ffc107', borderRadius: 2 }}>
-                      <Stack spacing={2}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1, color: '#856404' }}>
-                          🏁 Auction Ended
-                        </Typography>
-                        <Divider />
-                        {vehicle?.highestBidder ? (
-                          <Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: theme.palette.text.primary }}>
-                              Contact Winning Bidder:
-                            </Typography>
-                            <Stack spacing={1}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                                  {vehicle.highestBidder?.firstName?.charAt(0)}
-                                </Avatar>
-                                <Box>
-                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                    {vehicle.highestBidder?.firstName} {vehicle.highestBidder?.lastName}
-                                  </Typography>
-                                  <Typography variant="caption" color="textSecondary">
-                                    Final Bid: LKR {vehicle.currentBid?.toLocaleString()}
-                                  </Typography>
-                                </Box>
-                              </Box>
-                              {vehicle.highestBidder?.email && (
-                                <Typography variant="body2">
-                                  📧 <strong>Email:</strong> {vehicle.highestBidder.email}
-                                </Typography>
-                              )}
-                              {vehicle.highestBidder?.phone && (
-                                <Typography variant="body2">
-                                  📱 <strong>Phone:</strong> {vehicle.highestBidder.phone}
-                                </Typography>
-                              )}
-                            </Stack>
-                          </Box>
-                        ) : (
-                          <Typography variant="body2" color="textSecondary" sx={{ fontStyle: 'italic' }}>
-                            No bids received for this auction.
-                          </Typography>
-                        )}
-                      </Stack>
-                    </Card>
-                  ) : user?._id?.toString() === vehicle?.highestBidder?._id?.toString() || user?.id?.toString() === vehicle?.highestBidder?._id?.toString() ? (
-                    // 🏆 WINNER VIEW: Contact Seller
-                    <Card sx={{ p: 2.5, bgcolor: '#d4edda', border: '1px solid #28a745', borderRadius: 2 }}>
-                      <Stack spacing={2}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1, color: '#155724' }}>
-                          🏆 Congratulations! You Won!
-                        </Typography>
-                        <Divider />
-                        <Box>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: theme.palette.text.primary }}>
-                            Contact Seller:
-                          </Typography>
-                          <Stack spacing={1}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Avatar sx={{ width: 32, height: 32, bgcolor: 'success.main' }}>
-                                {vehicle?.sellerId?.firstName?.charAt(0) || 'S'}
-                              </Avatar>
-                              <Box>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {vehicle?.sellerId?.firstName} {vehicle?.sellerId?.lastName}
-                                </Typography>
-                                <Typography variant="caption" color="textSecondary">
-                                  Winning Amount: LKR {vehicle?.currentBid?.toLocaleString()}
-                                </Typography>
-                              </Box>
-                            </Box>
-                            {vehicle?.sellerId?.email && (
-                              <Typography variant="body2">
-                                📧 <strong>Email:</strong> {vehicle.sellerId.email}
-                              </Typography>
-                            )}
-                            {vehicle?.sellerId?.phone && (
-                              <Typography variant="body2">
-                                📱 <strong>Phone:</strong> {vehicle.sellerId.phone}
-                              </Typography>
-                            )}
-                          </Stack>
-                        </Box>
-                      </Stack>
-                    </Card>
-                  ) : (
-                    // 👁️ VIEWER VIEW: Read-only results
-                    <Card sx={{ p: 2.5, bgcolor: '#e2e3e5', border: '1px solid #6c757d', borderRadius: 2 }}>
-                      <Stack spacing={2}>
-                        <Typography variant="h6" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 1, color: '#383d41' }}>
-                          👁️ Read-Only View
-                        </Typography>
-                        <Divider />
-                        <Box>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                            Final Results:
-                          </Typography>
-                          <Stack spacing={1}>
-                            <Typography variant="body2">
-                              <strong>Starting Price:</strong> LKR {vehicle?.startingPrice?.toLocaleString()}
-                            </Typography>
-                            <Typography variant="body2">
-                              <strong>Final Price:</strong> LKR {vehicle?.currentBid?.toLocaleString()}
-                            </Typography>
-                            {vehicle?.highestBidder && (
-                              <Typography variant="body2">
-                                <strong>Winner:</strong> {vehicle.highestBidder.firstName} {vehicle.highestBidder.lastName}
-                              </Typography>
-                            )}
-                          </Stack>
-                        </Box>
-                      </Stack>
-                    </Card>
                   )}
                 </Box>
               )}
@@ -1111,6 +1376,7 @@ const LiveAuctionDashboard = () => {
                   currentUserName={`${user?.firstName} ${user?.lastName}`}
                   initialMessages={chatMessages}
                   isClosed={isClosed}
+                  isOwner={isOwner}
                   vehicle={vehicle && {
                     brand: vehicle.brand || 'Unknown',
                     model: vehicle.model || 'Unknown',
@@ -1136,11 +1402,12 @@ const LiveAuctionDashboard = () => {
           onBidSuccess={handleBidSuccess}
         />
 
-        {/* ✅ NEW: Bidding Consent Modal (first-time bidder) */}
-        <BiddingConsentModal
+        {/* ✅ NEW: Bidding Partner Registration Modal (first-time bidder) */}
+        <BiddingPartnerRegistrationModal
           open={showConsentModal}
           onClose={() => setShowConsentModal(false)}
           auctionId={vehicleId}
+          socket={socketRef.current} // Pass socket for real-time broadcast
           vehicleInfo={
             vehicle && {
               year: vehicle.year,
@@ -1151,7 +1418,7 @@ const LiveAuctionDashboard = () => {
               location: vehicle.location?.city || 'Location not specified',
             }
           }
-          onConsentComplete={handleConsentComplete}
+          onRegistrationComplete={handleConsentComplete}
         />
 
         {/* Error Alert */}

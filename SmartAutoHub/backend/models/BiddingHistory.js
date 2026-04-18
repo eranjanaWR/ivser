@@ -11,7 +11,6 @@ const biddingHistorySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'BiddingVehicle',
       required: true,
-      index: true,
     },
     bidderId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -37,7 +36,6 @@ const biddingHistorySchema = new mongoose.Schema(
     timestamp: {
       type: Date,
       default: Date.now,
-      index: true,
     },
   },
   {

@@ -23,23 +23,32 @@ import {
   useTheme,
   Autocomplete
 } from '@mui/material';
-import { Close as CloseIcon, CloudUpload as CloudUploadIcon, Delete as DeleteIcon, Star as StarIcon } from '@mui/icons-material';
+import { 
+  Close as CloseIcon, 
+  CloudUpload as CloudUploadIcon, 
+  Delete as DeleteIcon, 
+  Star as StarIcon,
+  LocationOn as LocationIcon 
+} from '@mui/icons-material';
 import api from '../services/api';
+import LocationPickerModal from './LocationPickerModal';
 
 // ✅ Sri Lankan Provinces Array
 const SRI_LANKAN_PROVINCES = [
-  'Western',
-  'Central',
-  'Southern',
-  'North Western',
-  'Sabaragamuwa',
-  'North Central',
-  'Uva',
-  'Eastern',
-  'Northern'
+  'Western', 'Central', 'Southern', 'North Western', 'Sabaragamuwa',
+  'North Central', 'Uva', 'Eastern', 'Northern'
 ];
 
-const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
+// ✅ Sri Lankan Districts Array
+const SRI_LANKAN_DISTRICTS = [
+  'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya',
+  'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochchi', 'Mannar',
+  'Vavuniya', 'Mullaitivu', 'Batticaloa', 'Ampara', 'Trincomalee',
+  'Kurunegala', 'Puttalam', 'Anuradhapura', 'Polonnaruwa', 'Badulla',
+  'Moneragala', 'Ratnapura', 'Kegalle'
+];
+
+const AddVehicleBiddingDialog = ({ open, onClose, onSuccess, prefilledVehicle }) => {
   const theme = useTheme();
   
   // ✅ NEW: Dynamic Feature options based on bodyType
@@ -65,6 +74,7 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
     doors: 4,
     seats: 5,
     bodyType: 'sedan',
+    vin: '',
     
     // Key Features (Checkboxes)
     features: {},
@@ -77,8 +87,11 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
     
     // Location with Coordinates
     location: {
-      city: '',
-      state: '',
+      province: '',
+      district: '',
+      town: '',
+      city: '', // for fallback
+      state: '', // for fallback
       country: 'Sri Lanka',
       latitude: '',
       longitude: ''
@@ -86,8 +99,76 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
     
     // Media & Description
     description: '',
-    mainCoverImageIndex: null
+    mainCoverImageIndex: null,
+    originalVehicleId: ''
   });
+
+  // ✅ NEW: Prefill logic when existing vehicle data is passed
+  React.useEffect(() => {
+    if (prefilledVehicle && open) {
+      console.log('🚗 [PREFILL] Initializing form with vehicle:', prefilledVehicle.brand, prefilledVehicle.model);
+      
+      // Convert features array to object for checkbox handling
+      const featuresObj = {};
+      if (prefilledVehicle.features && Array.isArray(prefilledVehicle.features)) {
+        prefilledVehicle.features.forEach(f => {
+          featuresObj[f] = true;
+        });
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        brand: prefilledVehicle.brand || '',
+        model: prefilledVehicle.model || '',
+        year: prefilledVehicle.year || prev.year,
+        mileage: (prefilledVehicle.mileage !== undefined && prefilledVehicle.mileage !== null) ? prefilledVehicle.mileage : '',
+        condition: prefilledVehicle.condition?.toLowerCase() || 'good',
+        fuelType: prefilledVehicle.fuelType?.toLowerCase() || 'petrol',
+        transmission: prefilledVehicle.transmission?.toLowerCase() || 'automatic',
+        engineCapacity: prefilledVehicle.engineCapacity || '',
+        color: prefilledVehicle.color || '',
+        bodyType: prefilledVehicle.bodyType?.toLowerCase() || 'sedan',
+        doors: prefilledVehicle.doors !== undefined ? prefilledVehicle.doors : prev.doors,
+        seats: prefilledVehicle.seats !== undefined ? prefilledVehicle.seats : prev.seats,
+        vin: prefilledVehicle.vin || '',
+        description: prefilledVehicle.description || '',
+        features: featuresObj,
+        location: {
+          ...prev.location,
+          province: prefilledVehicle.location?.state || prefilledVehicle.location?.province || '',
+          district: prefilledVehicle.location?.city || prefilledVehicle.location?.district || '',
+          city: prefilledVehicle.location?.city || '',
+          town: prefilledVehicle.location?.city || '',
+          state: prefilledVehicle.location?.state || '',
+          latitude: prefilledVehicle.location?.coordinates?.coords?.[1] || prefilledVehicle.location?.coordinates?.lat || '',
+          longitude: prefilledVehicle.location?.coordinates?.coords?.[0] || prefilledVehicle.location?.coordinates?.lng || '',
+        },
+        originalVehicleId: prefilledVehicle._id || ''
+      }));
+
+      // Pre-populate image previews (existing URLs)
+      if (prefilledVehicle.images && prefilledVehicle.images.length > 0) {
+        const imageUrls = prefilledVehicle.images.map(img => 
+          typeof img === 'string' ? img : `/api/images/${img._id || img}`
+        );
+        setImagePreviews(imageUrls);
+        setFormData(prev => ({ ...prev, mainCoverImageIndex: 0 }));
+        
+        // ✅ NEW: Clear error message when images are successfully pre-filled
+        setError('');
+        
+        // Note: Actual 'images' state (Files) stays empty as they aren't re-uploaded yet
+      }
+
+      // Mark location as verified if coordinates exist
+      if (prefilledVehicle.location?.coordinates?.coords) {
+        console.log('🗺️ [PREFILL] Auto-verifying location');
+        setLocationVerified(true);
+      }
+    } else if (open) {
+      console.log('ℹ️ [PREFILL] Dialog opened without prefilled data');
+    }
+  }, [prefilledVehicle, open]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -98,6 +179,9 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
   const [locationVerifying, setLocationVerifying] = useState(false);
   const [locationVerified, setLocationVerified] = useState(false);
   const [locationError, setLocationError] = useState('');
+  
+  // ✅ NEW: Map Picker State
+  const [pickerOpen, setPickerOpen] = useState(false);
   
   // ✅ Real-time price validation state
   const [priceValidationError, setPriceValidationError] = useState('');
@@ -283,25 +367,27 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
 
   // ============ GEOCODING LOGIC ============
   const fetchCoordinates = async () => {
-    const { city, state } = formData.location;
+    const { town, district, province } = formData.location;
     
-    // Validate city and state
-    if (!city.trim() || !state.trim()) {
-      setLocationError('Please enter both City and State/Province');
+    // Validate all 3 fields for town-level precision
+    if (!town.trim() || !district.trim() || !province.trim()) {
+      setLocationError('Please provide Town, District, and Province for mapping.');
       return;
     }
 
+    // ✅ STEP 1: OPEN MODAL IMMEDIATELY
+    setPickerOpen(true);
     setLocationVerifying(true);
     setLocationError('');
     setLocationVerified(false);
 
     try {
-      // Construct Nominatim API query
-      const searchQuery = `${city.trim()}, ${state.trim()}, Sri Lanka`;
-      const encodedQuery = encodeURIComponent(searchQuery);
+      // ✅ TOWN LEVEL: Construct Nominatim API query with 3 levels
+      const searchAddress = `${town.trim()}, ${district.trim()}, ${province.trim()}, Sri Lanka`;
+      const encodedQuery = encodeURIComponent(searchAddress);
       const nominatimUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}`;
 
-      console.log('🔍 [GEOCODING] Fetching coordinates for:', searchQuery);
+      console.log('🔍 [GEOCODING] Fetching coordinates for:', searchAddress);
       console.log('   URL:', nominatimUrl);
 
       // Fetch coordinates from Nominatim API
@@ -309,7 +395,7 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'User-Agent': 'SmartAutoHub-VehicleForm/1.0' // Required by Nominatim
+          'User-Agent': 'SmartAutoHub-VehicleForm/1.0'
         }
       });
 
@@ -323,8 +409,8 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
 
       // Check if results found
       if (!results || results.length === 0) {
-        setLocationError(`❌ Could not find this location. Please check the spelling of "${city}" and "${state}".`);
-        console.warn('⚠️  [GEOCODING] No results found for:', searchQuery);
+        console.warn('⚠️  [GEOCODING] No results found for:', searchAddress);
+        // We stay open so user can pick manually
         setLocationVerifying(false);
         return;
       }
@@ -333,12 +419,6 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
       const firstResult = results[0];
       const latitude = parseFloat(firstResult.lat);
       const longitude = parseFloat(firstResult.lon);
-      const displayName = firstResult.display_name;
-
-      console.log('📍 [GEOCODING] Coordinates found:');
-      console.log(`   Latitude: ${latitude}`);
-      console.log(`   Longitude: ${longitude}`);
-      console.log(`   Display Name: ${displayName}`);
 
       // Update form with coordinates
       setFormData(prev => ({
@@ -353,15 +433,30 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
       // Show success message
       setLocationVerified(true);
       setLocationError('');
-      console.log('✅ [GEOCODING] Location verified and coordinates updated');
+      console.log('✅ [GEOCODING] Location pre-verified at town level');
 
     } catch (err) {
       console.error('❌ [GEOCODING] Error:', err);
-      setLocationError(`Error verifying location: ${err.message}. Please try again or enter coordinates manually.`);
-      setLocationVerified(false);
+      setLocationError(`Error verifying location: ${err.message}. Opening Map Picker...`);
+      setPickerOpen(true);
     } finally {
       setLocationVerifying(false);
     }
+  };
+
+  // ✅ NEW: Handle location confirmation from Map Picker
+  const handleLocationConfirm = (coords) => {
+    setFormData(prev => ({
+      ...prev,
+      location: {
+        ...prev.location,
+        latitude: coords[0].toString(),
+        longitude: coords[1].toString()
+      }
+    }));
+    setLocationVerified(true);
+    setLocationError('');
+    console.log('📍 [PICKER] Manual location set:', coords);
   };
 
   const handleSubmit = async (e) => {
@@ -395,7 +490,7 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
       setError('Year is required');
       return;
     }
-    if (!formData.mileage) {
+    if (formData.mileage === '' || formData.mileage === null || formData.mileage === undefined) {
       setError('Mileage is required');
       return;
     }
@@ -495,12 +590,8 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
     }
 
     // Location Validation
-    if (!formData.location.city.trim()) {
-      setError('City is required');
-      return;
-    }
-    if (!formData.location.state.trim()) {
-      setError('State/Province is required');
+    if (!formData.location.province.trim() || !formData.location.district.trim() || !formData.location.town.trim()) {
+      setError('Precise location (Province, District, Town) is required');
       return;
     }
 
@@ -521,7 +612,10 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
     }
 
     // Images Validation
-    if (images.length === 0) {
+    // Check if we have either new files or existing image previews
+    const hasAnyImages = images.length > 0 || imagePreviews.length > 0;
+    
+    if (!hasAnyImages) {
       setError('Please upload at least one vehicle image');
       return;
     }
@@ -552,12 +646,16 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
       submissionData.append('transmission', formData.transmission);
       submissionData.append('engineCapacity', formData.engineCapacity.trim());
       submissionData.append('color', formData.color.trim());
+      submissionData.append('vin', formData.vin?.trim() || '');
       
       // ✅ ENSURE: Motorcycles always send doors=0, seats=1
       const finalDoors = formData.bodyType === 'motorcycle' ? 0 : parseInt(formData.doors);
       const finalSeats = formData.bodyType === 'motorcycle' ? 1 : parseInt(formData.seats);
       submissionData.append('doors', finalDoors);
       submissionData.append('seats', finalSeats);
+      if (formData.originalVehicleId) {
+        submissionData.append('originalVehicleId', formData.originalVehicleId);
+      }
       console.log(`📤 [SUBMIT] Vehicle: ${formData.brand} ${formData.model}, BodyType: ${formData.bodyType}, Doors: ${finalDoors}, Seats: ${finalSeats}`);
       
       submissionData.append('bodyType', formData.bodyType);
@@ -571,13 +669,26 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
       submissionData.append('auctionStartDate', formData.auctionStartDate);
       submissionData.append('auctionEndDate', formData.auctionEndDate);
       
+      // ✅ NEW: Handle Existing Images (URLs)
+      const existingUrls = imagePreviews.filter(preview => typeof preview === 'string' && (preview.startsWith('http') || preview.startsWith('/') || preview.startsWith('api/images')));
+      if (existingUrls.length > 0) {
+        submissionData.append('existingImages', JSON.stringify(existingUrls));
+        console.log('🖼️ [SUBMIT] Including existing images:', existingUrls.length);
+      }
+      
       // Location with Coordinates
       submissionData.append('location', JSON.stringify({
-        city: formData.location.city.trim(),
-        state: formData.location.state.trim(),
+        province: formData.location.province.trim(),
+        district: formData.location.district.trim(),
+        town: formData.location.town.trim(),
+        city: formData.location.town.trim(), // fallback
         country: formData.location.country,
         latitude: formData.location.latitude ? parseFloat(formData.location.latitude) : null,
-        longitude: formData.location.longitude ? parseFloat(formData.location.longitude) : null
+        longitude: formData.location.longitude ? parseFloat(formData.location.longitude) : null,
+        coordinates: {
+          lat: formData.location.latitude ? parseFloat(formData.location.latitude) : null,
+          lng: formData.location.longitude ? parseFloat(formData.location.longitude) : null
+        }
       }));
       
       // Media & Description
@@ -616,6 +727,9 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
           auctionStartDate: '',
           auctionEndDate: '',
           location: {
+            province: '',
+            district: '',
+            town: '',
             city: '',
             state: '',
             country: 'Sri Lanka',
@@ -1112,139 +1226,88 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
             {/* Location Verified Success Alert */}
             {locationVerified && (
               <Alert severity="success" sx={{ mb: 2 }}>
-                ✅ Location verified: <strong>{formData.location.city}, {formData.location.state}</strong> 
+                ✅ Town location verified: <strong>{formData.location.town}</strong> 
                 <br />
                 Coordinates: {formData.location.latitude}, {formData.location.longitude}
               </Alert>
             )}
 
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="City"
-                  name="location.city"
-                  value={formData.location.city}
-                  onChange={(e) => {
-                    handleChange(e);
-                    setLocationVerified(false); // Reset verification when city changes
-                  }}
-                  placeholder="e.g., Colombo"
-                  required
-                  disabled={locationVerifying}
-                />
-              </Grid>
+              {/* Province Dropdown */}
               <Grid item xs={12} sm={6}>
                 <Autocomplete
                   options={SRI_LANKAN_PROVINCES}
-                  value={formData.location.state}
+                  value={formData.location.province}
                   onChange={(event, value) => {
                     setFormData(prev => ({
                       ...prev,
-                      location: {
-                        ...prev.location,
-                        state: value || ''
-                      }
+                      location: { ...prev.location, province: value || '' }
                     }));
-                    setLocationVerified(false); // Reset verification when province changes
+                    setLocationVerified(false);
                   }}
-                  disabled={locationVerifying}
-                  fullWidth
                   renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="State/Province"
-                      placeholder="e.g., Western"
-                      required
-                    />
+                    <TextField {...params} label="Province" required disabled={locationVerifying} />
                   )}
                 />
               </Grid>
 
-              {/* Verify Location Button */}
+              {/* District Dropdown */}
+              <Grid item xs={12} sm={6}>
+                <Autocomplete
+                  options={SRI_LANKAN_DISTRICTS}
+                  value={formData.location.district}
+                  onChange={(event, value) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      location: { ...prev.location, district: value || '' }
+                    }));
+                    setLocationVerified(false);
+                  }}
+                  renderInput={(params) => (
+                    <TextField {...params} label="District" required disabled={locationVerifying} />
+                  )}
+                />
+              </Grid>
+
+              {/* Town Input */}
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Town / City"
+                  name="location.town"
+                  value={formData.location.town}
+                  onChange={(e) => {
+                    handleChange(e);
+                    setLocationVerified(false);
+                  }}
+                  placeholder="e.g., Kaduwela"
+                  required
+                  disabled={locationVerifying}
+                />
+              </Grid>
+            </Grid>
+
+            {/* Verify Location Button */}
+            <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12}>
                 <Button
                   fullWidth
-                  variant="contained"
-                  color="info"
+                  variant="outlined"
+                  color={locationVerified ? "success" : "primary"}
                   onClick={fetchCoordinates}
-                  disabled={locationVerifying || !formData.location.city.trim() || !formData.location.state.trim()}
-                  startIcon={locationVerifying ? <CircularProgress size={20} /> : undefined}
+                  disabled={!formData.location.province || !formData.location.district || !formData.location.town}
+                  startIcon={locationVerifying ? <CircularProgress size={20} /> : <LocationIcon />}
                   sx={{
                     py: 1.5,
                     fontWeight: 600,
                     textTransform: 'none',
-                    fontSize: '1rem',
-                    transition: 'all 0.3s ease'
+                    borderRadius: 2
                   }}
                 >
-                  {locationVerifying ? 'Verifying Location...' : '🗺️ Verify Location on Map'}
+                  {locationVerifying ? 'Searching...' : locationVerified ? '✅ Location Picked' : '🗺️ Verify Location on Map'}
                 </Button>
               </Grid>
 
-              {/* Read-Only Coordinates Display */}
-              {(formData.location.latitude || formData.location.longitude) && (
-                <>
-                  <Grid item xs={12}>
-                    <Typography 
-                      variant="subtitle2" 
-                      sx={{ fontWeight: 600, mb: 2, color: theme.palette.success.main }}
-                    >
-                      ✓ Auto-populated Coordinates:
-                    </Typography>
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="Latitude"
-                      type="number"
-                      value={formData.location.latitude}
-                      InputProps={{
-                        readOnly: true,
-                      }}
-                      inputProps={{ step: '0.0001', min: -90, max: 90 }}
-                      helperText="Range: -90 to 90 (Read-only)"
-                      sx={{
-                        '& .MuiInputBase-input': {
-                          cursor: 'default',
-                          backgroundColor: theme.palette.action.disabledBackground
-                        }
-                      }}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label="Longitude"
-                      type="number"
-                      value={formData.location.longitude}
-                      InputProps={{
-                        readOnly: true,
-                      }}
-                      inputProps={{ step: '0.0001', min: -180, max: 180 }}
-                      helperText="Range: -180 to 180 (Read-only)"
-                      sx={{
-                        '& .MuiInputBase-input': {
-                          cursor: 'default',
-                          backgroundColor: theme.palette.action.disabledBackground
-                        }
-                      }}
-                    />
-                  </Grid>
-
-                  {/* Manual Override Option */}
-                  <Grid item xs={12}>
-                    <Typography 
-                      variant="caption" 
-                      sx={{ color: theme.palette.text.secondary, display: 'block', mt: 1 }}
-                    >
-                      💡 Tip: Coordinates are auto-populated and read-only. To change them, update the City/Province and verify again.
-                    </Typography>
-                  </Grid>
-                </>
-              )}
             </Grid>
           </Box>
 
@@ -1272,19 +1335,26 @@ const AddVehicleBiddingDialog = ({ open, onClose, onSuccess }) => {
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, backgroundColor: theme.palette.action.hover }}>
-        <Button onClick={onClose} variant="outlined">
-          Cancel
-        </Button>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button onClick={onClose} disabled={loading}>Cancel</Button>
         <Button
-          variant="contained"
           onClick={handleSubmit}
-          disabled={loading}
-          startIcon={loading ? <CircularProgress size={20} /> : undefined}
+          variant="contained"
+          disabled={loading || !locationVerified}
+          startIcon={loading && <CircularProgress size={20} />}
         >
           {loading ? 'Adding...' : 'Add for Bidding'}
         </Button>
       </DialogActions>
+
+      {/* ✅ NEW: Location Picker Modal */}
+      <LocationPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={handleLocationConfirm}
+        initialLocation={[formData.location.latitude, formData.location.longitude]}
+        district={formData.location.district}
+      />
     </Dialog>
   );
 };

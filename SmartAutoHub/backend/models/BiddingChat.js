@@ -11,7 +11,6 @@ const biddingChatSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'BiddingVehicle',
       required: true,
-      index: true,
     },
     senderId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -32,7 +31,6 @@ const biddingChatSchema = new mongoose.Schema(
     timestamp: {
       type: Date,
       default: Date.now,
-      index: true,
     },
     // Reply (Quote) Fields
     replyToId: {

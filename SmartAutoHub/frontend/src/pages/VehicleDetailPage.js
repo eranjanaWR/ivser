@@ -45,6 +45,7 @@ import {
   Favorite,
   FavoriteBorder,
   AttachMoney,
+  Gavel,
 } from '@mui/icons-material';
 
 import { useAuth } from '../context/AuthContext';
@@ -239,6 +240,12 @@ const VehicleDetailPage = () => {
     );
   };
 
+  // ✅ ADD FOR BIDDING NAVIGATION
+  const handleAddForBidding = () => {
+    console.log('🚀 [DETAILS-PAGE] Navigating to bidding with vehicle:', vehicle.brand, vehicle._id);
+    navigate('/bidding', { state: { prefilledVehicle: vehicle } });
+  };
+
   if (loading) {
     return (
       <Box sx={{ py: 8, textAlign: 'center' }}>
@@ -263,11 +270,21 @@ const VehicleDetailPage = () => {
     );
   }
 
-  // Check if current user is the seller
-  const isOwner = user && vehicle.sellerId && (
-    String(typeof vehicle.sellerId === 'string' ? vehicle.sellerId : (vehicle.sellerId._id || vehicle.sellerId.id)) === 
-    String(user._id || user.id)
-  );
+  // ✅ USER REQUESTED DEBUG LOGS
+  console.log('--- DEBUG OWNER CHECK ---');
+  console.log('Current User Object:', user);
+  console.log('Vehicle Seller Data:', vehicle?.sellerId);
+  console.log('Logged-in User ID (._id):', user?._id);
+  console.log('Logged-in User ID (.id):', user?.id);
+  console.log('Vehicle Seller ID:', vehicle?.sellerId?._id || vehicle?.sellerId);
+
+  // ✅ ROBUST COMPARISON (Handling both ._id and .id)
+  const loggedInId = (user?._id || user?.id)?.toString();
+  const ownerId = (vehicle?.sellerId?._id || vehicle?.sellerId)?.toString();
+  const isOwner = !!(loggedInId && ownerId && loggedInId === ownerId);
+
+  console.log('Final Comparison:', { loggedInId, ownerId, isOwner });
+  console.log('------------------------------');
 
   return (
     <Box sx={{ py: 4, bgcolor: '#fafafa', minHeight: '80vh' }}>
@@ -509,6 +526,28 @@ const VehicleDetailPage = () => {
                 </Button>
               </Box>
             )}
+
+            {/* ✅ ADD FOR BIDDING - ONLY FOR OWNER */}
+            {isOwner && (
+              <Box sx={{ mt: 2 }}>
+                <Button 
+                  variant="contained" 
+                  fullWidth
+                  onClick={handleAddForBidding}
+                  startIcon={<Gavel />}
+                  sx={{ 
+                    bgcolor: '#ed6c02', 
+                    '&:hover': { bgcolor: '#e65100' }, 
+                    py: 1.5, 
+                    fontWeight: 'bold',
+                    color: '#ffffff',
+                    borderRadius: '8px'
+                  }}
+                >
+                  Add for Bidding
+                </Button>
+              </Box>
+            )}
           </Grid>
 
           {/* Vehicle Details */}
@@ -734,36 +773,36 @@ const VehicleDetailPage = () => {
                       Delete Vehicle
                     </Button>
                   </Box>
-    <Button
-      variant="contained"
-      fullWidth
-      size="large"
-      onClick={handleToggleSold}
-      sx={{
-        backgroundColor: '#000000',
-        color: '#ffffff',
-        fontWeight: 600,
-        '&:hover': { backgroundColor: '#9CA3AF' }
-      }}
-    >
-      {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
-    </Button>
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    size="large"
+                    onClick={handleToggleSold}
+                    sx={{
+                      backgroundColor: '#000000',
+                      color: '#ffffff',
+                      fontWeight: 600,
+                      '&:hover': { backgroundColor: '#9CA3AF' }
+                    }}
+                  >
+                    {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
+                  </Button>
 
-    {isOwner && (
-      <Button
-        variant="contained"
-        color="primary"
-        fullWidth
-        size="large"
-        startIcon={<Schedule />}
-        onClick={() => navigate('/seller-availability')}
-        sx={{ mt: 1, fontWeight: 600 }}
-      >
-        Manage Test Drive Availability
-      </Button>
-    )}
-  </Box>
-)}
+                  {isOwner && (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      size="large"
+                      startIcon={<Schedule />}
+                      onClick={() => navigate('/seller-availability')}
+                      sx={{ mt: 1, fontWeight: 600 }}
+                    >
+                      Manage Test Drive Availability
+                    </Button>
+                  )}
+                </Box>
+              )}
             </Paper>
           </Grid>
         </Grid>
@@ -792,7 +831,6 @@ const VehicleDetailPage = () => {
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               Request a test drive for {vehicle.brand} {vehicle.model}
             </Typography>
-            {/* Preferred Date Field with min date set to today */}
             <TextField
               fullWidth
               label="Preferred Date"
@@ -801,17 +839,10 @@ const VehicleDetailPage = () => {
               onChange={(e) => setTestDriveDate(e.target.value)}
               InputLabelProps={{ shrink: true }}
               inputProps={{
-                min: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+                min: new Date().toISOString().split('T')[0],
               }}
-              sx={{ 
-                mb: 2,
-                '& input[type="date"]': {
-                  fontSize: '1rem',
-                  padding: '8px 12px',
-                }
-              }}
+              sx={{ mb: 2 }}
             />
-            {/* Preferred Time Field */}
             <TextField
               fullWidth
               label="Preferred Time"
@@ -819,15 +850,8 @@ const VehicleDetailPage = () => {
               value={testDriveTime}
               onChange={(e) => setTestDriveTime(e.target.value)}
               InputLabelProps={{ shrink: true }}
-              sx={{ 
-                mb: 2,
-                '& input[type="time"]': {
-                  fontSize: '1rem',
-                  padding: '8px 12px',
-                }
-              }}
+              sx={{ mb: 2 }}
             />
-            {/* Message to Seller */}
             <TextField
               fullWidth
               label="Message to Seller (Optional)"

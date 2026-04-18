@@ -34,11 +34,11 @@ router.get('/:auctionId/combined', auctionController.getBiddingDetails);
 router.get('/:auctionId/chat-history', auctionController.getChatHistory);
 
 /**
- * GET /api/bidding/partner-status/:auctionId
- * Check if current user is a bidding partner for an auction
+ * GET /api/bidding/check-registration/:auctionId
+ * Check if current user is already a registered partner for an auction
  * Access: Private (Authenticated)
  */
-router.get('/partner-status/:auctionId', protect, validateObjectId('auctionId'), auctionController.checkPartnerStatus);
+router.get('/check-registration/:auctionId', protect, validateObjectId('auctionId'), auctionController.checkPartnerStatus);
 
 /**
  * POST /api/bidding/join-partner
@@ -46,5 +46,21 @@ router.get('/partner-status/:auctionId', protect, validateObjectId('auctionId'),
  * Access: Private (Authenticated)
  */
 router.post('/join-partner', protect, auctionController.joinAsPartner);
+
+/**
+ * SELLER CONTROLS: API routes for managing the live auction
+ * Access: Private (Seller only - verified in controller)
+ */
+router.put('/:auctionId/extend-time', protect, validateObjectId('auctionId'), auctionController.extendAuctionTime);
+router.put('/:auctionId/accept-bid', protect, validateObjectId('auctionId'), auctionController.acceptHighestBid);
+router.put('/:auctionId/cancel-auction', protect, validateObjectId('auctionId'), auctionController.cancelAuction);
+
+/**
+ * POST-AUCTION CONNECTION: Result and Private Deal Chat
+ * Access: Private (Seller or Winner Only - verified in controller)
+ */
+router.get('/result/:auctionId', protect, validateObjectId('auctionId'), auctionController.getAuctionResult);
+router.get('/result/:auctionId/private-chat', protect, validateObjectId('auctionId'), auctionController.getPrivateChatHistory);
+router.get('/deal-chat/:vehicleId', protect, validateObjectId('vehicleId'), auctionController.getDealChatHistory);
 
 module.exports = router;

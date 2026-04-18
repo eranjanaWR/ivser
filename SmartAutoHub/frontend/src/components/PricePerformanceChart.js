@@ -16,44 +16,48 @@ import {
   ReferenceDot,
   ReferenceLine,
   Label,
+  LabelList,
 } from 'recharts';
 import { Box, Typography, Paper, Grid } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import { TrendingUp, FiberNew } from '@mui/icons-material';
 
 /**
- * Format currency to LKR with proper handling - Fix for Y-axis labels
- * Handles large numbers gracefully without scientific notation
+ * Format currency to LKR with enhanced precision for chart labels
+ * Shows up to 2 decimals for millions to help differentiate close bids
  */
 const formatLKRAxis = (value) => {
   if (!value && value !== 0) return '0';
   
   const num = Math.abs(value);
   if (num >= 1000000) {
-    return (value / 1000000).toFixed(1) + 'M';
+    // Show up to 3 decimals for M to differentiate very close bids
+    return (value / 1000000).toLocaleString(undefined, { 
+      minimumFractionDigits: 1, 
+      maximumFractionDigits: 3 
+    }) + 'M';
   }
   if (num >= 1000) {
-    return (value / 1000).toFixed(0) + 'K';
+    // Show 1-2 decimals for K for granularity (e.g., 600.15K)
+    return (value / 1000).toLocaleString(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 2
+    }) + 'K';
   }
   return Math.round(value).toString();
 };
 
 /**
- * Format currency to LKR with proper handling
+ * Format currency to LKR with FULL precision for Tooltips and notifications
+ * Shows exact amount with commas and no rounding
  * @param {number} value - The value to format
  * @returns {string} - Formatted currency string
  */
 const formatLKR = (value) => {
   if (!value && value !== 0) return 'LKR 0';
   
-  const num = Math.abs(value);
-  if (num >= 1000000) {
-    return `LKR ${(value / 1000000).toFixed(1)}M`;
-  }
-  if (num >= 1000) {
-    return `LKR ${(value / 1000).toFixed(0)}K`;
-  }
-  return `LKR ${Math.round(value)}`;
+  // Use toLocaleString for full precision with comma separators (e.g., 9,019,250)
+  return `LKR ${Number(value).toLocaleString()}`;
 };
 
 /**
@@ -149,12 +153,7 @@ const CustomDot = ({ cx, cy, payload, isLatest, theme }) => {
   );
 };
 
-/**
- * Price Performance Chart Component
- * @param {Array} priceHistory - Array of bid data with price, timestamp, bidLabel, bidderName
- * @param {Object} highestBidder - Current highest bidder info
- */
-const PricePerformanceChart = ({ priceHistory = [], highestBidder = null }) => {
+const PricePerformanceChart = ({ priceHistory = [], highestBidder = null, startingPrice = 0, startTime = null }) => {
   const theme = useTheme();
   const [isNewBidReceived, setIsNewBidReceived] = useState(false);
   const [previousDataLength, setPreviousDataLength] = useState(0);
@@ -176,27 +175,53 @@ const PricePerformanceChart = ({ priceHistory = [], highestBidder = null }) => {
 
   // Prepare chart data with labels and formatting
   const chartData = useMemo(() => {
+    // Start with the base price node
+    const baseNode = {
+      price: Number(startingPrice) || 0,
+      timestamp: startTime || new Date().toISOString(),
+      bidLabel: 'Start',
+      bidderName: 'Starting Price',
+      formattedPrice: formatLKR(startingPrice),
+      formattedTime: 'Start',
+      isBase: true
+    };
+
     if (!priceHistory || priceHistory.length === 0) {
-      return [];
+      return [baseNode];
     }
 
-    return priceHistory.map((item, index) => ({
+    const bids = priceHistory.map((item, index) => ({
       ...item,
       index: index + 1,
       bidIndex: index + 1,
       bidLabel: item.bidLabel || `Bid ${index + 1}`,
-      price: item.price || 0,
+      price: Number(item.price) || 0,
       timestamp: item.timestamp || new Date().toISOString(),
       formattedPrice: formatLKR(item.price),
       formattedTime: formatAbsoluteTime(item.timestamp),
     }));
-  }, [priceHistory]);
+
+    return [baseNode, ...bids];
+  }, [priceHistory, startingPrice, startTime]);
 
   // Get latest bid for highlighting
-  const latestBidTime = chartData.length > 0 ? chartData[chartData.length - 1].formattedTime : null;
+  const latestBid = chartData.length > 1 ? chartData[chartData.length - 1] : null;
 
-  // Get latest bid for highlighting
-  const latestBid = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+  // Calculate dynamic ticks for granular Y-axis visibility
+  const dynamicTicks = useMemo(() => {
+    const start = Number(startingPrice);
+    const currentMax = latestBid ? latestBid.price : start;
+    
+    // Add a small buffer at the top (5%) for the maximum tick
+    const chartMax = Math.max(currentMax * 1.05, start + 1000); 
+    
+    // Calculate interval for 6 ticks
+    const range = chartMax - start;
+    const step = range / 5;
+    
+    // Generate exactly 6 ticks starting from startingPrice
+    return [0, 1, 2, 3, 4, 5].map(i => Math.round(start + (step * i)));
+  }, [startingPrice, latestBid]);
 
   if (chartData.length === 0) {
     // Return nothing - completely remove empty state box
@@ -282,10 +307,15 @@ const PricePerformanceChart = ({ priceHistory = [], highestBidder = null }) => {
               />
             </XAxis>
 
-            {/* Y-Axis: Price in LKR with dynamic scaling */}
+            {/* Y-Axis: Price in LKR - Anchored at Starting Price for clean baseline visibility */}
             <YAxis
-              domain={['dataMin', 'dataMax']}
-              allowDecimals={false}
+              scale="linear"
+              domain={[
+                Number(startingPrice), 
+                (dataMax) => Math.max(dataMax * 1.05, Number(startingPrice) + 1000) 
+              ]}
+              ticks={dynamicTicks}
+              allowDataOverflow={true}
               tickFormatter={formatLKRAxis}
               label={{
                 value: 'Price (LKR)',
@@ -302,7 +332,7 @@ const PricePerformanceChart = ({ priceHistory = [], highestBidder = null }) => {
               tick={{ fill: theme.palette.text.primary, fontSize: 10, opacity: 0.85 }}
               axisLine={{ stroke: theme.palette.divider, opacity: 0.6, strokeWidth: 1 }}
               tickLine={{ stroke: theme.palette.divider, opacity: 0.6 }}
-              width={45}
+              width={55} // Increased width for larger labels
             />
 
             {/* Tooltip with bidder name */}
@@ -317,7 +347,7 @@ const PricePerformanceChart = ({ priceHistory = [], highestBidder = null }) => {
               wrapperStyle={{ outline: 'none' }}
             />
 
-            {/* Area Chart with Linear segments */}
+            {/* Area Chart with Linear segments and Direct Data Labels */}
             <Area
               type="linear"
               dataKey="price"
@@ -328,12 +358,26 @@ const PricePerformanceChart = ({ priceHistory = [], highestBidder = null }) => {
               activeDot={<CustomDot theme={theme} />}
               isAnimationActive={true}
               animationDuration={500}
-            />
+            >
+              {/* Direct Price Labels above each dot */}
+              <LabelList 
+                dataKey="price" 
+                position="top" 
+                formatter={formatLKRAxis}
+                offset={15}
+                style={{ 
+                  fill: theme.palette.primary.main, 
+                  fontSize: 11, 
+                  fontWeight: 700,
+                  pointerEvents: 'none'
+                }} 
+              />
+            </Area>
 
             {/* Vertical Reference Line at Latest Bid */}
-            {latestBidTime && (
+            {latestBid && !latestBid.isBase && (
               <ReferenceLine
-                x={latestBidTime}
+                x={latestBid.formattedTime}
                 stroke={theme.palette.error.main}
                 strokeDasharray="5 5"
                 opacity={0.4}

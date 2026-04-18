@@ -7,6 +7,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // Context
 import { AuthProvider } from './context/AuthContext';
@@ -29,6 +31,7 @@ import VehiclesPage from './pages/VehiclesPage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
 import AddVehiclePage from './pages/AddVehiclePage';
 import MyVehiclesPage from './pages/MyVehiclesPage';
+import AuctionResultPage from './pages/AuctionResultPage';
 import WishlistPage from './pages/WishlistPage';
 
 // Pages - Features from Main Branch (Financials & Comparison)
@@ -42,8 +45,6 @@ import TestDrivesPage from './pages/TestDrivesPage';
 import BookTestDrivePage from './pages/BookTestDrivePage';
 import SellerAvailability from './pages/SellerAvailability';
 import BiddingPage from './pages/BiddingPage';
-import MyAuctionsPage from './pages/MyAuctionsPage';
-import WonBidsPage from './pages/WonBidsPage';
 import AuctionVehicleDetailsPage from './pages/AuctionVehicleDetailsPage';
 import LiveAuctionDashboard from './pages/LiveAuctionDashboard';
 
@@ -90,6 +91,18 @@ function App() {
       <CssBaseline />
       <AuthProvider>
         <Router>
+          <ToastContainer 
+            position="top-center"
+            autoClose={5000}
+            hideProgressBar={false}
+            newestOnTop={false}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="colored"
+          />
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
             <Navbar />
             <main style={{ flex: 1, paddingTop: '80px' }}>
@@ -133,10 +146,9 @@ function App() {
 
                 {/* Bidding Protected Routes */}
                 <Route path="/bidding" element={<PrivateRoute><BiddingPage /></PrivateRoute>} />
-                <Route path="/my-auctions" element={<PrivateRoute><MyAuctionsPage /></PrivateRoute>} />
-                <Route path="/won-bids" element={<PrivateRoute><WonBidsPage /></PrivateRoute>} />
                 <Route path="/bidding/:vehicleId/place-bid" element={<PrivateRoute><LiveAuctionDashboard /></PrivateRoute>} />
                 <Route path="/bidding/:vehicleId" element={<PrivateRoute><LiveAuctionDashboard /></PrivateRoute>} />
+                <Route path="/auction-result/:vehicleId" element={<PrivateRoute><AuctionResultPage /></PrivateRoute>} />
 
                 {/* Breakdown Services */}
                 <Route path="/breakdown" element={<PrivateRoute><BreakdownPage /></PrivateRoute>} />

@@ -197,46 +197,61 @@ const AuctionGroupChat = ({
   /**
    * Set up Socket.io listeners for chat and presence
    */
+  /**
+   * Set up Socket.io listeners for chat and presence
+   */
   useEffect(() => {
-    if (!socketRef?.current) {
+    const socket = socketRef?.current;
+    if (!socket) {
       console.warn('⚠️ AuctionGroupChat: Socket reference not available');
       return;
     }
 
     // Join auction room
     if (vehicleId) {
-      socketRef.current.emit('joinAuction', vehicleId);
-      console.log(`🔗 AuctionGroupChat: Emitted joinAuction for vehicleId: ${vehicleId}`);
+      socket.emit('joinAuction', vehicleId);
+      console.log(`🔗 Joined auction room: ${vehicleId}`);
     }
 
-    // Listen for connection
     const handleConnect = () => {
       setIsConnected(true);
-      console.log('✅ AuctionGroupChat: Connected to socket');
-      
-      // Re-join room on reconnection
-      if (vehicleId) {
-        socketRef.current.emit('joinAuction', vehicleId);
-        console.log(`🔗 AuctionGroupChat: Re-joined auction room after reconnect for vehicleId: ${vehicleId}`);
-      }
+      if (vehicleId) socket.emit('joinAuction', vehicleId);
     };
 
-    // Listen for incoming chat messages - use correct event name 'receiveChatMessage'
-    const handleReceiveChatMessage = (messageData) => {
-      console.log('📨 AuctionGroupChat: Received chat message:', messageData);
-      console.log('   [DEBUG] Has replyToId?', !!messageData.replyToId);
-      console.log('   [DEBUG] Has replyToText?', !!messageData.replyToText);
-      if (messageData.replyToText) console.log('   [DEBUG] replyToText value:', messageData.replyToText);
-      
-      if (!messageData) {
-        console.warn('⚠️ AuctionGroupChat: Received empty messageData');
-        return;
-      }
+    const handleDisconnect = () => setIsConnected(false);
 
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: messageData._id || messageData.id || `msg-${Date.now()}-${Math.random()}`,
+    // ✅ GUARANTEED DEDUPLICATION LOGIC
+    const handleReceiveChatMessage = (messageData) => {
+      if (!messageData) return;
+
+      setChatMessages((prev) => {
+        // 1. Check for duplicates using multiple identifiers
+        const isDuplicate = prev.some((m) => {
+          // Check by Database ID
+          if (messageData._id && (m._id === messageData._id || m.id === messageData._id)) return true;
+          // Check by Client-side unique ID (Optimistic match)
+          if (messageData.clientMessageId && (m.clientMessageId === messageData.clientMessageId || m.id === messageData.clientMessageId)) return true;
+          return false;
+        });
+
+        if (isDuplicate) {
+          console.log('🚫 duplicate message blocked:', messageData._id || messageData.clientMessageId);
+          // If it's a duplicate but we don't have the real ID yet, update it
+          if (messageData._id) {
+            return prev.map(m => 
+              (m.clientMessageId === messageData.clientMessageId || m.id === messageData.clientMessageId) && !m._id
+                ? { ...m, _id: messageData._id, id: messageData._id }
+                : m
+            );
+          }
+          return prev;
+        }
+
+        // 2. Add as new message if not found
+        const newMessage = {
+          id: messageData._id || messageData.id || `msg-${Date.now()}`,
+          _id: messageData._id,
+          clientMessageId: messageData.clientMessageId,
           senderId: messageData.senderId,
           senderName: messageData.senderName,
           message: messageData.message,
@@ -244,94 +259,78 @@ const AuctionGroupChat = ({
           replyToId: messageData.replyToId || null,
           replyToText: messageData.replyToText || null,
           replyToSender: messageData.replyToSender || null,
-        },
-      ]);
-      console.log('✅ AuctionGroupChat: Message added to chatMessages');
+        };
+
+        return [...prev, newMessage];
+      });
+
       scrollToBottom();
     };
 
-    // Listen for active users count
-    const handleActiveUsers = (count) => {
-      console.log(`👥 AuctionGroupChat: Active users count: ${count}`);
-      setActiveUsers(count);
-    };
+    const handleActiveUsers = (count) => setActiveUsers(count);
 
-    // Listen for disconnection
-    const handleDisconnect = () => {
-      setIsConnected(false);
-      console.log('❌ AuctionGroupChat: Disconnected from socket');
-    };
+    // Register listeners
+    socket.on('connect', handleConnect);
+    socket.on('receive_chat_message', handleReceiveChatMessage);
+    socket.on('activeUsers', handleActiveUsers);
+    socket.on('disconnect', handleDisconnect);
 
-    // Listen for connection errors
-    const handleConnectError = (error) => {
-      console.error('❌ AuctionGroupChat: Socket connection error:', error);
-      setIsConnected(false);
-    };
-
-    socketRef.current.on('connect', handleConnect);
-    socketRef.current.on('receive_chat_message', handleReceiveChatMessage);
-    socketRef.current.on('activeUsers', handleActiveUsers);
-    socketRef.current.on('disconnect', handleDisconnect);
-    socketRef.current.on('connect_error', handleConnectError);
-
+    // ✅ PROPER CLEANUP
     return () => {
-      if (socketRef?.current) {
-        socketRef.current.off('connect', handleConnect);
-        socketRef.current.off('receive_chat_message', handleReceiveChatMessage);
-        socketRef.current.off('activeUsers', handleActiveUsers);
-        socketRef.current.off('disconnect', handleDisconnect);
-        socketRef.current.off('connect_error', handleConnectError);
-      }
+      socket.off('connect', handleConnect);
+      socket.off('receive_chat_message', handleReceiveChatMessage);
+      socket.off('activeUsers', handleActiveUsers);
+      socket.off('disconnect', handleDisconnect);
     };
   }, [socketRef, vehicleId]);
 
   /**
-   * Handle sending a message
+   * Handle sending a message with Optimistic Update
    */
   const sendMessage = () => {
-    if (msg.trim() && socketRef?.current) {
-      const messageData = {
-        auctionId: vehicleId,
-        senderId: currentUserId, // Include userId for proper attribution
+    const socket = socketRef?.current;
+    if (!msg.trim() || !socket) return;
+
+    // Generate a unique client ID for this message
+    const clientMessageId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const messageData = {
+      clientMessageId,
+      auctionId: vehicleId,
+      senderId: currentUserId,
+      senderName: currentUserName,
+      message: msg.trim(),
+      timestamp: new Date().toISOString(),
+      replyingTo: replyingTo ? {
+        id: replyingTo.id,
+        text: replyingTo.text,
+        sender: replyingTo.sender,
+      } : null,
+    };
+
+    // 1. Add to local state immediately (Optimistic UI)
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: clientMessageId,
+        clientMessageId,
+        senderId: currentUserId,
         senderName: currentUserName,
-        message: msg,
-        timestamp: new Date().toISOString(),
-        // Include full reply object if replying to a message
-        replyingTo: replyingTo ? {
-          id: replyingTo.id,
-          text: replyingTo.text,
-          sender: replyingTo.sender,
-        } : null,
-      };
-      console.log('📤 AuctionGroupChat: Emitting send_chat_message:', messageData);
-      if (messageData.replyingTo) {
-        console.log('   ↩️ Sending reply to:', messageData.replyingTo);
-      }
-      
-      // Emit to backend
-      socketRef.current.emit('send_chat_message', messageData);
-      
-      // Add to local state immediately for optimistic UI
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-${Math.random()}`,
-          senderId: currentUserId,
-          senderName: currentUserName,
-          message: msg.trim(),
-          timestamp: messageData.timestamp,
-          replyToId: replyingTo?.id || null,
-          replyToText: replyingTo?.text || null,
-          replyToSender: replyingTo?.sender || null,
-          _DEBUG_replyingToObj: replyingTo, // Debug: log the full object
-        },
-      ]);
-      
-      console.log('✅ AuctionGroupChat: Message added to local state and emitted to backend');
-      setMsg(''); // Clear input after sending
-      setReplyingTo(null); // Clear reply after sending
-      scrollToBottom();
-    }
+        message: msg.trim(),
+        timestamp: messageData.timestamp,
+        replyToId: replyingTo?.id || null,
+        replyToText: replyingTo?.text || null,
+        replyToSender: replyingTo?.sender || null,
+      },
+    ]);
+
+    // 2. Emit to server
+    socket.emit('send_chat_message', messageData);
+    
+    // 3. Reset input UI
+    setMsg('');
+    setReplyingTo(null);
+    scrollToBottom();
   };
 
   /**

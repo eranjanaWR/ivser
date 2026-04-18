@@ -20,19 +20,22 @@ import {
 } from '@mui/icons-material';
 
 /**
- * Format currency to LKR
+ * Format currency to LKR with full precision and commas
  */
 const formatLKR = (value) => {
   if (!value && value !== 0) return 'LKR 0';
-  
+  return `LKR ${Number(value).toLocaleString()}`;
+};
+
+/**
+ * Format currency with abbreviations for small badges
+ */
+const formatShortLKR = (value) => {
+  if (!value && value !== 0) return '0';
   const num = Math.abs(value);
-  if (num >= 1000000) {
-    return `LKR ${(value / 1000000).toFixed(2)}M`;
-  }
-  if (num >= 1000) {
-    return `LKR ${(value / 1000).toFixed(1)}K`;
-  }
-  return `LKR ${Math.round(value)}`;
+  if (num >= 1000000) return `${(value / 1000000).toFixed(2)}M`;
+  if (num >= 1000) return `${(value / 1000).toFixed(1)}K`;
+  return Math.round(value).toString();
 };
 
 /**
@@ -46,7 +49,7 @@ const getInitials = (firstName, lastName) => {
 
 /**
  * Current Leading Bidder Component
- * @param {Object} highestBidder - Current highest bidder info { _id, firstName, lastName, bidAmount }
+ * @param {Object} highestBidder - Current highest bidder info
  * @param {Array} bidHistory - Array of all bids for the auction
  */
 const CurrentLeadingBidder = ({ highestBidder = null, bidHistory = [] }) => {
@@ -54,40 +57,51 @@ const CurrentLeadingBidder = ({ highestBidder = null, bidHistory = [] }) => {
 
   /**
    * Calculate statistics for the current leading bidder
+   * REWRITTEN: Strict filtering based ONLY on the identified leader
    */
   const bidderStats = useMemo(() => {
-    if (!highestBidder || !bidHistory || bidHistory.length === 0) {
+    if (!bidHistory || bidHistory.length === 0) {
       return null;
     }
 
-    // Filter all bids from this specific bidder
-    const bidderBids = bidHistory.filter(
-      (bid) => bid.bidderId === highestBidder._id || 
-               bid.firstName === highestBidder.firstName
-    );
+    // 1. Identify the absolute highest bid to find the true leader
+    const sortedAllBids = [...bidHistory].sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    const leadingBid = sortedAllBids[0];
+    const leadingUserId = leadingBid.bidderId?.toString();
+    const leadingUserName = leadingBid.firstName; // Fallback if ID is missing
 
-    if (bidderBids.length === 0) {
+    // 2. Filter specifically for the Leader's bids ONLY
+    const leadingUserBids = bidHistory.filter((bid) => {
+      const bidUserId = bid.bidderId?.toString();
+      if (leadingUserId && bidUserId) {
+        return bidUserId === leadingUserId;
+      }
+      // Fallback to name ONLY if IDs are unavailable
+      return bid.firstName === leadingUserName;
+    });
+
+    if (leadingUserBids.length === 0) {
       return null;
     }
 
-    // Sort by bid amount (highest first)
-    const sortedBids = [...bidderBids].sort((a, b) => b.amount - a.amount);
+    // 3. Derive Stats from the Filtered Array ONLY
+    const sortedLeaderBids = [...leadingUserBids].sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    const winningBidAmount = sortedLeaderBids[0].amount || 0;
+    const minBidAmount = Math.min(...leadingUserBids.map(b => b.amount || 0));
 
-    // Current highest bid is the first one
-    const currentHighestBid = sortedBids[0];
-
-    // Previous bids (all except current highest)
-    const previousBids = sortedBids.slice(1).map((bid) => ({
+    // Previous bids (all except the current winning bid)
+    const previousBids = sortedLeaderBids.slice(1).map((bid) => ({
       amount: bid.amount,
-      formatted: formatLKR(bid.amount),
+      formatted: `LKR ${formatShortLKR(bid.amount)}`,
     }));
 
     return {
-      totalBids: bidderBids.length,
-      currentBid: currentHighestBid.amount,
+      totalBids: leadingUserBids.length,
+      currentBid: winningBidAmount,
+      minBid: minBidAmount,
       previousBids,
     };
-  }, [highestBidder, bidHistory]);
+  }, [bidHistory]);
 
   // Empty state
   if (!highestBidder || !bidderStats) {
@@ -353,17 +367,7 @@ const CurrentLeadingBidder = ({ highestBidder = null, bidHistory = [] }) => {
                   wordBreak: 'break-word',
                 }}
               >
-                {formatLKR(
-                  Math.min(
-                    ...bidHistory
-                      .filter(
-                        (bid) =>
-                          bid.bidderId === highestBidder._id ||
-                          bid.firstName === highestBidder.firstName
-                      )
-                      .map((b) => b.amount)
-                  )
-                )}
+                {formatLKR(bidderStats.minBid)}
               </Typography>
             </Box>
           </Grid>

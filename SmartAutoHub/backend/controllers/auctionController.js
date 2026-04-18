@@ -4,10 +4,37 @@
  */
 
 const AuctionVehicle = require('../models/AuctionVehicle');
+const User = require('../models/User');
 const BiddingHistory = require('../models/BiddingHistory');
 const BiddingChat = require('../models/BiddingChat');
+const DealMessage = require('../models/DealMessage'); // ✅ NEW: Private Chat Model
 const BiddingPartner = require('../models/BiddingPartner');
+const axios = require('axios'); // For Geocoding API calls
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
+
+/**
+ * Helper: Geocode city name to Lat/Lng using Nominatim
+ */
+const geocodeCity = async (city, province) => {
+  try {
+    const query = `${city}, ${province}, Sri Lanka`;
+    const response = await axios.get(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
+      { headers: { 'User-Agent': 'SmartAutoHub/1.0' } }
+    );
+    
+    if (response.data && response.data.length > 0) {
+      return {
+        lat: parseFloat(response.data[0].lat),
+        lng: parseFloat(response.data[0].lon)
+      };
+    }
+    return null;
+  } catch (error) {
+    console.warn('⚠️ Geocoding failed:', error.message);
+    return null;
+  }
+};
 
 /**
  * @desc    Create a new auction vehicle listing
@@ -17,10 +44,23 @@ const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const createAuctionVehicle = async (req, res) => {
   try {
     const {
-      brand, model, year, mileage, fuelType, transmission,
+      brand, model, year, mileage, vin, fuelType, transmission,
       bodyType, color, engineCapacity, doors, seats, condition,
-      description, features, location, startingPrice, auctionStartDate, auctionEndDate
+      description, features, location, startingPrice, auctionStartDate, auctionEndDate,
+      existingImages, originalVehicleId
     } = req.body;
+
+    // ✅ BACKEND SECURITY: Verify ownership if copying from an existing vehicle
+    if (originalVehicleId) {
+      const Vehicle = require('../models/Vehicle');
+      const originalVehicle = await Vehicle.findById(originalVehicleId);
+      if (originalVehicle && originalVehicle.sellerId.toString() !== req.user._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Security Alert: You are not authorized to list this vehicle for bidding as you are not the owner.'
+        });
+      }
+    }
 
     // Validate required fields
     if (!brand || !model || !year || !mileage || !startingPrice || !auctionStartDate || !auctionEndDate) {
@@ -49,11 +89,21 @@ const createAuctionVehicle = async (req, res) => {
       });
     }
 
-    // Check if images are uploaded
-    if (!req.files || req.files.length === 0) {
+    // Check if images are uploaded or provided via existing list
+    let parsedExistingImages = [];
+    if (existingImages) {
+      try {
+        parsedExistingImages = typeof existingImages === 'string' ? JSON.parse(existingImages) : existingImages;
+      } catch (e) {
+        parsedExistingImages = [];
+      }
+    }
+
+    const hasNewFiles = req.files && req.files.length > 0;
+    if (!hasNewFiles && parsedExistingImages.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'At least one image is required'
+        message: 'At least one image is required (either new upload or existing URL)'
       });
     }
 
@@ -85,6 +135,7 @@ const createAuctionVehicle = async (req, res) => {
       model: model.trim(),
       year: parseInt(year),
       mileage: parseInt(mileage),
+      vin: vin?.trim(),
       fuelType: fuelType?.toLowerCase(),
       transmission: transmission?.toLowerCase(),
       bodyType: bodyType?.toLowerCase(),
@@ -95,7 +146,10 @@ const createAuctionVehicle = async (req, res) => {
       condition: condition?.toLowerCase(),
       description: description?.trim(),
       features: parsedFeatures,
-      images: req.files.map(file => `/uploads/vehicles/${file.filename}`),
+      images: [
+        ...parsedExistingImages,
+        ...(req.files ? req.files.map(file => `/uploads/vehicles/${file.filename}`) : [])
+      ],
       location: parsedLocation,
       startingPrice: parseFloat(startingPrice),
       auctionStartDate: startDate,
@@ -122,6 +176,15 @@ const createAuctionVehicle = async (req, res) => {
   } catch (error) {
     console.error('Create auction vehicle error:', error);
     
+    // Handle duplicate key error (MongoDB error code 11000)
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({
+        success: false,
+        message: `A vehicle with this ${field} is already listed for bidding. Duplicate ${field} is not allowed.`
+      });
+    }
+
     // Handle validation errors
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(err => err.message);
@@ -293,8 +356,9 @@ const getAuctionVehicles = async (req, res) => {
 const getAuctionVehicleById = async (req, res) => {
   try {
     const vehicle = await AuctionVehicle.findById(req.params.id)
-      .populate('sellerId', 'firstName lastName email phone profileImage')
-      .populate('highestBidder', 'firstName lastName')
+      .populate('sellerId', 'firstName lastName email phoneNumber phone profileImage')
+      .populate('highestBidder', 'firstName lastName email phoneNumber phone')
+      .populate('winnerId', 'firstName lastName email phoneNumber phone')
       .populate('bids.bidderId', 'firstName lastName');
 
     if (!vehicle) {
@@ -562,6 +626,13 @@ const placeBid = async (req, res) => {
           _id: req.user._id,
           firstName: req.user.firstName,
           lastName: req.user.lastName,
+        },
+        location: {
+          lat: req.body.location?.latitude || null,
+          lng: req.body.location?.longitude || null,
+          city: req.body.location?.city || null,
+          district: req.body.location?.district || null,
+          province: req.body.location?.province || null,
         },
         timestamp: new Date(),
       };
@@ -832,9 +903,19 @@ const getBiddingDetails = async (req, res) => {
           message: msg.message,
           timestamp: msg.timestamp,
         })),
+        partners: await BiddingPartner.find({ auctionId, status: 'active' })
+          .populate('userId', 'firstName lastName')
+          .lean()
+          .then(partners => partners.map(p => ({
+            id: p.userId?._id,
+            name: `${p.userId?.firstName || 'User'} ${p.userId?.lastName || ''}`.trim(),
+            location: p.location,
+            joinedAt: p.consentDate
+          }))),
         totals: {
           totalBids: bidHistory.length,
           totalMessages: chatMessages.length,
+          totalPartners: await BiddingPartner.countDocuments({ auctionId, status: 'active' })
         },
       },
     });
@@ -975,13 +1056,21 @@ const joinAsPartner = async (req, res) => {
       });
     }
 
-    // Validate location object
-    const { latitude, longitude, city, province } = location;
-    if (!latitude || !longitude || !city || !province) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid location data. Required: latitude, longitude, city, province'
-      });
+    // Validate location object - Auto-geocode if coordinates missing
+    let { latitude, longitude, mainTown, province, district } = location;
+    
+    if (!latitude || !longitude) {
+      console.log(`🌍 Geocoding town for partner: ${mainTown}`);
+      const coords = await geocodeCity(mainTown, province);
+      if (coords) {
+        latitude = coords.lat;
+        longitude = coords.lng;
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Unable to verify coordinates for this city. Please provide a more specific location.'
+        });
+      }
     }
 
     // Validate auction exists
@@ -1005,8 +1094,9 @@ const joinAsPartner = async (req, res) => {
       partner.location = {
         latitude,
         longitude,
-        city,
-        province
+        mainTown,
+        province,
+        district
       };
       partner.status = 'active';
       partner.consentDate = new Date();
@@ -1022,14 +1112,37 @@ const joinAsPartner = async (req, res) => {
         location: {
           latitude,
           longitude,
-          city,
-          province
+          mainTown,
+          province,
+          district
         },
         status: 'active',
         consentDate: new Date()
       });
 
       console.log(`✅ New bidding partner created: ${userId} for auction ${auctionId}`);
+    }
+
+    // ✅ SOCKET BROADCAST: Notify all viewers of the new partner
+    const io = req.app.get('io');
+    if (io) {
+      const userPartner = await BiddingPartner.findById(partner._id).populate('userId', 'firstName lastName');
+      const broadcastData = {
+        id: userId,
+        name: `${userPartner.userId?.firstName || 'User'} ${userPartner.userId?.lastName || ''}`.trim(),
+        location: {
+          lat: latitude,
+          lng: longitude,
+          mainTown,
+          province,
+          district
+        },
+        timestamp: new Date().toISOString()
+      };
+      
+      const roomName = `auction_${auctionId}`;
+      io.to(roomName).emit('newPartnerJoined', broadcastData);
+      console.log(`📢 Broadcasted newPartnerJoined to ${roomName}`);
     }
 
     res.json({
@@ -1133,17 +1246,19 @@ const endAuctionNow = async (req, res) => {
  */
 const extendAuctionTime = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { auctionId } = req.params;
     const { minutes = 5 } = req.body;
     const userId = req.user._id;
 
-    const vehicle = await AuctionVehicle.findById(id);
+    const vehicle = await AuctionVehicle.findById(auctionId);
     if (!vehicle) {
       return res.status(404).json({
         success: false,
         message: 'Vehicle not found'
       });
     }
+
+    console.log(`⏱️ [EXTEND-TIME] Processing extension for auctionId: ${auctionId}`);
 
     // Verify ownership
     if (vehicle.sellerId.toString() !== userId.toString()) {
@@ -1154,15 +1269,29 @@ const extendAuctionTime = async (req, res) => {
     }
 
     // Extend end date
-    const newEndDate = new Date(vehicle.auctionEndDate.getTime() + minutes * 60000);
+    const extensionMs = minutes * 60000;
+    const newEndDate = new Date(vehicle.auctionEndDate.getTime() + extensionMs);
     vehicle.auctionEndDate = newEndDate;
     await vehicle.save();
 
-    console.log(`✅ [SELLER] Auction ${id} extended by ${minutes} minutes. New end date: ${newEndDate}`);
+    console.log(`✅ [SELLER] Auction ${auctionId} extended by ${minutes} minutes. New end date: ${newEndDate}`);
+
+    // BROADCAST: Notify all users via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      const roomName = `auction_${auctionId}`;
+      io.to(roomName).emit('auctionUpdated', {
+        vehicleId: auctionId,
+        auctionEndDate: newEndDate,
+        message: `Auction time extended by ${minutes} minutes`
+      });
+      console.log(`📢 [EMISSION] Broadcasted auctionUpdated to room: ${roomName}`);
+    }
 
     res.json({
       success: true,
       message: `Auction extended by ${minutes} minutes`,
+      endTime: vehicle.auctionEndDate,
       data: vehicle
     });
   } catch (error) {
@@ -1182,10 +1311,10 @@ const extendAuctionTime = async (req, res) => {
  */
 const acceptHighestBid = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { auctionId } = req.params;
     const userId = req.user._id;
 
-    const vehicle = await AuctionVehicle.findById(id).populate('highestBidder');
+    const vehicle = await AuctionVehicle.findById(auctionId).populate('highestBidder');
     if (!vehicle) {
       return res.status(404).json({
         success: false,
@@ -1208,12 +1337,30 @@ const acceptHighestBid = async (req, res) => {
       });
     }
 
-    // Mark auction as closed and accepted
-    vehicle.status = 'closed';
+    // Mark auction as completed and record winner
+    vehicle.status = 'completed';
+    vehicle.winnerId = vehicle.highestBidder?._id || vehicle.highestBidder;
     vehicle.auctionEndDate = new Date();
     await vehicle.save();
 
     console.log(`✅ [SELLER] Accepted highest bid from ${vehicle.highestBidder.firstName} for ${vehicle.currentBid || 0}`);
+
+    // BROADCAST: Notify all users via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      const roomName = `auction_${auctionId}`;
+      io.to(roomName).emit('auctionEnded', {
+        vehicleId: auctionId,
+        status: 'completed',
+        winner: {
+          _id: vehicle.highestBidder._id,
+          name: `${vehicle.highestBidder.firstName} ${vehicle.highestBidder.lastName}`
+        },
+        finalBid: vehicle.currentBid,
+        message: 'Auction ended: Highest bid accepted by seller'
+      });
+      console.log(`📢 [EMISSION] Broadcasted auctionEnded to room: ${roomName}`);
+    }
 
     res.json({
       success: true,
@@ -1237,10 +1384,10 @@ const acceptHighestBid = async (req, res) => {
  */
 const cancelAuction = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { auctionId } = req.params;
     const userId = req.user._id;
 
-    const vehicle = await AuctionVehicle.findById(id);
+    const vehicle = await AuctionVehicle.findById(auctionId);
     if (!vehicle) {
       return res.status(404).json({
         success: false,
@@ -1258,9 +1405,22 @@ const cancelAuction = async (req, res) => {
 
     // Mark auction as cancelled
     vehicle.status = 'cancelled';
+    vehicle.auctionEndDate = new Date(); // End now
     await vehicle.save();
 
-    console.log(`✅ [SELLER] Auction ${id} cancelled`);
+    console.log(`✅ [SELLER] Auction ${auctionId} cancelled`);
+
+    // BROADCAST: Notify all users via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      const roomName = `auction_${auctionId}`;
+      io.to(roomName).emit('auctionEnded', {
+        vehicleId: auctionId,
+        status: 'cancelled',
+        message: 'Auction cancelled by seller'
+      });
+      console.log(`📢 [EMISSION] Broadcasted auctionEnded to room: ${roomName}`);
+    }
 
     res.json({
       success: true,
@@ -1274,6 +1434,191 @@ const cancelAuction = async (req, res) => {
       message: 'Error cancelling auction',
       error: error.message
     });
+  }
+};
+
+/**
+ * GET /api/bidding/result/:auctionId
+ * Get auction results including winner and seller contact info
+ * ACCESS: Private (Seller or Winner Only)
+ */
+const getAuctionResult = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const userId = req.user._id.toString();
+
+    // Populate all three possible winner/seller fields
+    const vehicle = await AuctionVehicle.findById(auctionId)
+      .populate('sellerId',      'firstName lastName email phoneNumber phone')
+      .populate('highestBidder', 'firstName lastName email phoneNumber phone')
+      .populate('winnerId',      'firstName lastName email phoneNumber phone');
+
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Auction not found' });
+    }
+
+    // --- Safe ID extraction (handles both populated objects and raw ObjectIds) ---
+    const sellerIdStr = (vehicle.sellerId?._id || vehicle.sellerId)?.toString();
+
+    // Winner can be stored in winnerId OR highestBidder (timer-expired auctions)
+    const winnerIdStr =
+      (vehicle.winnerId?._id   || vehicle.winnerId)?.toString()      ||
+      (vehicle.highestBidder?._id || vehicle.highestBidder)?.toString();
+
+    console.log('[RESULT-AUTH]', { userId, sellerIdStr, winnerIdStr });
+
+    const isSeller = sellerIdStr && userId === sellerIdStr;
+    const isWinner = winnerIdStr && userId === winnerIdStr;
+
+    if (!isSeller && !isWinner) {
+      console.warn('[RESULT-AUTH] Access denied for user:', userId);
+      return res.status(403).json({ success: false, message: 'Access denied: You are not part of this deal' });
+    }
+
+    // Determine the "other party" the viewer should contact
+    const otherParty = isSeller
+      ? (vehicle.winnerId   || vehicle.highestBidder)   // Seller sees winner
+      : vehicle.sellerId;                                // Winner sees seller
+
+    res.json({
+      success: true,
+      vehicle,
+      isSeller,
+      isWinner,
+      otherParty,
+    });
+  } catch (error) {
+    console.error('\u274c [GET-RESULT] Error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
+/**
+ * GET /api/bidding/result/:auctionId/private-chat
+ * Get private chat history between winner and seller
+ * ACCESS: Private (Seller or Winner Only)
+ */
+const getPrivateChatHistory = async (req, res) => {
+  try {
+    const { auctionId } = req.params;
+    const userId = req.user._id.toString();
+
+    const vehicle = await AuctionVehicle.findById(auctionId);
+    if (!vehicle) return res.status(404).json({ success: false, message: 'Auction not found' });
+
+    const sellerIdStr = vehicle.sellerId?.toString();
+    const winnerIdStr =
+      vehicle.winnerId?.toString() ||
+      vehicle.highestBidder?.toString();
+
+    const isSeller = sellerIdStr && userId === sellerIdStr;
+    const isWinner = winnerIdStr && userId === winnerIdStr;
+
+    if (!isSeller && !isWinner) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const messages = await DealMessage.find({ auctionId })
+      .sort({ createdAt: 1 })
+      .populate('senderId', 'firstName lastName');
+
+    res.json({ success: true, messages });
+  } catch (error) {
+    console.error('\u274c [GET-PRIVATE-CHAT] Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * GET /api/bidding/deal-chat/:vehicleId
+ * Get chat history for a private deal (using the DealMessage model)
+ * ACCESS: Private (Seller or Winner Only)
+ */
+const getDealChatHistory = async (req, res) => {
+  try {
+    const { vehicleId } = req.params;
+    const userId = req.user._id.toString();
+
+    console.log('Fetching history for:', vehicleId);
+
+    const vehicle = await AuctionVehicle.findById(vehicleId);
+    if (!vehicle) return res.status(404).json({ success: false, message: 'Auction not found' });
+
+    const sellerIdStr = vehicle.sellerId?.toString();
+    const winnerIdStr =
+      vehicle.winnerId?.toString() ||
+      vehicle.highestBidder?.toString();
+
+    const isSeller = sellerIdStr && userId === sellerIdStr;
+    const isWinner = winnerIdStr && userId === winnerIdStr;
+
+    if (!isSeller && !isWinner) {
+      return res.status(403).json({ success: false, message: 'Access denied to this private deal' });
+    }
+
+    const messages = await DealMessage.find({ auctionId: vehicleId })
+      .sort({ createdAt: 1 })
+      .populate('senderId', 'firstName lastName');
+
+    res.json({ success: true, messages });
+  } catch (error) {
+    console.error('\u274c [GET-DEAL-CHAT] Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * SOCKET CONTROLLER: Save a private deal message to the database
+ * Called directly by Socket.io, not through an Express route
+ */
+const saveDealMessage = async (messageData) => {
+  try {
+    const DealMessage = require('../models/DealMessage');
+    const { vehicleId, senderId, message } = messageData;
+
+    const newMessage = new DealMessage({
+      auctionId: vehicleId,
+      senderId: senderId,
+      message: message
+    });
+    
+    const savedMessage = await newMessage.save();
+    return savedMessage;
+  } catch (error) {
+    console.error('\u274c Error saving deal message:', error);
+    throw error;
+  }
+};
+/**
+ * GET /api/auction-vehicles/won-bids
+ * Get all auctions won by the current user
+ * ACCESS: Private
+ */
+const getMyWonBids = async (req, res) => {
+  try {
+    const userId = req.user._id.toString();
+
+    // Find vehicles that are closed/completed and where the user is the winner
+    // Winner could be stored in winnerId OR highestBidder
+    const vehicles = await AuctionVehicle.find({
+      status: { $in: ['closed', 'completed', 'Completed', 'Closed'] },
+      $or: [
+        { winnerId: userId },
+        { highestBidder: userId },
+        { highestBidderId: userId }
+      ]
+    })
+    .populate('sellerId', 'firstName lastName email phoneNumber profileImage')
+    .sort({ auctionEndDate: -1 });
+
+    res.json({
+      success: true,
+      count: vehicles.length,
+      data: vehicles
+    });
+  } catch (error) {
+    console.error('\u274c [GET-WON-BIDS] Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -1295,4 +1640,9 @@ module.exports = {
   extendAuctionTime,
   acceptHighestBid,
   cancelAuction,
+  getAuctionResult,
+  getPrivateChatHistory,
+  getDealChatHistory,
+  getMyWonBids,
+  saveDealMessage
 };

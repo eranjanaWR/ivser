@@ -36,6 +36,10 @@ const auctionVehicleSchema = new mongoose.Schema({
     required: [true, 'Mileage is required'],
     min: [0, 'Mileage cannot be negative']
   },
+  vin: {
+    type: String,
+    trim: true
+  },
 
   // Additional Vehicle Details
   fuelType: {
@@ -103,10 +107,16 @@ const auctionVehicleSchema = new mongoose.Schema({
   // Location
   location: {
     city: String,
+    province: String,
+    district: String,
+    coordinates: {
+      lat: Number,
+      lng: Number
+    },
     state: String,
     country: {
       type: String,
-      default: 'USA'
+      default: 'Sri Lanka'
     }
   },
 
@@ -130,6 +140,12 @@ const auctionVehicleSchema = new mongoose.Schema({
     default: null
   },
 
+  winnerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+
   auctionStartDate: {
     type: Date,
     default: Date.now
@@ -142,7 +158,7 @@ const auctionVehicleSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['upcoming', 'live', 'closed'],
+    enum: ['upcoming', 'live', 'closed', 'completed', 'cancelled'],
     default: 'upcoming'
   },
 

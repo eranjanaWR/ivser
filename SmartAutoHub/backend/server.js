@@ -73,6 +73,9 @@ const availabilityRoutes = require('./routes/availability');
 const auctionRoutes = require('./routes/auction');
 const biddingRoutes = require('./routes/bidding');
 const chatRoutes = require('./routes/chat');
+const BiddingChat = require('./models/BiddingChat');
+const DealMessage = require('./models/DealMessage'); // ✅ NEW: Private Chat Model
+const Breakdown = require('./models/Breakdown');
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -138,6 +141,7 @@ io.on('connection', (socket) => {
 
       const broadcastData = {
         _id: chatMessage._id,
+        clientMessageId: data.clientMessageId, // Added for frontend deduplication
         auctionId: data.auctionId,
         senderId: data.senderId,
         senderName: data.senderName,
@@ -173,6 +177,49 @@ io.on('connection', (socket) => {
   
   socket.on('updateRepairmanStatus', (data) => {
     io.to(`breakdown_${data.breakdownId}`).emit('repairmanStatusUpdate', { ...data, timestamp: new Date() });
+  });
+
+  // --- ✅ NEW: POST-AUCTION PRIVATE CHAT (Seller & Winner) ---
+  
+  // Join private deal room
+  socket.on('joinPrivateDeal', (vehicleId) => {
+    if (!vehicleId) return;
+    const roomName = `private_deal_${vehicleId}`;
+    socket.join(roomName);
+    console.log(`🔒 [SOCKET] User joined private deal room: ${roomName}`);
+  });
+
+  // Handle private message
+  socket.on('sendPrivateMessage', async (data) => {
+    const { vehicleId, senderId, senderName, message } = data;
+    const roomName = `private_deal_${vehicleId}`;
+
+    console.log(`💬 [PRIVATE] Message from ${senderName} in room ${roomName}`);
+
+    try {
+      const { saveDealMessage } = require('./controllers/auctionController');
+      
+      // PERSISTENCE: Save to database using controller
+      const savedMessage = await saveDealMessage(data);
+
+      // BROADCAST: Only to the private room, AFTER successful save
+      const broadcastData = {
+        ...data,
+        timestamp: savedMessage.createdAt || new Date().toISOString(),
+        _id: savedMessage._id // Send back the DB ID to help with duplicate prevention
+      };
+
+      io.to(roomName).emit('receive_private_message', broadcastData);
+    } catch (error) {
+      console.error(`❌ [PRIVATE] Message save error:`, error.message);
+      socket.emit('private_chat_error', { message: 'Failed to save private message' });
+    }
+  });
+
+  // Leave private room
+  socket.on('leavePrivateDeal', (vehicleId) => {
+    if (!vehicleId) return;
+    socket.leave(`private_deal_${vehicleId}`);
   });
   
   socket.on('disconnect', () => {

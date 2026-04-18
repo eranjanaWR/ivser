@@ -87,14 +87,14 @@ const MapUpdater = ({ bidderMarkers }) => {
 };
 
 /**
- * Create custom vehicle marker icon
+ * Create custom vehicle marker icon (Car Icon)
  */
 const createVehicleIcon = () => {
   return L.icon({
-    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyMiIgZmlsbD0iIzQyYTVmNSIgc3Ryb2tlPSIjMTk3NWQyIiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMjQgOEMxOS41OCA4IDE2IDExLjU4IDE2IDE2VjMyQzE2IDM2LjQyIDE5LjU4IDQwIDI0IDQwQzI4LjQyIDQwIDMyIDM2LjQyIDMyIDMyVjE2QzMyIDExLjU4IDI4LjQyIDggMjQgOFpNMjAgMjBDMTkuNDQ3IDIwIDE5IDIwLjQ0NyAxOSAyMUMyMSAyMS41NTMgMjEuNDQ3IDIyIDIyIDIySDE5QzE4LjQ0NyAyMiAxOCAyMS41NTMgMTggMjFDMTggMjAuNDQ3IDE4LjQ0NyAyMCAxOSAyMEgyMFpNMjMgMzBDMjMgMzEuMTA1IDIzLjg5NSAzMiAyNSAzMkMyNi4xMDUgMzIgMjcgMzEuMTA1IDI3IDMwQzI3IDI4Ljg5NSAyNi4xMDUgMjggMjUgMjhDMjMuODk1IDI4IDIzIDI4Ljg5NSAyMyAzMFpNMjkgMjBDMjkuNTUzIDIwIDMwIDIwLjQ0NyAzMCAyMUMzMCAyMS41NTMgMjkuNTUzIDIyIDI5IDIySzMyIDIyQzMyLjU1MyAyMiAzMyAyMS41NTMgMzMgMjFDMzMgMjAuNDQ3IDMyLjU1MyAyMCAzMiAyMEMyOSAyMCAyOSAyMCAyOSAyMFoiIGZpbGw9IndoaXRlIi8+PC9zdmc+',
-    iconSize: [40, 40],
-    iconAnchor: [20, 40],
-    popupAnchor: [0, -40],
+    iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyNCIgY3k9IjI0IiByPSIyMiIgZmlsbD0iIzQyYTVmNSIgc3Ryb2tlPSIjMTk3NWQyIiBzdHJva2Utd2lkdGg9IjIiLz48cGF0aCBkPSJNMzQgMjhDMzQuNTUzIDI4IDM1IDI3LjU1MyAzNSAyN1YyM0MzNSAyMi40NDcgMzQuNTUzIDIyIDM0IDIySDE0QzEzLjQ0NyAyMiAxMyAyMi40NDcgMTMgMjNWMjdDMTMgMjcuNTUzIDEzLjQ0NyAyOCAxNCAyOEgzNFoiIGZpbGw9IndoaXRlIi8+PHBhdGggZD0iTTE2IDE4QzE2IDE2Ljg5NSAxNi44OTUgMTYgMTggMTZIMzBDMzEuMTA1IDE2IDMyIDE2Ljg5NSAzMiAxOFYyMkgxNlYxOFoiIGZpbGw9IndoaXRlIi8+PGNpcmNsZSBjeD0iMTgiIGN5PSIzMCIgcj0iMyIgZmlsbD0iIzMzMyIvPjxjaXJjbGUgY3g9IjMwIiBjeT0iMzAiIHI9IjMiIGZpbGw9IiMzMzMiLz48L3N2Zz4=',
+    iconSize: [44, 44],
+    iconAnchor: [22, 44],
+    popupAnchor: [0, -44],
     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
     shadowSize: [41, 41],
     shadowAnchor: [12, 41],
@@ -102,23 +102,24 @@ const createVehicleIcon = () => {
 };
 
 /**
- * Create custom bidder marker icon
+ * Create custom bidder marker icon (User Icon)
  */
 const createBidderIcon = (color = '#ff9800') => {
   return L.icon({
     iconUrl: `data:image/svg+xml;base64,${btoa(
-      `<svg width="32" height="40" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M16 0C10.4772 0 6 4.47715 6 10C6 19 16 40 16 40S26 19 26 10C26 4.47715 21.5228 0 16 0Z" fill="${color}"/>
-        <circle cx="16" cy="10" r="4" fill="white"/>
+      `<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="18" cy="18" r="17" fill="white" stroke="${color}" stroke-width="2"/>
+        <path d="M18 17C20.2091 17 22 15.2091 22 13C22 10.7909 20.2091 9 18 9C15.7909 9 14 10.7909 14 13C14 15.2091 15.7909 17 18 17Z" fill="${color}"/>
+        <path d="M18 19C14.134 19 11 22.134 11 26V27H25V26C25 22.134 21.866 19 18 19Z" fill="${color}"/>
       </svg>`
     )}`,
-    iconSize: [32, 40],
-    iconAnchor: [16, 40],
-    popupAnchor: [0, -40],
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -18],
   });
 };
 
-const AuctionMap = ({ vehicle = null, socketRef = null }) => {
+const AuctionMap = ({ vehicle = null, socketRef = null, initialPartners = [] }) => {
   const theme = useTheme();
   const [bidderMarkers, setBidderMarkers] = useState([]);
   const socketListenerRef = useRef(false);
@@ -126,33 +127,45 @@ const AuctionMap = ({ vehicle = null, socketRef = null }) => {
 
   // Sri Lanka center coordinates
   const sriLankaCenter = [7.8731, 80.7718];
-  const defaultZoom = 8;
+  const defaultZoom = 14; // ✅ VILLAGE LEVEL: Increased zoom for precise neighborhood view
 
-  // Vehicle location from database - with validation
+  // ✅ FIXED: Correctly extract vehicle coordinates from vehicle.location.coordinates
   let vehicleCoords = null;
+  const rawCoords = vehicle?.location?.coordinates || vehicle?.coordinates || vehicle?.location;
+  
   if (
-    vehicle?.coordinates &&
-    typeof vehicle.coordinates.lat === 'number' &&
-    typeof vehicle.coordinates.lng === 'number' &&
-    !isNaN(vehicle.coordinates.lat) &&
-    !isNaN(vehicle.coordinates.lng)
+    rawCoords &&
+    (typeof rawCoords.lat === 'number' || typeof rawCoords.latitude === 'number' || rawCoords.lat || rawCoords.latitude) &&
+    (typeof rawCoords.lng === 'number' || typeof rawCoords.longitude === 'number' || rawCoords.lng || rawCoords.longitude)
   ) {
-    vehicleCoords = vehicle.coordinates;
-  } else if (
-    vehicle?.location &&
-    typeof vehicle.location.lat === 'number' &&
-    typeof vehicle.location.lng === 'number' &&
-    !isNaN(vehicle.location.lat) &&
-    !isNaN(vehicle.location.lng)
-  ) {
-    vehicleCoords = vehicle.location;
-  } else {
-    // Default to Colombo, Sri Lanka
     vehicleCoords = {
-      lat: 6.9271,
-      lng: 80.7744,
+      lat: parseFloat(rawCoords.lat || rawCoords.latitude),
+      lng: parseFloat(rawCoords.lng || rawCoords.longitude),
     };
+    console.log(`📍 [MAP] Vehicle coordinates detected: ${vehicleCoords.lat}, ${vehicleCoords.lng}`);
+  } else {
+    // Default fallback to center of map if no coordinates found
+    vehicleCoords = { lat: 6.9271, lng: 79.8612 }; 
   }
+
+  // ✅ NEW: Initialize map with existing partners from database
+  useEffect(() => {
+    if (initialPartners && initialPartners.length > 0) {
+      console.log(`🗺️ [MAP] Initializing with ${initialPartners.length} partners from database`);
+      const markers = initialPartners
+        .filter(p => p.location && p.location.latitude && p.location.longitude)
+        .map(p => ({
+          id: `partner_${p.id}`,
+          lat: parseFloat(p.location.latitude),
+          lng: parseFloat(p.location.longitude),
+          name: p.name,
+          city: p.location.city,
+          district: p.location.district,
+          type: 'partner'
+        }));
+      setBidderMarkers(markers);
+    }
+  }, [initialPartners]);
 
   /**
    * Set up Socket.io listener for bidder location updates
@@ -189,6 +202,8 @@ const AuctionMap = ({ vehicle = null, socketRef = null }) => {
           lat: parseFloat(bidData.location.lat),
           lng: parseFloat(bidData.location.lng),
           name: bidData.bidderName || 'Anonymous',
+          city: bidData.location.city,
+          district: bidData.location.district,
           amount: bidData.amount || 0,
         };
 
@@ -206,11 +221,34 @@ const AuctionMap = ({ vehicle = null, socketRef = null }) => {
       });
     };
 
+    const handleNewPartner = (data) => {
+      console.log('🌍 New partner joined:', data);
+      if (!data.location?.lat || !data.location?.lng) return;
+
+      const markerId = `partner_${data.id}`;
+      setBidderMarkers((prev) => {
+        const exists = prev.some(m => m.id === markerId);
+        if (exists) return prev;
+        
+        return [...prev, {
+          id: markerId,
+          lat: parseFloat(data.location.lat),
+          lng: parseFloat(data.location.lng),
+          name: data.name,
+          city: data.location.city,
+          district: data.location.district,
+          type: 'partner'
+        }];
+      });
+    };
+
     socketRef.current.on('bidPlaced', handleBidPlaced);
+    socketRef.current.on('newPartnerJoined', handleNewPartner);
 
     return () => {
       if (socketRef?.current) {
         socketRef.current.off('bidPlaced', handleBidPlaced);
+        socketRef.current.off('newPartnerJoined', handleNewPartner);
       }
     };
   }, [socketRef]);
@@ -232,7 +270,7 @@ const AuctionMap = ({ vehicle = null, socketRef = null }) => {
     >
       <MapContainer
         ref={mapRef}
-        center={sriLankaCenter}
+        center={[vehicleCoords.lat, vehicleCoords.lng]} // ✅ AUTO-CENTER: Initial center set to vehicle
         zoom={defaultZoom}
         style={{ width: '100%', height: '450px' }}
         zoomControl={true}
@@ -247,29 +285,28 @@ const AuctionMap = ({ vehicle = null, socketRef = null }) => {
         {/* Fix map sizing after mount */}
         <MapResizer />
 
-        {/* Vehicle Location Marker - Only render if valid coordinates */}
-        {vehicleCoords &&
-          typeof vehicleCoords.lat === 'number' &&
-          typeof vehicleCoords.lng === 'number' &&
-          !isNaN(vehicleCoords.lat) &&
-          !isNaN(vehicleCoords.lng) && (
-            <Marker
-              position={[vehicleCoords.lat, vehicleCoords.lng]}
-              icon={createVehicleIcon()}
-              zIndexOffset={1000}
-            >
-              <Popup>
-                <Box sx={{ p: 1 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-                    🚗 {vehicle?.year} {vehicle?.brand} {vehicle?.model}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
-                    Vehicle Location
-                  </Typography>
-                </Box>
-              </Popup>
-            </Marker>
-          )}
+        {/* ✅ FIXED: Vehicle Location Marker with Popup */}
+        {vehicleCoords && (
+          <Marker
+            position={[vehicleCoords.lat, vehicleCoords.lng]}
+            icon={createVehicleIcon()}
+            zIndexOffset={1000}
+          >
+            <Popup>
+              <Box sx={{ p: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                  Vehicle Location: {vehicle?.brand} {vehicle?.model}
+                </Typography>
+                <Typography variant="caption" sx={{ color: theme.palette.text.secondary, display: 'block' }}>
+                  📍 {vehicle?.location?.city}, {vehicle?.location?.district}
+                </Typography>
+                <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                  Year: {vehicle?.year} | Starting Price: {vehicle?.startingPrice}
+                </Typography>
+              </Box>
+            </Popup>
+          </Marker>
+        )}
 
         {/* Bidder Location Markers - Only render if coordinates are valid */}
         {bidderMarkers
@@ -295,6 +332,9 @@ const AuctionMap = ({ vehicle = null, socketRef = null }) => {
                 <Box sx={{ p: 1 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
                     {bidder.name}
+                  </Typography>
+                  <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: 'text.secondary' }}>
+                    📍 {bidder.city}, {bidder.district}
                   </Typography>
                   <Typography
                     variant="body2"

@@ -13,7 +13,6 @@ const biddingPartnerSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'User ID is required'],
-      index: true,
     },
 
     // Auction Reference
@@ -21,7 +20,6 @@ const biddingPartnerSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'AuctionVehicle',
       required: [true, 'Auction ID is required'],
-      index: true,
     },
 
     // Consent Information
@@ -46,14 +44,18 @@ const biddingPartnerSchema = new mongoose.Schema(
         type: Number,
         required: [true, 'Longitude is required'],
       },
-      city: {
+      mainTown: {
         type: String,
-        required: [true, 'City is required'],
+        required: [true, 'Main Town / City is required'],
         trim: true,
       },
       province: {
         type: String,
         required: [true, 'Province is required'],
+        trim: true,
+      },
+      district: {
+        type: String,
         trim: true,
       },
     },
