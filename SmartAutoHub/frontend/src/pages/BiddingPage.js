@@ -195,8 +195,6 @@ const BiddingPage = () => {
           <Grid item xs={12} sm={6} md={4} key={vehicle._id}>
             <BiddingCard 
               vehicle={vehicle} 
-              isLive={type === 'live'} 
-              isClosed={['completed', 'won-bids', 'my-auctions'].includes(type) && (vehicle.status === 'completed' || new Date(vehicle.auctionEndDate) <= new Date())} 
               user={user} 
               onCountdownComplete={handleCountdownComplete} 
             />

@@ -12,6 +12,7 @@ const Boost = require('../models/Boost');
 const ViewHistory = require('../models/ViewHistory');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const notificationController = require('./notificationController');
+const AuctionVehicle = require('../models/AuctionVehicle');
 const { sendTestDriveCancellationEmail, sendNotificationEmail } = require('../utils/email');
 /**
  * @desc    Get all vehicles with filters
@@ -217,7 +218,8 @@ const createVehicle = async (req, res) => {
     const {
       brand, model, year, mileage, price, fuelType, transmission,
       type, bodyType, color, engineCapacity, engineSize, doors, seats, condition,
-      description, features, vin, location, manufacturedCountry
+      description, features, vin, location, manufacturedCountry,
+      existingImages, originalAuctionId // ✅ Extract originalAuctionId
     } = req.body;
     
     // Parse features if it's a string or array
@@ -254,7 +256,8 @@ const createVehicle = async (req, res) => {
       features: parsedFeatures,
       images: [],
       vin: vin?.trim(),
-      manufacturedCountry: manufacturedCountry?.trim()
+      manufacturedCountry: manufacturedCountry?.trim(),
+      fromAuctionId: originalAuctionId || null // ✅ Save origin ID
     };
     
     // Parse location if it's a string (JSON)
@@ -274,55 +277,96 @@ const createVehicle = async (req, res) => {
     // Create vehicle first
     const vehicle = await Vehicle.create(vehicleData);
     
-    // Handle image uploads - save to database
+    // Handle image storage (New uploads + Existing images from auction transition)
+    const imageIds = [];
+
+    // 1. Process NEW uploads
     if (req.files && req.files.length > 0) {
-      const imageIds = [];
-      
       for (let i = 0; i < req.files.length; i++) {
         const file = req.files[i];
         try {
-          // Read file from disk
           const fileData = fs.readFileSync(file.path);
-          
-          // Convert to base64
           const base64Data = fileData.toString('base64');
-          
-          // Get MIME type
           const ext = path.extname(file.originalname).toLowerCase();
-          const mimeTypeMap = {
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp'
-          };
+          const mimeTypeMap = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
           const mimeType = mimeTypeMap[ext] || file.mimetype || 'image/jpeg';
           
-          // Create image document in database
           const imageDoc = await Image.create({
             vehicleId: vehicle._id,
             filename: file.originalname,
             imageData: base64Data,
             mimeType: mimeType,
             fileSize: file.size,
-            order: i
+            order: imageIds.length
           });
-          
           imageIds.push(imageDoc._id);
-          
-          // Delete file from disk after saving to database
           fs.unlinkSync(file.path);
         } catch (imageError) {
-          console.error('Error saving image to database:', imageError);
-          // Continue with other images even if one fails
+          console.error('Error saving new image:', imageError);
         }
       }
-      
-      // Update vehicle with image references
+    }
+
+    // 2. Process EXISTING images (Carried over from Auction record)
+    if (existingImages) {
+      let paths = [];
+      try {
+        paths = typeof existingImages === 'string' ? JSON.parse(existingImages) : existingImages;
+      } catch (e) {
+        paths = [];
+      }
+
+      for (let i = 0; i < paths.length; i++) {
+        const relativePath = paths[i]; // e.g., /uploads/vehicles/filename.jpg
+        // Paths from auction are relative to the project root or backend root
+        // We need to resolve to absolute path. Assuming relativePath starts with /
+        const absolutePath = path.join(process.cwd(), relativePath);
+
+        if (fs.existsSync(absolutePath)) {
+          try {
+            const fileData = fs.readFileSync(absolutePath);
+            const base64Data = fileData.toString('base64');
+            const filename = path.basename(relativePath);
+            const ext = path.extname(filename).toLowerCase();
+            const mimeTypeMap = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
+            const mimeType = mimeTypeMap[ext] || 'image/jpeg';
+
+            const imageDoc = await Image.create({
+              vehicleId: vehicle._id,
+              filename: filename,
+              imageData: base64Data,
+              mimeType: mimeType,
+              fileSize: fileData.length,
+              order: imageIds.length
+            });
+            imageIds.push(imageDoc._id);
+          } catch (copyError) {
+            console.error('Error copying auction image to marketplace:', copyError);
+          }
+        } else {
+          console.warn('⚠️ Auction image not found on disk:', absolutePath);
+        }
+      }
+    }
+
+    // Save image references if any were created
+    if (imageIds.length > 0) {
       vehicle.images = imageIds;
       await vehicle.save();
     }
     
+    // 3. ✅ Update Auction record if this was a settlement flow
+    if (originalAuctionId) {
+      try {
+        await AuctionVehicle.findByIdAndUpdate(originalAuctionId, { 
+          isSettledToMarketplace: true 
+        });
+        console.log(`✅ Auction ${originalAuctionId} marked as settled to marketplace.`);
+      } catch (auctionErr) {
+        console.error('Error updating auction settlement flag:', auctionErr);
+      }
+    }
+
     // Check and send notifications to subscribed users
     try {
       await notificationController.checkAndNotify(vehicle);
@@ -560,6 +604,18 @@ const deleteVehicle = async (req, res) => {
       });
     }
     
+    // ✅ SYNC LOGIC: If vehicle was settled from an auction, reset the auction's settlement flag
+    if (vehicle.fromAuctionId) {
+      try {
+        await AuctionVehicle.findByIdAndUpdate(vehicle.fromAuctionId, { 
+          isSettledToMarketplace: false 
+        });
+        console.log(`🔄 [SYNC] Reset settlement flag for Auction: ${vehicle.fromAuctionId}`);
+      } catch (auctionErr) {
+        console.warn('⚠️ [SYNC] Failed to reset auction settlement flag:', auctionErr.message);
+      }
+    }
+
     // Delete all associated images from database
     if (vehicle.images && vehicle.images.length > 0) {
       try {

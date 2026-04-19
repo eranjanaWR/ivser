@@ -79,6 +79,7 @@ const VehicleDetailPage = () => {
   // Admin actions
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [lockModalOpen, setLockModalOpen] = useState(false);
   const isAdmin = user && ['admin1', 'admin2'].includes(user.role);
 
   useEffect(() => {
@@ -242,6 +243,10 @@ const VehicleDetailPage = () => {
 
   // ✅ ADD FOR BIDDING NAVIGATION
   const handleAddForBidding = () => {
+    if (vehicle.fromAuctionId) {
+      setLockModalOpen(true);
+      return;
+    }
     console.log('🚀 [DETAILS-PAGE] Navigating to bidding with vehicle:', vehicle.brand, vehicle._id);
     navigate('/bidding', { state: { prefilledVehicle: vehicle } });
   };
@@ -536,15 +541,16 @@ const VehicleDetailPage = () => {
                   onClick={handleAddForBidding}
                   startIcon={<Gavel />}
                   sx={{ 
-                    bgcolor: '#ed6c02', 
-                    '&:hover': { bgcolor: '#e65100' }, 
+                    bgcolor: vehicle.fromAuctionId ? '#bdbdbd' : '#ed6c02', 
+                    '&:hover': { bgcolor: vehicle.fromAuctionId ? '#bdbdbd' : '#e65100' }, 
                     py: 1.5, 
                     fontWeight: 'bold',
                     color: '#ffffff',
-                    borderRadius: '8px'
+                    borderRadius: '8px',
+                    opacity: vehicle.fromAuctionId ? 0.8 : 1
                   }}
                 >
-                  Add for Bidding
+                  {vehicle.fromAuctionId ? 'Imported from Bidding (Locked)' : 'Add for Bidding'}
                 </Button>
               </Box>
             )}
@@ -801,8 +807,42 @@ const VehicleDetailPage = () => {
                       Manage Test Drive Availability
                     </Button>
                   )}
+                  )}
                 </Box>
               )}
+
+              {/* ========== ACTION RESTRICTED MODAL (For Imported Vehicles) ========== */}
+              <Dialog
+                open={lockModalOpen}
+                onClose={() => setLockModalOpen(false)}
+                PaperProps={{
+                  sx: { borderRadius: 2, p: 1 }
+                }}
+              >
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 700, color: '#d32f2f' }}>
+                  Action Restricted
+                </DialogTitle>
+                <DialogContent>
+                  <Typography color="text.secondary">
+                    You cannot add this vehicle to bidding again. 
+                    This vehicle was imported from a completed auction and already 
+                    exists in the Bidding section history.
+                  </Typography>
+                </DialogContent>
+                <DialogActions sx={{ p: 2, pt: 1 }}>
+                  <Button 
+                    onClick={() => setLockModalOpen(false)} 
+                    variant="contained"
+                    sx={{ 
+                      backgroundColor: '#1976d2', 
+                      fontWeight: 700,
+                      '&:hover': { backgroundColor: '#1565c0' }
+                    }}
+                  >
+                    Understood
+                  </Button>
+                </DialogActions>
+              </Dialog>
             </Paper>
           </Grid>
         </Grid>

@@ -144,6 +144,13 @@ const vehicleSchema = new mongoose.Schema({
     default: 'active'
   },
 
+  // Origin Tracking (for Auction to Marketplace settlement)
+  fromAuctionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AuctionVehicle',
+    default: null
+  },
+
   // Bidding Status
   isAvailableForBidding: {
     type: Boolean,

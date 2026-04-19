@@ -4,7 +4,7 @@
  * Fixes: Strict ID comparison, correct winner detection on closed auctions
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -14,19 +14,46 @@ import {
   Button,
   Chip,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   TrendingUp,
   Schedule,
   EmojiEvents as TrophyIcon,
   Gavel,
+  Handshake,
+  CheckCircle,
 } from '@mui/icons-material';
 import { useNavigate, Link } from 'react-router-dom';
 import CountdownTimer from './CountdownTimer';
 
-const BiddingCard = ({ vehicle, isLive = true, isClosed = false, user, onCountdownComplete }) => {
+const BiddingCard = ({ vehicle, user, onCountdownComplete }) => {
   const navigate = useNavigate();
   const finalId = vehicle._id || vehicle.id;
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [settleModalOpen, setSettleModalOpen] = useState(false);
+  const [alreadySettledModalOpen, setAlreadySettledModalOpen] = useState(false);
+
+  // ✅ REAL-TIME STATUS CALCULATION
+  // Re-calculates every 10 seconds to ensure tab synchronization
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const startDate = new Date(vehicle?.auctionStartDate);
+  const endDate = new Date(vehicle?.auctionEndDate);
+  const statusLower = vehicle?.status?.toLowerCase() || '';
+
+  // Determine dynamic status
+  const isUpcoming = currentTime < startDate;
+  const isLive = currentTime >= startDate && currentTime <= endDate && statusLower !== 'completed' && statusLower !== 'closed' && statusLower !== 'cancelled';
+  const auctionIsClosed = currentTime > endDate || ['closed', 'completed', 'cancelled'].includes(statusLower);
 
   // ========== STRICT ID COMPARISON WITH .toString() ==========
   // Ensures both MongoDB ObjectId and String IDs are compared correctly
@@ -50,13 +77,23 @@ const BiddingCard = ({ vehicle, isLive = true, isClosed = false, user, onCountdo
       (vehicleWinnerId     && currentUserId === vehicleWinnerId)
     )
   );
-  // Case-insensitive closed check to handle 'closed', 'Completed', 'cancelled' etc.
-  const statusLower = vehicle?.status?.toLowerCase() || '';
-  const auctionIsClosed = isClosed || ['closed', 'completed', 'cancelled'].includes(statusLower) || new Date(vehicle?.auctionEndDate) <= new Date();
 
   const handleContactClick = () => {
     navigate(`/auction-result/${finalId}`);
   };
+  const handleSettleConfirm = () => {
+    setSettleModalOpen(false);
+    navigate('/add-vehicle', { state: { prefilledData: vehicle } });
+  };
+
+  const handleSettleClick = () => {
+    if (vehicle.isSettledToMarketplace) {
+      setAlreadySettledModalOpen(true);
+    } else {
+      setSettleModalOpen(true);
+    }
+  };
+  // ========== PERMISSIONS LOGIC ==========
 
   return (
     <Card
@@ -182,7 +219,7 @@ const BiddingCard = ({ vehicle, isLive = true, isClosed = false, user, onCountdo
         )}
 
         {/* Countdown for Upcoming Vehicles */}
-        {!isLive && !auctionIsClosed && (
+        {isUpcoming && (
           <Box sx={{ mb: 2 }}>
             <CountdownTimer 
               targetDate={vehicle.auctionStartDate}
@@ -351,9 +388,105 @@ const BiddingCard = ({ vehicle, isLive = true, isClosed = false, user, onCountdo
             >
               View Details
             </Button>
+            {/* ✅ NEW: Settle Your Vehicle Button (Only for Seller on Closed Auctions) */}
+            {auctionIsClosed && isOwner && (
+              <Button
+                variant="contained"
+                fullWidth
+                size="small"
+                startIcon={<Handshake />}
+                onClick={handleSettleClick}
+                sx={{
+                  mt: 1,
+                  backgroundColor: vehicle.isSettledToMarketplace ? '#9575cd' : '#4a148c', // Dimmed if settled
+                  color: 'white',
+                  fontWeight: 700,
+                  textTransform: 'none',
+                  opacity: vehicle.isSettledToMarketplace ? 0.7 : 1,
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    backgroundColor: vehicle.isSettledToMarketplace ? '#7e57c2' : '#311b92',
+                  },
+                }}
+              >
+                {vehicle.isSettledToMarketplace ? 'Already Settled' : 'Settle Your Vehicle'}
+              </Button>
+            )}
           </>
         )}
       </CardContent>
+
+      {/* ========== SETTLEMENT CONFIRMATION MODAL ========== */}
+      <Dialog
+        open={settleModalOpen}
+        onClose={() => setSettleModalOpen(false)}
+        PaperProps={{
+          sx: { borderRadius: 2, p: 1 }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 700 }}>
+          <CheckCircle sx={{ color: '#4a148c' }} />
+          Settle and List in Marketplace
+        </DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            Are you sure you want to proceed? This will import your auction vehicle's details 
+            into the marketplace listing form. You can review and edit all details 
+            before final submission.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 1 }}>
+          <Button 
+            onClick={() => setSettleModalOpen(false)} 
+            sx={{ color: 'text.secondary', fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSettleConfirm} 
+            variant="contained"
+            sx={{ 
+              backgroundColor: '#4a148c', 
+              fontWeight: 700,
+              '&:hover': { backgroundColor: '#311b92' }
+            }}
+          >
+            Yes, Proceed
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ========== ALREADY SETTLED WARNING MODAL ========== */}
+      <Dialog
+        open={alreadySettledModalOpen}
+        onClose={() => setAlreadySettledModalOpen(false)}
+        PaperProps={{
+          sx: { borderRadius: 2, p: 1 }
+        }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5, fontWeight: 700, color: '#d32f2f' }}>
+          Already Listed
+        </DialogTitle>
+        <DialogContent>
+          <Typography color="text.secondary">
+            You have already added this vehicle to the marketplace. 
+            You cannot list the same auction vehicle more than once.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 1 }}>
+          <Button 
+            onClick={() => setAlreadySettledModalOpen(false)} 
+            variant="contained"
+            sx={{ 
+              backgroundColor: '#616161', 
+              fontWeight: 700,
+              '&:hover': { backgroundColor: '#424242' }
+            }}
+          >
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Card>
   );
 };

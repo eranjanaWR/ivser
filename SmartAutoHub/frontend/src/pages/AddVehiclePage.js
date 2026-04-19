@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -36,32 +36,43 @@ const colors = ['White', 'Black', 'Silver', 'Gray', 'Red', 'Blue', 'Green', 'Yel
 
 const AddVehiclePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, refreshUser } = useAuth();
   const fileInputRef = useRef(null);
+  const prefilledData = location.state?.prefilledData;
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [roleConfirmed, setRoleConfirmed] = useState(false);
-  const [images, setImages] = useState([]);
+  const [images, setImages] = useState(prefilledData?.images || []);
   const [imageFiles, setImageFiles] = useState([]);
+  const [existingImages, setExistingImages] = useState(prefilledData?.images || []);
   
   const [formData, setFormData] = useState({
-    brand: '',
-    model: '',
-    year: new Date().getFullYear(),
-    price: '',
-    vehicleType: '',
-    condition: '',
-    fuelType: '',
-    transmission: '',
-    mileage: '',
-    location: '',
-    color: '',
+    brand: prefilledData?.brand || '',
+    model: prefilledData?.model || '',
+    year: prefilledData?.year || new Date().getFullYear(),
+    price: prefilledData?.currentBid || prefilledData?.startingPrice || '',
+    vehicleType: prefilledData?.bodyType || '',
+    condition: prefilledData?.condition || '',
+    fuelType: prefilledData?.fuelType || '',
+    transmission: prefilledData?.transmission || '',
+    mileage: prefilledData?.mileage || '',
+    location: prefilledData?.location?.city || '',
+    color: prefilledData?.color || '',
     manufacturedCountry: '',
-    engineCapacity: '',
-    description: '',
-    features: '',
+    engineCapacity: prefilledData?.engineCapacity || '',
+    description: prefilledData?.description || '',
+    features: Array.isArray(prefilledData?.features) ? prefilledData.features.join(', ') : (prefilledData?.features || ''),
   });
+
+  // Show success alert if prefilled
+  useEffect(() => {
+    if (prefilledData) {
+      console.log('✅ Auto-filled from Auction:', prefilledData);
+      // Optional: Add a subtle notification or alert here
+    }
+  }, [prefilledData]);
 
   // Update user role to "buyer/seller" if user is a buyer visiting this page
   useEffect(() => {
@@ -134,7 +145,7 @@ const AddVehiclePage = () => {
       return;
     }
     
-    if (imageFiles.length === 0) {
+    if (imageFiles.length === 0 && existingImages.length === 0) {
       setError('Please upload at least one image');
       return;
     }
@@ -170,6 +181,16 @@ const AddVehiclePage = () => {
       imageFiles.forEach((file) => {
         submitData.append('images', file);
       });
+
+      // Append existing image paths if any (for auction transition)
+      if (existingImages.length > 0) {
+        submitData.append('existingImages', JSON.stringify(existingImages));
+      }
+
+      // ✅ Pass the original auction ID for settlement tracking
+      if (prefilledData?._id) {
+        submitData.append('originalAuctionId', prefilledData._id);
+      }
       
       const { data } = await api.post('/vehicles', submitData, {
         headers: { 'Content-Type': 'multipart/form-data' },

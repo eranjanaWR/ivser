@@ -162,6 +162,11 @@ const auctionVehicleSchema = new mongoose.Schema({
     default: 'upcoming'
   },
 
+  isSettledToMarketplace: {
+    type: Boolean,
+    default: false
+  },
+
   // Bidding History
   bids: [{
     bidderId: {

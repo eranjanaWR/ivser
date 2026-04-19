@@ -11,6 +11,7 @@ const DealMessage = require('../models/DealMessage'); // ✅ NEW: Private Chat M
 const BiddingPartner = require('../models/BiddingPartner');
 const axios = require('axios'); // For Geocoding API calls
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
+const Vehicle = require('../models/Vehicle'); // ✅ Added for sync checks
 
 /**
  * Helper: Geocode city name to Lat/Lng using Nominatim
@@ -261,14 +262,14 @@ const getAuctionVehicles = async (req, res) => {
       filter.status = 'upcoming';
       filter.auctionStartDate = { $gt: now };
     } else if (status === 'closed') {
-      // ✅ NEW: Only closed vehicles (past their end date)
-      filter.status = 'closed';
+      // ✅ UPDATED: Include both closed and completed for the finished tab
+      filter.status = { $in: ['closed', 'completed', 'cancelled'] };
     } else {
-      // ✅ FIXED: Return live, upcoming, AND closed vehicles if no status filter
+      // ✅ FIXED: Return live, upcoming, AND finished vehicles if no status filter
       filter.$or = [
         { status: 'live', auctionStartDate: { $lte: now }, auctionEndDate: { $gt: now } },
         { status: 'upcoming', auctionStartDate: { $gt: now } },
-        { status: 'closed' }
+        { status: { $in: ['closed', 'completed', 'cancelled'] } }
       ];
     }
 
@@ -420,6 +421,18 @@ const getSellerAuctionVehicles = async (req, res) => {
         .limit(limitNum),
       AuctionVehicle.countDocuments(filter)
     ]);
+
+    // ✅ AUTO-FIX: Check for "Ghost Settlements" (where marketplace vehicle was deleted)
+    for (const v of vehicles) {
+      if (v.isSettledToMarketplace) {
+        const stillExists = await Vehicle.exists({ fromAuctionId: v._id });
+        if (!stillExists) {
+          v.isSettledToMarketplace = false;
+          await v.save({ validateBeforeSave: false });
+          console.log(`🛠️ [AUTO-FIX] Reset stale settlement flag for Auction: ${v._id}`);
+        }
+      }
+    }
 
     res.json({
       success: true,
