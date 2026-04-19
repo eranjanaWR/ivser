@@ -12,6 +12,7 @@ const BiddingPartner = require('../models/BiddingPartner');
 const axios = require('axios'); // For Geocoding API calls
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const Vehicle = require('../models/Vehicle'); // ✅ Added for sync checks
+const { sendAuctionWinnerNotificationEmail } = require('../utils/email');
 
 /**
  * Helper: Geocode city name to Lat/Lng using Nominatim
@@ -35,6 +36,184 @@ const geocodeCity = async (city, province) => {
     console.warn('⚠️ Geocoding failed:', error.message);
     return null;
   }
+};
+
+const getUserFullName = (user) => {
+  if (!user) return 'User';
+  return `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User';
+};
+
+const getUserPhone = (user) => user?.phoneNumber || user?.phone || 'Not provided';
+
+const getVehicleDisplayName = (vehicle) => {
+  return [vehicle?.year, vehicle?.brand, vehicle?.model].filter(Boolean).join(' ') || 'Auction Vehicle';
+};
+
+const sendAuctionWinnerEmail = async (
+  vehicle,
+  { winnerUser = null, sellerUser = null, source = 'unknown' } = {}
+) => {
+  try {
+    const winnerCandidateId = winnerUser?._id || vehicle.winnerId || vehicle.highestBidder;
+    const sellerCandidateId = sellerUser?._id || vehicle.sellerId;
+
+    const winner = winnerUser?._id
+      ? winnerUser
+      : await User.findById(winnerCandidateId).select('firstName lastName email phone phoneNumber');
+
+    const seller = sellerUser?._id
+      ? sellerUser
+      : await User.findById(sellerCandidateId).select('firstName lastName email phone phoneNumber');
+
+    if (!winner?.email) {
+      console.warn(`⚠ [AUCTION-EMAIL:${source}] Winner email missing for auction ${vehicle._id}`);
+      return { success: false, error: 'Winner email missing' };
+    }
+
+    if (!seller?.email) {
+      console.warn(`⚠ [AUCTION-EMAIL:${source}] Seller contact missing for auction ${vehicle._id}`);
+      return { success: false, error: 'Seller contact missing' };
+    }
+
+    const result = await sendAuctionWinnerNotificationEmail({
+      winnerEmail: winner.email,
+      winnerName: getUserFullName(winner),
+      vehicleName: getVehicleDisplayName(vehicle),
+      brand: vehicle.brand,
+      model: vehicle.model,
+      year: vehicle.year,
+      finalWinningBid: vehicle.finalPrice || vehicle.currentBid || vehicle.startingPrice || 0,
+      seller: {
+        fullName: getUserFullName(seller),
+        phone: getUserPhone(seller),
+        email: seller.email,
+      },
+    });
+
+    if (result.success) {
+      console.log(`✅ [AUCTION-EMAIL:${source}] Winner email sent for auction ${vehicle._id}`);
+    } else {
+      console.warn(`⚠ [AUCTION-EMAIL:${source}] Email not sent for auction ${vehicle._id}: ${result.error}`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error(`❌ [AUCTION-EMAIL:${source}] Failed for auction ${vehicle._id}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Background-safe status transition handler.
+ * Scenario B (automatic completion) is handled here.
+ */
+const processAuctionStatusTransitions = async ({ io = null, source = 'scheduler' } = {}) => {
+  const now = new Date();
+  const summary = {
+    source,
+    upcomingToLive: 0,
+    expiredToCompleted: 0,
+    expiredToClosed: 0,
+    winnerEmailsSent: 0,
+  };
+
+  try {
+    const upcomingToLive = await AuctionVehicle.updateMany(
+      {
+        status: { $regex: /^upcoming$/i },
+        auctionStartDate: { $lte: now },
+        auctionEndDate: { $gt: now },
+      },
+      { $set: { status: 'live' } }
+    );
+    summary.upcomingToLive = upcomingToLive.modifiedCount || 0;
+  } catch (error) {
+    console.error(`❌ [AUCTION-TRANSITION:${source}] Upcoming→Live error:`, error.message);
+  }
+
+  const expiredLiveAuctions = await AuctionVehicle.find({
+    status: { $regex: /^live$/i },
+    auctionEndDate: { $lte: now },
+  })
+    .populate('highestBidder', 'firstName lastName email phone phoneNumber')
+    .populate('sellerId', 'firstName lastName email phone phoneNumber');
+
+  for (const auction of expiredLiveAuctions) {
+    const endedAt = auction.auctionEndDate || now;
+
+    if (auction.highestBidder) {
+      const winnerId = auction.highestBidder?._id || auction.highestBidder;
+      const finalPrice = auction.currentBid || auction.startingPrice || 0;
+
+      auction.status = 'completed';
+      auction.winnerId = winnerId;
+      auction.finalPrice = finalPrice;
+      auction.endTime = auction.endTime || endedAt;
+      auction.auctionEndDate = auction.auctionEndDate || endedAt;
+      await auction.save();
+
+      summary.expiredToCompleted += 1;
+
+      const emailResult = await sendAuctionWinnerEmail(auction, {
+        winnerUser: auction.highestBidder,
+        sellerUser: auction.sellerId,
+        source,
+      });
+      if (emailResult.success) {
+        summary.winnerEmailsSent += 1;
+      }
+
+      if (io) {
+        const roomName = `auction_${auction._id}`;
+        io.to(roomName).emit('auctionEnded', {
+          vehicleId: auction._id,
+          status: 'Completed',
+          normalizedStatus: 'completed',
+          winner: {
+            _id: winnerId,
+            name: getUserFullName(auction.highestBidder),
+          },
+          finalBid: finalPrice,
+          finalPrice,
+          endTime: auction.endTime || endedAt,
+          auctionEndDate: auction.auctionEndDate || endedAt,
+          message: 'Auction ended automatically: timer reached zero',
+        });
+      }
+    } else {
+      auction.status = 'closed';
+      auction.endTime = auction.endTime || endedAt;
+      auction.auctionEndDate = auction.auctionEndDate || endedAt;
+      await auction.save();
+      summary.expiredToClosed += 1;
+
+      if (io) {
+        const roomName = `auction_${auction._id}`;
+        io.to(roomName).emit('auctionEnded', {
+          vehicleId: auction._id,
+          status: 'closed',
+          normalizedStatus: 'closed',
+          endTime: auction.endTime || endedAt,
+          auctionEndDate: auction.auctionEndDate || endedAt,
+          message: 'Auction ended automatically: no winning bids',
+        });
+      }
+    }
+  }
+
+  if (
+    summary.upcomingToLive > 0 ||
+    summary.expiredToCompleted > 0 ||
+    summary.expiredToClosed > 0
+  ) {
+    console.log(
+      `✅ [AUCTION-TRANSITION:${source}] upcoming→live=${summary.upcomingToLive}, ` +
+      `expired→completed=${summary.expiredToCompleted}, expired→closed=${summary.expiredToClosed}, ` +
+      `winnerEmailsSent=${summary.winnerEmailsSent}`
+    );
+  }
+
+  return summary;
 };
 
 /**
@@ -216,39 +395,7 @@ const getAuctionVehicles = async (req, res) => {
     const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : '';
     const terminalStatusRegex = /^(closed|completed|cancelled)$/i;
 
-    // ✅ AUTO-TRANSITION LOGIC: Update statuses based on current time
-    // Upcoming → Live transition
-    try {
-      const upcomingToLive = await AuctionVehicle.updateMany(
-        {
-          status: { $regex: /^upcoming$/i },
-          auctionStartDate: { $lte: now },
-          auctionEndDate: { $gt: now }
-        },
-        { $set: { status: 'live' } }
-      );
-      if (upcomingToLive.modifiedCount > 0) {
-        console.log(`✅ Auto-transitioned ${upcomingToLive.modifiedCount} vehicles from 'upcoming' to 'live'`);
-      }
-    } catch (err) {
-      console.error('❌ Error transitioning upcoming to live:', err.message);
-    }
-
-    // Live → Closed transition
-    try {
-      const liveToClosed = await AuctionVehicle.updateMany(
-        {
-          status: { $regex: /^live$/i },
-          auctionEndDate: { $lte: now }
-        },
-        { $set: { status: 'closed' } }
-      );
-      if (liveToClosed.modifiedCount > 0) {
-        console.log(`✅ Auto-transitioned ${liveToClosed.modifiedCount} vehicles from 'live' to 'closed'`);
-      }
-    } catch (err) {
-      console.error('❌ Error transitioning live to closed:', err.message);
-    }
+    // Status transitions are handled by the background scheduler in server.js.
 
     // ✅ BUILD FILTER: Include live, upcoming, and closed vehicles
     let filter = {};
@@ -1337,7 +1484,9 @@ const acceptHighestBid = async (req, res) => {
     const { auctionId } = req.params;
     const userId = req.user._id;
 
-    const vehicle = await AuctionVehicle.findById(auctionId).populate('highestBidder');
+    const vehicle = await AuctionVehicle.findById(auctionId)
+      .populate('highestBidder', 'firstName lastName email phone phoneNumber')
+      .populate('sellerId', 'firstName lastName email phone phoneNumber');
     if (!vehicle) {
       return res.status(404).json({
         success: false,
@@ -1346,7 +1495,8 @@ const acceptHighestBid = async (req, res) => {
     }
 
     // Verify ownership
-    if (vehicle.sellerId.toString() !== userId.toString()) {
+    const sellerId = vehicle.sellerId?._id || vehicle.sellerId;
+    if (sellerId.toString() !== userId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Only the seller can accept bids on this auction'
@@ -1376,6 +1526,13 @@ const acceptHighestBid = async (req, res) => {
     await vehicle.save();
 
     console.log(`✅ [SELLER] Accepted highest bid from ${winnerName} for ${finalPrice}`);
+
+    // Scenario A: manual completion winner email notification
+    await sendAuctionWinnerEmail(vehicle, {
+      winnerUser: vehicle.highestBidder,
+      sellerUser: vehicle.sellerId,
+      source: 'manual-accept',
+    });
 
     // BROADCAST: Notify all users via Socket.io
     const io = req.app.get('io');
@@ -1672,6 +1829,7 @@ const getMyWonBids = async (req, res) => {
 module.exports = {
   createAuctionVehicle,
   getAuctionVehicles,
+  processAuctionStatusTransitions,
   getAuctionVehicleById,
   getSellerAuctionVehicles,
   updateAuctionVehicle,

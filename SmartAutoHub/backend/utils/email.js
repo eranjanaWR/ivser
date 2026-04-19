@@ -209,6 +209,107 @@ const sendBreakdownNotification = async (repairmanEmail, repairmanName, location
 };
 
 /**
+ * Send auction winner notification email
+ */
+const sendAuctionWinnerNotificationEmail = async ({
+  winnerEmail,
+  winnerName,
+  vehicleName,
+  brand,
+  model,
+  year,
+  finalWinningBid,
+  seller,
+}) => {
+  try {
+    const transporter = createTransporter();
+
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping auction winner email to:', winnerEmail);
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    if (!winnerEmail) {
+      return { success: false, error: 'Winner email is missing' };
+    }
+
+    const formattedBid = new Intl.NumberFormat('en-LK', {
+      style: 'currency',
+      currency: 'LKR',
+      maximumFractionDigits: 0,
+    }).format(finalWinningBid || 0);
+
+    const sellerName = seller?.fullName || 'Seller';
+    const sellerPhone = seller?.phone || 'Not provided';
+    const sellerEmail = seller?.email || 'Not provided';
+    const safeVehicleName = vehicleName || [year, brand, model].filter(Boolean).join(' ') || 'Auction Vehicle';
+
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: winnerEmail,
+      subject: `Congratulations! You won the bid for ${safeVehicleName} on TakGaala.lk 🎉`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 640px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 22px; text-align: center; }
+            .content { padding: 24px; background: #f9f9f9; }
+            .card { background: white; border-left: 4px solid #28a745; padding: 14px 16px; margin: 16px 0; }
+            .row { margin: 8px 0; }
+            .label { font-weight: bold; color: #222; }
+            .footer { padding: 16px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Congratulations! You Won 🎉</h1>
+            </div>
+
+            <div class="content">
+              <p>Hello ${winnerName || 'Winner'},</p>
+              <p>Great news. You are the winning bidder for <strong>${safeVehicleName}</strong> on TakGaala.lk.</p>
+
+              <div class="card">
+                <div class="row"><span class="label">Vehicle:</span> ${safeVehicleName}</div>
+                <div class="row"><span class="label">Brand:</span> ${brand || '-'}</div>
+                <div class="row"><span class="label">Model:</span> ${model || '-'}</div>
+                <div class="row"><span class="label">Year:</span> ${year || '-'}</div>
+                <div class="row"><span class="label">Final Winning Bid:</span> ${formattedBid}</div>
+              </div>
+
+              <div class="card">
+                <div class="row"><span class="label">Seller Full Name:</span> ${sellerName}</div>
+                <div class="row"><span class="label">Seller Phone Number:</span> ${sellerPhone}</div>
+                <div class="row"><span class="label">Seller Email:</span> ${sellerEmail}</div>
+              </div>
+
+              <p>Please contact the seller to finalize the deal and complete the next steps.</p>
+              <p>Thank you for using TakGaala.lk.</p>
+            </div>
+
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Auction winner email sent to:', winnerEmail, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending auction winner email:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Send generic email with template support
  */
 const sendEmail = async (options) => {
@@ -503,6 +604,7 @@ module.exports = {
   sendNotificationEmail,
   sendTestDriveNotification,
   sendBreakdownNotification,
+  sendAuctionWinnerNotificationEmail,
   sendTestDriveApprovedEmail,
   sendTestDriveRejectedEmail,
   sendTestDriveCancellationEmail,

@@ -76,6 +76,28 @@ const chatRoutes = require('./routes/chat');
 const BiddingChat = require('./models/BiddingChat');
 const DealMessage = require('./models/DealMessage'); // ✅ NEW: Private Chat Model
 const Breakdown = require('./models/Breakdown');
+const auctionController = require('./controllers/auctionController');
+
+const AUCTION_TRANSITION_INTERVAL_MS = Number(process.env.AUCTION_TRANSITION_INTERVAL_MS || 60000);
+let isAuctionTransitionJobRunning = false;
+
+const runAuctionTransitionJob = async () => {
+  if (isAuctionTransitionJobRunning) {
+    return;
+  }
+
+  isAuctionTransitionJobRunning = true;
+  try {
+    await auctionController.processAuctionStatusTransitions({
+      io,
+      source: 'scheduler',
+    });
+  } catch (error) {
+    console.error('❌ [AUCTION-SCHEDULER] Transition job failed:', error.message);
+  } finally {
+    isAuctionTransitionJobRunning = false;
+  }
+};
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -95,6 +117,12 @@ app.use('/api/availability', availabilityRoutes);
 app.use('/api/auction-vehicles', auctionRoutes);
 app.use('/api/bidding', biddingRoutes);
 app.use('/api/auction', chatRoutes);
+
+// Scenario B: periodic automatic auction completion by timer
+setTimeout(() => {
+  runAuctionTransitionJob();
+}, 5000);
+setInterval(runAuctionTransitionJob, AUCTION_TRANSITION_INTERVAL_MS);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
