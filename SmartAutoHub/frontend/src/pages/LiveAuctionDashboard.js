@@ -42,7 +42,7 @@ import {
   Star as FeaturesIcon,
   Stop as EndAuctionIcon,
   Schedule as ExtendTimeIcon,
-  CheckCircle as AcceptBidIcon,
+  CheckCircle,
   Cancel as CancelIcon,
   EmojiEvents as TrophyIcon,
 } from '@mui/icons-material';
@@ -757,11 +757,23 @@ const LiveAuctionDashboard = () => {
           </Button>
         </Box>
 
-        {/* ✅ NEW: Read-only Alert Banner for Closed Auctions */}
+        {/* ✅ Read-only Alert Banner for Closed Auctions */}
         {isClosed && (
-          <Alert severity="success" sx={{ mb: 3, bgcolor: '#e8f5e9', border: '2px solid #4caf50' }}>
-            <Typography sx={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-              🏁 This auction has ended. You are viewing the final results in read-only mode.
+          <Alert 
+            severity="success" 
+            icon={<CheckCircle sx={{ color: '#2e7d32' }} />}
+            sx={{ 
+              mb: 3, 
+              bgcolor: '#e8f5e9', 
+              border: '1px solid #c8e6c9',
+              borderRadius: 2,
+              '& .MuiAlert-message': {
+                width: '100%'
+              }
+            }}
+          >
+            <Typography sx={{ fontWeight: 600, color: '#2e7d32', fontSize: '0.95rem' }}>
+              This auction has ended. You are viewing the final results in read-only mode.
             </Typography>
           </Alert>
         )}
@@ -1271,10 +1283,20 @@ const LiveAuctionDashboard = () => {
                       {isWinner ? '🏆 You Won! Contact Seller' : '🤝 Auction Won! Contact Winner'}
                     </Button>
                   ) : (
-                    // ✅ OTHER BIDDERS: Show Auction Ended Message
-                    <Alert severity="info" sx={{ borderRadius: 3, fontSize: '1rem', fontWeight: 600 }}>
-                      This auction has ended.
-                    </Alert>
+                    // ✅ OTHER USERS: Show Auction Ended Message
+                    <Box sx={{ py: 1 }}>
+                      <Alert 
+                        severity="info" 
+                        sx={{ 
+                          borderRadius: 3, 
+                          bgcolor: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          '& .MuiAlert-message': { fontWeight: 700, color: '#475569' } 
+                        }}
+                      >
+                        This auction has ended.
+                      </Alert>
+                    </Box>
                   )}
                 </Box>
               ) : (
@@ -1303,7 +1325,7 @@ const LiveAuctionDashboard = () => {
                         <Button 
                           variant="contained" 
                           size="small"
-                          startIcon={<AcceptBidIcon />}
+                          startIcon={<CheckCircle />}
                           sx={{ 
                             flex: 1,
                             minWidth: 120,

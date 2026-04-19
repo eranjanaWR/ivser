@@ -259,12 +259,12 @@ const BiddingCard = ({ vehicle, isLive = true, isClosed = false, user, onCountdo
                     🤝 Contact Winner
                   </Button>
                 ) : (
-                  // ✅ OTHER BIDDERS: Show enabled "Auction Ended" button
+                  // ✅ OTHER BIDDERS: Show enabled "View Results" button
                   <Button
                     variant="contained"
                     fullWidth
                     size="large"
-                    onClick={handleContactClick}
+                    onClick={() => navigate(`/bidding/${finalId}/place-bid`)}
                     sx={{
                       mt: 'auto',
                       mb: 1,
@@ -278,7 +278,7 @@ const BiddingCard = ({ vehicle, isLive = true, isClosed = false, user, onCountdo
                       },
                     }}
                   >
-                    Auction Ended
+                    View Results
                   </Button>
                 )}
               </>
