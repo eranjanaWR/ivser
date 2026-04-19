@@ -566,14 +566,18 @@ const HomePage = () => {
       {/* Commercial Ads Banner Section */}
       <CommercialAdsBanner />
 
+      {/* Premium Posts Banner - Full Width */}
+      <Box sx={{ width: '100vw', marginLeft: 'calc(-50vw + 50%)', bgcolor: '#ffffff', py: 2 }}>
+        <Container maxWidth="lg">
+          <Typography variant="h4" fontWeight="bold" sx={{ color: '#1a1a1a', fontWeight: 900, mb: 0 }}>
+            Premium Posts
+          </Typography>
+        </Container>
+      </Box>
+
       {/* Premium Posts Section */}
       <Box sx={{ py: 2, bgcolor: '#f5f5f5' }}>
         <Container maxWidth="lg">
-          <Box sx={{ mb: 6, textAlign: 'left' }}>
-            <Typography variant="h4" fontWeight="bold" sx={{ mb: 2 }}>
-              Premium Posts
-            </Typography>
-          </Box>
 
             {loadingFeatured ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
@@ -674,14 +678,6 @@ const HomePage = () => {
                             </Box>
                           </Box>
 
-                          {/* Boost info */}
-                          {vehicle.boost && (
-                            <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e0e0' }}>
-                              <Typography variant="caption" color="text.secondary">
-                                Featured until {new Date(vehicle.boost.endDate).toLocaleDateString('en-LK')}
-                              </Typography>
-                            </Box>
-                          )}
                         </CardContent>
 
                         <CardActions sx={{ pt: 0, pb: 2, px: 2 }}>

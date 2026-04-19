@@ -90,6 +90,32 @@ router.get('/image/:id', async (req, res) => {
 });
 
 /**
+ * @route   GET /api/advertising/requests
+ * @desc    Get all advertising requests (including paymentSlipBase64)
+ * @access  Public
+ */
+router.get('/requests', async (req, res) => {
+  try {
+    console.log('📢 [ADVERTISING] GET /requests endpoint called');
+    const Advertising = require('../models/Advertising');
+    const requests = await Advertising.find()
+      .sort({ submittedAt: -1 });
+
+    console.log(`✅ [ADVERTISING] Found ${requests.length} ads`);
+    res.json({
+      success: true,
+      data: requests
+    });
+  } catch (error) {
+    console.error('❌ [ADVERTISING] Error fetching requests:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch advertising requests'
+    });
+  }
+});
+
+/**
  * @route   POST /api/advertising/submit-package
  * @desc    Submit an advertising package request
  * @access  Public

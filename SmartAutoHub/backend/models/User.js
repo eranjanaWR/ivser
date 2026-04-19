@@ -174,6 +174,28 @@ const userSchema = new mongoose.Schema({
   },
   flagReason: String,
   
+  // Advertising Package Usage Tracking
+  usedPackages: {
+    freeTrialUsed: {
+      type: Boolean,
+      default: false
+    },
+    freeTrialUsedAt: Date,
+    freeTrialAdId: mongoose.Schema.Types.ObjectId, // Reference to the ad that used Free Trial
+    starterUsed: {
+      type: Boolean,
+      default: false
+    },
+    starterUsedAt: Date,
+    starterAdId: mongoose.Schema.Types.ObjectId, // Reference to the ad that used Starter
+    freeBoostUsed: {
+      type: Boolean,
+      default: false
+    },
+    freeBoostUsedAt: Date,
+    freeBoostId: mongoose.Schema.Types.ObjectId // Reference to the boost that used Free Boost
+  },
+  
   // Timestamps
   lastLogin: Date,
   createdAt: {
@@ -235,6 +257,17 @@ userSchema.methods.getPublicProfile = function() {
     } : null,
     profileImage: this.profileImage,
     address: this.address,
+    usedPackages: this.usedPackages || {
+      freeTrialUsed: false,
+      freeTrialUsedAt: null,
+      freeTrialAdId: null,
+      starterUsed: false,
+      starterUsedAt: null,
+      starterAdId: null,
+      freeBoostUsed: false,
+      freeBoostUsedAt: null,
+      freeBoostId: null
+    },
     ...(this.role === 'repairman' && { repairmanDetails: this.repairmanDetails }),
     createdAt: this.createdAt
   };

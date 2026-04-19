@@ -3,7 +3,7 @@
  * Display advertising packages and pricing options
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
@@ -51,6 +51,43 @@ const AdvertisePackagesPage = () => {
   const [previewImage, setPreviewImage] = useState(null);
   const [paymentSlipPreview, setPaymentSlipPreview] = useState(null);
   const [paymentRefNumber, setPaymentRefNumber] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [starterUsed, setStarterUsed] = useState(false);
+  const [freeTrialUsed, setFreeTrialUsed] = useState(false);
+  
+  // Function to fetch/refresh user data
+  const fetchUserData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        const response = await api.get('/auth/me');
+        if (response.data.data.user) {
+          const user = response.data.data.user;
+          setCurrentUser(user);
+          // Check if user has already used Free Trial package
+          if (user.usedPackages && user.usedPackages.freeTrialUsed) {
+            setFreeTrialUsed(true);
+          } else {
+            setFreeTrialUsed(false);
+          }
+          // Check if user has already used Starter package
+          if (user.usedPackages && user.usedPackages.starterUsed) {
+            setStarterUsed(true);
+          } else {
+            setStarterUsed(false);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    }
+  };
+  
+  // Fetch current user data on mount
+  useEffect(() => {
+    fetchUserData();
+  }, []);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -70,28 +107,25 @@ const AdvertisePackagesPage = () => {
       id: 0,
       name: 'Free Trial',
       price: 'Free',
-      period: '/4 weeks',
+      period: 'One time redeemable',
       description: 'Try all premium features',
       color: '#000000',
       features: [
-        { icon: <Star />, text: 'Premium featured placement' },
-        { icon: <Visibility />, text: '50,000 impressions' },
-        { icon: <TrendingUp />, text: 'Advanced analytics' },
         { icon: <Speed />, text: 'Priority listing' },
         { icon: <Support />, text: 'Priority support' },
+        { icon: <CheckCircle />, text: 'Custom campaigns' },
       ],
       popular: false,
     },
     {
       id: 1,
       name: 'Starter',
-      price: '$99',
+      price: '₨5,000',
       period: '/month',
       description: 'Perfect for getting started',
       color: '#000000',
       features: [
-        { icon: <Visibility />, text: '5,000 impressions/month' },
-        { icon: <TrendingUp />, text: 'Basic analytics' },
+        { icon: <Visibility />, text: 'Ad is live on the website for a month' },
         { icon: <Speed />, text: 'Standard placement' },
         { icon: <Support />, text: 'Email support' },
       ],
@@ -100,15 +134,13 @@ const AdvertisePackagesPage = () => {
     {
       id: 2,
       name: 'Professional',
-      price: '$299',
+      price: '₨10,000',
       period: '/month',
       description: 'Most popular choice',
       color: '#000000',
       features: [
-        { icon: <Visibility />, text: '25,000 impressions/month' },
+        { icon: <Visibility />, text: 'Ad is live on the website for 6 months' },
         { icon: <Star />, text: 'Featured placement' },
-        { icon: <TrendingUp />, text: 'Advanced analytics' },
-        { icon: <Speed />, text: 'Priority listing' },
         { icon: <Support />, text: 'Priority support' },
       ],
       popular: true,
@@ -116,15 +148,12 @@ const AdvertisePackagesPage = () => {
     {
       id: 3,
       name: 'Premium',
-      price: '$599',
+      price: '₨15,000',
       period: '/month',
       description: 'Maximum visibility',
       color: '#000000',
       features: [
-        { icon: <Visibility />, text: '100,000+ impressions/month' },
-        { icon: <Star />, text: 'Premium featured placement' },
-        { icon: <TrendingUp />, text: 'Custom analytics reports' },
-        { icon: <Speed />, text: 'Top priority listing' },
+        { icon: <Visibility />, text: 'Ad is live on the website for 1 year' },
         { icon: <Support />, text: '24/7 dedicated support' },
         { icon: <CheckCircle />, text: 'Custom campaigns' },
       ],
@@ -133,6 +162,12 @@ const AdvertisePackagesPage = () => {
   ];
 
   const handleSelectPackage = (pkg) => {
+    // Check if user is trying to use Free Trial but has already used it
+    if (pkg.name === 'Free Trial' && freeTrialUsed) {
+      alert('You have already redeemed the Free Trial package (one time redeemable). Please choose a different package.');
+      return;
+    }
+    
     setSelectedPackage(pkg);
     // Only show placement dialog for Free Trial and Starter packages
     if (pkg.name === 'Free Trial' || pkg.name === 'Starter') {
@@ -340,6 +375,9 @@ const AdvertisePackagesPage = () => {
         paymentSlipBase64 = await compressImage(formData.paymentSlip);
       }
 
+      // Get userId from localStorage
+      const userId = localStorage.getItem('userId');
+
       // Prepare form data
       const submitData = {
         name: formData.name,
@@ -351,9 +389,10 @@ const AdvertisePackagesPage = () => {
         placement: selectedPlacement || 'Not specified',
         adPhoto: true,
         adPhotoBase64: adPhotoBase64,
-        paymentRefNumber: selectedPackage?.name !== 'Free Trial' ? paymentRefNumber : null,
+        userId: userId || null,
+        paymentRefNumber: (selectedPackage?.name !== 'Free Trial' && selectedPackage?.name !== 'Starter') ? paymentRefNumber : null,
         paymentSlipBase64: paymentSlipBase64,
-        ...(selectedPackage?.name !== 'Free Trial' && {
+        ...((selectedPackage?.name !== 'Free Trial' && selectedPackage?.name !== 'Starter') && {
           cardholderName: formData.cardholderName,
           cardNumber: formData.cardNumber.replace(/\s/g, ''),
           expiryDate: formData.expiryDate,
@@ -379,6 +418,8 @@ const AdvertisePackagesPage = () => {
 
       if (response.data.success) {
         alert(`Thank you! We've sent a confirmation email to ${formData.email}. Our team will contact you soon!`);
+        // Refresh user data to update Starter status
+        await fetchUserData();
         handleClosePaymentDialog();
         handleCloseContactDialog();
       } else {
@@ -542,20 +583,29 @@ const AdvertisePackagesPage = () => {
                 <Button
                   fullWidth
                   variant="contained"
+                  disabled={(pkg.name === 'Free Trial' && freeTrialUsed)}
                   sx={{
-                    bgcolor: pkg.color,
+                    bgcolor: ((pkg.name === 'Free Trial' && freeTrialUsed)) ? '#cccccc' : pkg.color,
                     color: 'white',
                     fontWeight: 600,
+                    cursor: ((pkg.name === 'Free Trial' && freeTrialUsed)) ? 'not-allowed' : 'pointer',
                     '&:hover': {
-                      bgcolor: pkg.color,
-                      opacity: 0.9,
+                      bgcolor: ((pkg.name === 'Free Trial' && freeTrialUsed)) ? '#cccccc' : pkg.color,
+                      opacity: ((pkg.name === 'Free Trial' && freeTrialUsed)) ? 1 : 0.9,
                     },
                   }}
                   onClick={() => handleSelectPackage(pkg)}
                 >
-                  Choose Plan
+                  {((pkg.name === 'Free Trial' && freeTrialUsed)) ? 'Already Redeemed' : 'Choose Plan'}
                 </Button>
               </CardActions>
+              {((pkg.name === 'Free Trial' && freeTrialUsed)) && (
+                <Box sx={{ bgcolor: '#fff3cd', p: 2, borderTop: '1px solid #ffc107' }}>
+                  <Typography variant="body2" sx={{ color: '#856404', textAlign: 'center', m: 0 }}>
+                    ✓ You have already redeemed this one-time offer. Choose a different package.
+                  </Typography>
+                </Box>
+              )}
             </Card>
           </Grid>
         ))}
