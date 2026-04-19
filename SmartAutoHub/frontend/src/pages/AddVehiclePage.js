@@ -41,6 +41,7 @@ const AddVehiclePage = () => {
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [roleConfirmed, setRoleConfirmed] = useState(false);
   const [images, setImages] = useState([]);
   const [imageFiles, setImageFiles] = useState([]);
@@ -73,6 +74,7 @@ const AddVehiclePage = () => {
 
   const handleChange = (e) => {
     setError('');
+    setSuccess('');
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -171,13 +173,72 @@ const AddVehiclePage = () => {
         submitData.append('images', file);
       });
       
+      // Debug: Log all form data entries
+      console.log('📋 Form data being sent:');
+      for (let [key, value] of submitData.entries()) {
+        if (key === 'images') {
+          console.log(`  ${key}: [File]`);
+        } else {
+          console.log(`  ${key}: ${value}`);
+        }
+      }
+      
+      console.log('🚗 Sending vehicle creation request...');
       const { data } = await api.post('/vehicles', submitData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       
-      navigate('/vehicles');
+      console.log('✅ Vehicle creation response:', data);
+      
+      if (data.success) {
+        console.log('✅ Vehicle listed successfully! ID:', data.data._id);
+        setSuccess(`🎉 ${formData.brand} ${formData.model} listed successfully!`);
+        // Clear form
+        setFormData({
+          brand: '',
+          model: '',
+          year: new Date().getFullYear(),
+          price: '',
+          vehicleType: '',
+          condition: '',
+          fuelType: '',
+          transmission: '',
+          mileage: '',
+          location: '',
+          color: '',
+          manufacturedCountry: '',
+          engineCapacity: '',
+          description: '',
+          features: '',
+        });
+        setImages([]);
+        setImageFiles([]);
+        // Wait a moment then navigate
+        setTimeout(() => {
+          navigate('/vehicles');
+        }, 1000);
+      } else {
+        setError(data.message || 'Failed to create vehicle');
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to add vehicle');
+      console.error('❌ Vehicle creation error:', err);
+      console.error('Full error response:', err.response?.data);
+      console.error('Full error status:', err.response?.status);
+      
+      let errorMsg = 'Failed to add vehicle';
+      
+      if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
+        // Handle validation errors array
+        errorMsg = err.response.data.errors.map(e => `${e.field}: ${e.message}`).join(', ');
+      } else if (err.response?.data?.message) {
+        errorMsg = err.response.data.message;
+      } else if (err.response?.data?.error) {
+        errorMsg = err.response.data.error;
+      } else if (err.message) {
+        errorMsg = err.message;
+      }
+      
+      setError(errorMsg);
     }
     setLoading(false);
   };
@@ -204,6 +265,12 @@ const AddVehiclePage = () => {
           {error && (
             <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
               {error}
+            </Alert>
+          )}
+
+          {success && (
+            <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
+              {success}
             </Alert>
           )}
 

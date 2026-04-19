@@ -51,6 +51,7 @@ import {
   Bolt,
 } from '@mui/icons-material';
 import api from '../services/api';
+import io from 'socket.io-client';
 
 const Admin1Dashboard = () => {
   const navigate = useNavigate();
@@ -99,12 +100,56 @@ const Admin1Dashboard = () => {
     return `${backendUrl}/uploads/${normalizedPath}`;
   };
 
+  // Socket.IO connection for real-time advertising request updates
+  useEffect(() => {
+    const socket = io('http://localhost:5000', {
+      transports: ['websocket', 'polling']
+    });
+
+    // Listen for new advertising requests
+    socket.on('newAdvertisingRequest', (newRequest) => {
+      console.log('📬 New advertising request received via socket:', newRequest);
+      // Auto-refresh if on advertising requests tab
+      if (tab === 3) {
+        console.log('🔄 Auto-refreshing advertising requests...');
+        fetchAdvertisingRequests();
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [tab]);
+
   useEffect(() => {
     fetchData();
   }, [tab]);
 
+  // Auto-refresh advertising requests every 5 seconds when on that tab
+  useEffect(() => {
+    if (tab !== 3) return;
+    
+    // Fetch immediately when tab changes to 3
+    fetchAdvertisingRequests();
+    
+    const interval = setInterval(() => {
+      fetchAdvertisingRequests();
+    }, 5000); // Reduced from 10s to 5s for faster updates
+
+    return () => clearInterval(interval);
+  }, [tab]);
+
+
+
   const fetchData = async () => {
     setLoading(true);
+    
+    // Set a timeout to stop loading after 15 seconds
+    const timeoutId = setTimeout(() => {
+      console.warn('⚠️ Data fetch timeout - stopping loader');
+      setLoading(false);
+    }, 15000);
+    
     try {
       // Fetch stats
       try {
@@ -154,20 +199,57 @@ const Admin1Dashboard = () => {
         }
       } else if (tab === 3) {
         try {
-          const { data } = await api.get('/admin/advertising-requests');
-          console.log('✓ Advertising requests fetched:', data);
-          console.log('Sample request data:', data.data?.[0]);
-          if (data.data?.[0]) {
-            console.log('  - Name:', data.data[0].name);
-            console.log('  - Card Number:', data.data[0].cardNumber);
-            console.log('  - Cardholder Name:', data.data[0].cardholderName);
-            console.log('  - Payment Status:', data.data[0].paymentStatus);
+          console.log('📨 Fetching advertising requests...');
+          
+          let retries = 3;
+          let lastError;
+          let adRequests = [];
+          
+          while (retries > 0) {
+            try {
+              const response = await api.get('/admin/advertising-requests');
+              console.log('✅ API Response received:', {
+                success: response.data?.success,
+                dataType: typeof response.data?.data,
+                dataLength: response.data?.data?.length,
+                total: response.data?.total
+              });
+              
+              const { data } = response;
+              
+              // Extract the array from the response
+              if (data && data.data && Array.isArray(data.data)) {
+                adRequests = data.data;
+                console.log(`✅ Got ${adRequests.length} real advertising requests from database`);
+              } else if (data && Array.isArray(data)) {
+                adRequests = data;
+                console.log(`✅ Got ${adRequests.length} requests (direct array)`);
+              } else {
+                console.warn('⚠️ Unexpected response format:', data);
+                adRequests = [];
+              }
+              
+              // Successfully got data, break the retry loop
+              break;
+              
+            } catch (err) {
+              lastError = err;
+              retries--;
+              console.warn(`⚠️ Request attempt failed (${retries} retries left):`, err.message);
+              
+              if (retries > 0) {
+                await new Promise(resolve => setTimeout(resolve, 800));
+              }
+            }
           }
-          setAdvertisingRequests(data.data || []);
+          
+          // Set whatever data we got (could be real or empty array)
+          console.log(`📊 Setting ${adRequests.length} requests to state`);
+          setAdvertisingRequests(adRequests);
+          
         } catch (e) {
-          console.error('❌ Failed to fetch advertising requests:', e);
-          console.error('Error response:', e.response?.data);
-          console.error('Error status:', e.response?.status);
+          console.error('❌ Outer error fetching advertising requests:', e.message);
+          // Set empty array on complete failure
           setAdvertisingRequests([]);
         }
       } else if (tab === 4) {
@@ -197,8 +279,34 @@ const Admin1Dashboard = () => {
       }
     } catch (err) {
       setError('Failed to fetch data');
+    } finally {
+      clearTimeout(timeoutId);
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  // Separate function to fetch advertising requests for auto-refresh
+  const fetchAdvertisingRequests = async () => {
+    try {
+      console.log('🔄 [AUTO-REFRESH] Fetching advertising requests...');
+      
+      const { data } = await api.get('/admin/advertising-requests');
+      
+      // Handle the response
+      let adRequests = [];
+      if (data && data.data && Array.isArray(data.data)) {
+        adRequests = data.data;
+      } else if (data && Array.isArray(data)) {
+        adRequests = data;
+      }
+      
+      console.log(`✅ Got ${adRequests.length} advertising requests`);
+      setAdvertisingRequests(adRequests);
+    } catch (err) {
+      console.error('❌ Failed to fetch advertising requests:', err.message);
+      // Keep previous data on error instead of showing stale mock data
+      // This allows users to see what they had until the API recovers
+    }
   };
 
   const handleMenuOpen = (event, item) => {
@@ -333,18 +441,25 @@ const Admin1Dashboard = () => {
             adminMessage: 'Request approved by admin'
           });
           setSuccess('Advertising request approved successfully');
+          fetchAdvertisingRequests();
         } else if (dialogAction === 'reject') {
           await api.put(`/admin/advertising-requests/${selectedItem._id}/status`, {
             status: 'rejected',
             adminMessage: 'Request rejected by admin'
           });
           setSuccess('Advertising request rejected successfully');
+          fetchAdvertisingRequests();
         } else if (dialogAction === 'deactivate') {
-          await api.put(`/admin/advertising-requests/${selectedItem._id}/status`, {
+          console.log('🔄 [DEACTIVATE] Starting deactivation for ad:', selectedItem._id);
+          console.log('🔄 [DEACTIVATE] Selected item:', selectedItem);
+          const deactivateResponse = await api.put(`/admin/advertising-requests/${selectedItem._id}/status`, {
             status: 'deactivated',
             adminMessage: 'Ad deactivated by admin'
           });
+          console.log('✅ [DEACTIVATE] Response:', deactivateResponse);
           setSuccess('Advertising request deactivated successfully');
+          console.log('✅ [DEACTIVATE] Success message set, fetching requests...');
+          fetchAdvertisingRequests();
         }
       } else if (tab === 4) {
         // Boost request actions
@@ -678,187 +793,140 @@ const Admin1Dashboard = () => {
               )}
 
               {tab === 3 && (
-                <Table>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: 'grey.50' }}>
-                      <TableCell>Company</TableCell>
-                      <TableCell>Contact</TableCell>
-                      <TableCell>Package</TableCell>
-                      <TableCell>Placement</TableCell>
-                      <TableCell>Submitted Date</TableCell>
-                      <TableCell>Due Date</TableCell>
-                      <TableCell>Reference Number</TableCell>
-                      <TableCell>Payment Status</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {advertisingRequests.map((request) => (
-                      <TableRow key={request._id} hover>
-                        <TableCell>
-                          <Box>
-                            <Typography fontWeight="medium">
-                              {request.company}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {request.name}
-                            </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Box>
-                            <Typography variant="body2">{request.email}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {request.phone}
-                            </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {request.packageName}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={
-                              request.placement === 'home'
-                                ? 'Home Page'
-                                : request.placement === 'browse'
-                                ? 'Browse Page'
-                                : 'Not Specified'
-                            }
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {new Date(request.submittedAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          {calculateDueDate(request.submittedAt, request.packageName)}
-                        </TableCell>
-                        <TableCell>
-                          {request.paymentRefNumber ? (
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                fontFamily: 'monospace',
-                                fontWeight: 600,
-                                color: '#1565c0',
-                                fontSize: '0.75rem',
-                                letterSpacing: '0.5px'
-                              }}
-                            >
-                              {request.paymentRefNumber}
-                            </Typography>
-                          ) : (
-                            <Typography variant="caption" sx={{ color: '#999', fontStyle: 'italic' }}>
-                              N/A
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {(request.packageName !== 'Free Trial' && (!request.paymentStatus || request.paymentStatus === 'pending')) ? (
-                            <Box
-                              onClick={() => handleOpenPaymentDetails(request)}
-                              sx={{
-                                display: 'inline-block',
-                                cursor: 'pointer',
-                                '&:hover': {
-                                  opacity: 0.8,
-                                },
-                              }}
-                            >
-                              <Chip
-                                label={request.paymentStatus || (request.packageName === 'Free Trial' ? 'Free' : 'Pending')}
-                                size="small"
-                                color={
-                                  request.paymentStatus === 'free'
-                                    ? 'success'
-                                    : request.paymentStatus === 'completed'
-                                    ? 'success'
-                                    : request.paymentStatus === 'failed'
-                                    ? 'error'
-                                    : 'warning'
-                                }
-                              />
+                <>
+                  <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      size="small"
+                      startIcon={<Refresh />}
+                      onClick={fetchAdvertisingRequests}
+                      variant="outlined"
+                    >
+                      Refresh Requests
+                    </Button>
+                  </Box>
+                  <Table>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: 'grey.50' }}>
+                        <TableCell>Company</TableCell>
+                        <TableCell>Contact</TableCell>
+                        <TableCell>Package</TableCell>
+                        <TableCell>Placement</TableCell>
+                        <TableCell>Submitted Date</TableCell>
+                        <TableCell>Reference Number</TableCell>
+                        <TableCell>Payment Status</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {advertisingRequests.map((request) => (
+                        <TableRow key={request._id} hover>
+                          <TableCell>
+                            <Box>
+                              <Typography fontWeight="medium">
+                                {request.company}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {request.name}
+                              </Typography>
                             </Box>
-                          ) : (
+                          </TableCell>
+                          <TableCell>
+                            <Box>
+                              <Typography variant="body2">{request.email}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {request.phone}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {request.packageName}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
                             <Chip
-                              label={request.paymentStatus || (request.packageName === 'Free Trial' ? 'Free' : 'Pending')}
+                              label={
+                                request.placement === 'home'
+                                  ? 'Home Page'
+                                  : request.placement === 'browse'
+                                  ? 'Browse Page'
+                                  : 'Not Specified'
+                              }
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {new Date(request.submittedAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            {request.paymentRefNumber ? (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                  color: '#1565c0',
+                                  fontSize: '0.75rem',
+                                }}
+                              >
+                                {request.paymentRefNumber}
+                              </Typography>
+                            ) : (
+                              <Typography variant="caption" sx={{ color: '#999' }}>
+                                N/A
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={request.paymentStatus || 'pending'}
                               size="small"
                               color={
-                                request.paymentStatus === 'free'
+                                request.paymentStatus === 'completed'
                                   ? 'success'
-                                  : request.paymentStatus === 'completed'
+                                  : 'warning'
+                              }
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={request.status}
+                              size="small"
+                              color={
+                                request.status === 'approved'
                                   ? 'success'
-                                  : request.paymentStatus === 'failed'
+                                  : request.status === 'rejected'
                                   ? 'error'
                                   : 'warning'
                               }
                             />
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={request.status}
-                            size="small"
-                            color={
-                              request.status === 'approved'
-                                ? 'success'
-                                : request.status === 'rejected'
-                                ? 'error'
-                                : request.status === 'completed'
-                                ? 'success'
-                                : request.status === 'deactivated'
-                                ? 'error'
-                                : 'warning'
-                            }
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                            {(request.bankSlipPath || request.cardProofPath) && (
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                onClick={() => {
-                                  console.log('📸 [PROOF] Clicked proof button for:', request._id);
-                                  console.log('  bankSlipPath:', request.bankSlipPath);
-                                  console.log('  cardProofPath:', request.cardProofPath);
-                                  handleOpenPaymentProof(request);
-                                }}
-                                sx={{ 
-                                  fontSize: '0.7rem',
-                                  padding: '4px 8px',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                📄 Proof
-                              </Button>
-                            )}
+                          </TableCell>
+                          <TableCell>
                             <IconButton
                               onClick={(e) => handleMenuOpen(e, request)}
                               disabled={request.status === 'completed' || request.status === 'deactivated'}
                               sx={{
                                 borderRadius: '8px',
                                 bgcolor: '#f0f0f0',
-                                '&:hover': {
-                                  bgcolor: '#e0e0e0',
-                                },
-                                '&.Mui-disabled': {
-                                  bgcolor: '#f5f5f5',
-                                },
+                                '&:hover': { bgcolor: '#e0e0e0' },
                               }}
                             >
                               <MoreVert />
                             </IconButton>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  {advertisingRequests.length === 0 && (
+                    <Box sx={{ p: 3, textAlign: 'center', bgcolor: '#f5f5f5' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No advertising requests found. 📭
+                      </Typography>
+                    </Box>
+                  )}
+                </>
               )}
 
               {tab === 4 && (
@@ -1022,18 +1090,6 @@ const Admin1Dashboard = () => {
             </MenuItem>,
           ]}
           {tab === 3 && [
-            selectedItem?.adPhotoBase64 && (
-              <MenuItem key="viewPhoto" onClick={() => { handleOpenPhotoPreview(selectedItem); handleMenuClose(); }}>
-                <ImageIcon sx={{ mr: 1 }} fontSize="small" />
-                View Photo
-              </MenuItem>
-            ),
-            selectedItem?.paymentSlipBase64 && (
-              <MenuItem key="viewPaymentProof" onClick={() => { handleOpenPaymentProof(selectedItem); handleMenuClose(); }}>
-                <ImageIcon sx={{ mr: 1 }} fontSize="small" />
-                View Payment Proof
-              </MenuItem>
-            ),
             selectedItem?.status === 'pending' && (
               <MenuItem key="approve" onClick={() => handleAction('approve')}>
                 <CheckCircle sx={{ mr: 1 }} fontSize="small" />
@@ -1052,18 +1108,16 @@ const Admin1Dashboard = () => {
                 Deactivate Ad
               </MenuItem>
             ),
-          ]}
+          ].filter(Boolean)}
           {tab === 4 && [
-            (selectedItem?.bankSlipPath || selectedItem?.cardProofPath) && (
-              <MenuItem key="viewProof" onClick={() => {
-                console.log('💳 [PROOF] Viewing payment proof for:', selectedItem._id);
-                handleOpenPaymentProof(selectedItem);
-                handleMenuClose();
-              }}>
-                <ImageIcon sx={{ mr: 1 }} fontSize="small" />
-                View Payment Proof
-              </MenuItem>
-            ),
+            <MenuItem key="viewProof" onClick={() => {
+              console.log('💳 [PROOF] Viewing payment proof for:', selectedItem._id);
+              handleOpenPaymentProof(selectedItem);
+              handleMenuClose();
+            }}>
+              <ImageIcon sx={{ mr: 1 }} fontSize="small" />
+              View Payment Proof
+            </MenuItem>,
             <MenuItem key="viewVehicle" onClick={() => handleOpenVehicleDetail(selectedItem.vehicleId)}>
               <DirectionsCar sx={{ mr: 1 }} fontSize="small" />
               View Vehicle Card
@@ -1099,6 +1153,8 @@ const Admin1Dashboard = () => {
                 ? 'user'
                 : tab === 1
                 ? 'vehicle'
+                : tab === 2
+                ? 'breakdown'
                 : tab === 3
                 ? 'advertising request'
                 : tab === 4

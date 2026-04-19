@@ -4,7 +4,7 @@
  */
 
 const User = require('../models/User');
-const { generateToken, generateOTP, sendOTPEmail } = require('../utils');
+const { generateToken, generateOTP, sendOTPEmail, sendIDVerificationEmail } = require('../utils');
 const { extractIDText, verifyIDNumber } = require('../utils/ocr');
 const { compareFaces } = require('../utils/faceVerification');
 const path = require('path');
@@ -356,16 +356,35 @@ const verifyID = async (req, res) => {
       extractedText = await extractIDText(idImagePath, idBackPath);
       ocrSuccess = true;
       
+      console.log('📄 [OCR RESULT] Extracted text length:', extractedText.combinedText.length);
+      console.log('📄 [OCR RESULT] First 150 chars:', extractedText.combinedText.substring(0, 150));
+      
       // Verify ID number against extracted text
       verificationResult = verifyIDNumber(idNumber, extractedText.combinedText);
+      
+      console.log('🔍 [VERIFICATION] Entered ID:', idNumber);
+      console.log('🔍 [VERIFICATION] Normalized Entered ID:', verificationResult.enteredID);
+      console.log('🔍 [VERIFICATION] Extracted text (normalized):', verificationResult.extractedText);
+      console.log('🔍 [VERIFICATION] Match result:', verificationResult.isMatch);
+      console.log('🔍 [VERIFICATION] Confidence:', verificationResult.confidence);
     } catch (ocrError) {
       console.error('OCR processing error:', ocrError.message);
-      ocrSuccess = false;
+      
+      // Special handling for image quality detection
+      if (ocrError.message === 'IMAGE_QUALITY_TOO_LOW') {
+        console.log('🚨 [OCR QUALITY] Image quality too poor to read');
+        ocrSuccess = false;
+      } else {
+        ocrSuccess = false;
+      }
     }
     
-    // Decision logic
-    if (ocrSuccess && verificationResult && (verificationResult.isMatch || verificationResult.confidence >= 70)) {
-      // ✅ ID verified successfully - OCR matched the ID number
+    // Decision logic: STRICT - only accept exact matches
+    // This ensures the ID number is actually found on the photo, not just scattered characters
+    if (ocrSuccess && verificationResult && verificationResult.isMatch) {
+      // ✅ ID verified successfully
+      console.log('✅ [APPROVED] ID verification PASSED | Exact Match | Confidence:', verificationResult.confidence + '%');
+      
       user.isIDVerified = true;
       user.manualIDVerification = false;
       user.manualIDStatus = null;
@@ -379,34 +398,40 @@ const verifyID = async (req, res) => {
       };
       await user.save({ validateBeforeSave: false });
       
+      // 📧 Send ID verification email notification
+      await sendIDVerificationEmail(user.email, user.firstName);
+      
       return res.json({
         success: true,
-        message: 'ID verified successfully.',
+        message: 'ID verified successfully. A confirmation email has been sent to you.',
         data: {
           user: user.getPublicProfile(),
           verification: verificationResult
         }
       });
     } else {
-      // ❌ OCR failed or numbers don't match - set for manual verification
-      user.manualIDVerification = true;
-      user.manualIDStatus = 'pending';
-      user.idVerification = {
-        idNumber: idNumber,
-        idFrontImage: idImagePath,
-        idBackImage: idBackPath,
-        extractedText: extractedText ? extractedText.combinedText : '',
-        ocrConfidence: verificationResult ? verificationResult.confidence : 0
-      };
-      await user.save({ validateBeforeSave: false });
+      // ❌ OCR failed or numbers don't match - Return error
+      let errorMessage = 'ID verification failed. ';
       
-      return res.json({
-        success: true,
-        message: 'ID could not be verified automatically. Admin will verify manually.',
+      if (!ocrSuccess) {
+        // Check if it was a quality issue
+        if (verificationResult && verificationResult.message && verificationResult.message.includes('quality')) {
+          errorMessage = 'Photo quality is too poor to read your ID. Please upload a clearer image with: Sharp focus • Straight-on view • Good lighting • Full ID visible';
+        } else {
+          errorMessage += 'Could not read ID document. Please upload a clear, sharp photo of your actual ID card (NIC, Passport, or Driver\'s License).';
+        }
+      } else if (verificationResult && !verificationResult.isMatch) {
+        errorMessage += 'ID number does not match the photo. Please verify you uploaded the correct ID card and entered the correct ID number.';
+      }
+      
+      console.log('❌ [REJECTION] Error:', errorMessage);
+      
+      return res.status(400).json({
+        success: false,
+        message: errorMessage,
         data: {
-          user: user.getPublicProfile(),
-          manualVerificationRequired: true,
-          ocrConfidence: verificationResult ? verificationResult.confidence : 0
+          ocrConfidence: verificationResult ? verificationResult.confidence : 0,
+          hint: 'Requirements: Clear image, sharp focus, straight angle, good lighting'
         }
       });
     }
