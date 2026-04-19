@@ -4,7 +4,7 @@
  * Displays live, upcoming, completed, user auctions, and won bids
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -19,7 +19,6 @@ import {
 } from '@mui/material';
 import {
   ArrowBack,
-  LocalOffer as BiddingIcon,
   Info,
   TrendingUp,
   Schedule,
@@ -32,6 +31,62 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import AddVehicleBiddingDialog from '../components/AddVehicleBiddingDialog';
 import BiddingCard from '../components/BiddingCard';
+import takgaalaLogo from '../assets/takgaala-logo.png';
+
+const headerStyles = {
+  container: {
+    display: 'grid',
+    gridTemplateColumns: { xs: '1fr', md: 'auto 1fr auto' },
+    alignItems: 'center',
+    gap: { xs: 2, md: 3 },
+    rowGap: { xs: 2, md: 0 },
+    mb: 4,
+  },
+  leftGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: { xs: 1, sm: 1.5 },
+    minWidth: 0,
+  },
+  backButton: {
+    px: 1,
+    minWidth: 'auto',
+    flexShrink: 0,
+  },
+  logo: {
+    height: { xs: 58, sm: 68, md: 72 },
+    width: 'auto',
+    objectFit: 'contain',
+    flexShrink: 0,
+    display: 'block',
+  },
+  center: {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: { xs: 'flex-start', md: 'center' },
+    textAlign: { xs: 'left', md: 'center' },
+    minWidth: 0,
+    justifySelf: { md: 'center' },
+  },
+  title: {
+    fontWeight: 700,
+    lineHeight: 1.1,
+  },
+  subtitle: {
+    mt: 0.5,
+  },
+  right: {
+    display: 'flex',
+    justifyContent: { xs: 'flex-start', md: 'flex-end' },
+    width: { xs: '100%', md: 'auto' },
+    justifySelf: { md: 'end' },
+  },
+  actionButton: {
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+  },
+};
 
 const BiddingPage = () => {
   const navigate = useNavigate();
@@ -50,19 +105,6 @@ const BiddingPage = () => {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login');
-      return;
-    }
-    fetchAuctionVehicles();
-    // Refresh every 30 seconds to update countdown timers
-    const refreshInterval = setInterval(() => {
-      fetchAuctionVehicles();
-    }, 30000);
-    return () => clearInterval(refreshInterval);
-  }, [isAuthenticated, navigate]);
-
   // Catch prefilled vehicle from navigation state
   const [prefilledData, setPrefilledData] = useState(null);
 
@@ -77,7 +119,7 @@ const BiddingPage = () => {
     }
   }, [location.state]);
 
-  const fetchAuctionVehicles = async () => {
+  const fetchAuctionVehicles = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -88,19 +130,27 @@ const BiddingPage = () => {
       const now = new Date();
       const live = allVehicles.filter(v => {
         const startDate = new Date(v.auctionStartDate);
-        const endDate = new Date(v.auctionEndDate);
-        return v.status === 'live' || (startDate <= now && endDate > now);
+        const endDate = new Date(v.endTime || v.auctionEndDate);
+        const statusLower = (v.status || '').toLowerCase();
+        return statusLower === 'live' || (startDate <= now && endDate > now);
       });
       
       const upcoming = allVehicles.filter(v => {
         const startDate = new Date(v.auctionStartDate);
-        const endDate = new Date(v.auctionEndDate);
-        return (v.status === 'upcoming' || startDate > now) && endDate > now;
+        const endDate = new Date(v.endTime || v.auctionEndDate);
+        const statusLower = (v.status || '').toLowerCase();
+        return (statusLower === 'upcoming' || startDate > now) && endDate > now;
       });
       
       const closed = allVehicles.filter(v => {
-        const endDate = new Date(v.auctionEndDate);
-        return ['closed', 'completed', 'cancelled'].includes(v.status) || endDate <= now;
+        const statusLower = (v.status || '').toLowerCase();
+        const rawEndTime = v.endTime || v.auctionEndDate;
+        const endDate = rawEndTime ? new Date(rawEndTime) : null;
+        const endedByTime = endDate instanceof Date && !Number.isNaN(endDate.getTime()) && endDate < now;
+        const isCompletedStatus = v.status === 'Completed' || statusLower === 'completed';
+        const isClosedStatus = v.status === 'closed' || statusLower === 'closed';
+
+        return isCompletedStatus || isClosedStatus || statusLower === 'cancelled' || endedByTime;
       });
 
       setLiveVehicles(live);
@@ -129,7 +179,41 @@ const BiddingPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+
+    fetchAuctionVehicles();
+
+    // Refresh every 30 seconds to update countdown timers
+    const refreshInterval = setInterval(() => {
+      fetchAuctionVehicles();
+    }, 30000);
+
+    return () => clearInterval(refreshInterval);
+  }, [isAuthenticated, navigate, fetchAuctionVehicles]);
+
+  useEffect(() => {
+    const handleAuctionCompleted = () => {
+      fetchAuctionVehicles();
+    };
+
+    window.addEventListener('auction:completed', handleAuctionCompleted);
+
+    if (sessionStorage.getItem('refreshCompletedAuctions') === '1') {
+      fetchAuctionVehicles();
+      setActiveTab(2);
+      sessionStorage.removeItem('refreshCompletedAuctions');
+    }
+
+    return () => {
+      window.removeEventListener('auction:completed', handleAuctionCompleted);
+    };
+  }, [fetchAuctionVehicles]);
 
   const handleCountdownComplete = (vehicleId) => {
     console.log(`⏱️ Countdown completed for vehicle ${vehicleId}, re-fetching data...`);
@@ -208,34 +292,49 @@ const BiddingPage = () => {
     <Box sx={{ bgcolor: '#fafafa', minHeight: 'calc(100vh - 80px)', py: 4 }}>
       <Container maxWidth="lg">
         {/* Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Box sx={headerStyles.container}>
+          <Box sx={headerStyles.leftGroup}>
             <Button
               variant="text"
               startIcon={<ArrowBack />}
               onClick={() => navigate('/')}
-              sx={{ mr: 2 }}
+              sx={headerStyles.backButton}
             >
               Back
             </Button>
-            <BiddingIcon sx={{ fontSize: 32, color: 'primary.main', mr: 2 }} />
+            <Box
+              component="img"
+              src={takgaalaLogo}
+              alt="TakGaala.lk"
+              sx={headerStyles.logo}
+              onError={(event) => {
+                event.currentTarget.onerror = null;
+                event.currentTarget.src = '/images/takgaala-logo.png';
+              }}
+            />
+          </Box>
+
+          <Box sx={headerStyles.center}>
             <Box>
-              <Typography variant="h4" sx={{ fontWeight: 600 }}>
+              <Typography variant="h4" sx={headerStyles.title}>
                 Bidding Platform
               </Typography>
-              <Typography variant="body2" color="textSecondary">
+              <Typography variant="body2" color="textSecondary" sx={headerStyles.subtitle}>
                 Bid on vehicles and get the best deals
               </Typography>
             </Box>
           </Box>
-          <Button
-            variant="contained"
-            color="success"
-            onClick={handleOpenAddDialog}
-            sx={{ fontWeight: 600 }}
-          >
-            + Add Vehicle for Bidding
-          </Button>
+
+          <Box sx={headerStyles.right}>
+            <Button
+              variant="contained"
+              color="success"
+              onClick={handleOpenAddDialog}
+              sx={headerStyles.actionButton}
+            >
+              + Add Vehicle for Bidding
+            </Button>
+          </Box>
         </Box>
 
         {/* Info Alert */}

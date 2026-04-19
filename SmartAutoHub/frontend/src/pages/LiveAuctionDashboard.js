@@ -628,6 +628,25 @@ const LiveAuctionDashboard = () => {
       console.log('✅ [SELLER] Executing accept bid for:', vehicleId);
       const response = await api.put(`/bidding/${vehicleId}/accept-bid`);
       if (response.data.success) {
+        const updatedAuction = response.data.data;
+
+        if (updatedAuction) {
+          setVehicle((prev) => ({ ...prev, ...updatedAuction }));
+          setCurrentBid(updatedAuction.finalPrice || updatedAuction.currentBid || 0);
+          if (updatedAuction.highestBidder) {
+            setHighestBidder(updatedAuction.highestBidder);
+          }
+        }
+
+        setIsLive(false);
+        sessionStorage.setItem('refreshCompletedAuctions', '1');
+        window.dispatchEvent(new CustomEvent('auction:completed', {
+          detail: {
+            auctionId: vehicleId,
+            status: response.data.status || updatedAuction?.status || 'Completed',
+          }
+        }));
+
         console.log('✅ [SELLER] Bid accepted successfully');
         toast.success('Auction closed! Highest bid accepted.');
       }

@@ -213,13 +213,15 @@ const getAuctionVehicles = async (req, res) => {
     const { page, limit, sortBy, sortOrder, search, status } = req.query;
 
     const now = new Date();
+    const normalizedStatus = typeof status === 'string' ? status.toLowerCase() : '';
+    const terminalStatusRegex = /^(closed|completed|cancelled)$/i;
 
     // ✅ AUTO-TRANSITION LOGIC: Update statuses based on current time
     // Upcoming → Live transition
     try {
       const upcomingToLive = await AuctionVehicle.updateMany(
         {
-          status: 'upcoming',
+          status: { $regex: /^upcoming$/i },
           auctionStartDate: { $lte: now },
           auctionEndDate: { $gt: now }
         },
@@ -236,7 +238,7 @@ const getAuctionVehicles = async (req, res) => {
     try {
       const liveToClosed = await AuctionVehicle.updateMany(
         {
-          status: 'live',
+          status: { $regex: /^live$/i },
           auctionEndDate: { $lte: now }
         },
         { $set: { status: 'closed' } }
@@ -252,24 +254,30 @@ const getAuctionVehicles = async (req, res) => {
     let filter = {};
 
     // Filter by status if provided
-    if (status === 'live') {
+    if (normalizedStatus === 'live') {
       // Only live vehicles currently active
-      filter.status = 'live';
+      filter.status = { $regex: /^live$/i };
       filter.auctionStartDate = { $lte: now };
       filter.auctionEndDate = { $gt: now };
-    } else if (status === 'upcoming') {
+    } else if (normalizedStatus === 'upcoming') {
       // Only upcoming vehicles not yet started
-      filter.status = 'upcoming';
+      filter.status = { $regex: /^upcoming$/i };
       filter.auctionStartDate = { $gt: now };
-    } else if (status === 'closed') {
-      // ✅ UPDATED: Include both closed and completed for the finished tab
-      filter.status = { $in: ['closed', 'completed', 'cancelled'] };
+    } else if (normalizedStatus === 'closed' || normalizedStatus === 'completed') {
+      // Finished auctions should match either terminal status or expired end time.
+      filter.$or = [
+        { status: terminalStatusRegex },
+        { auctionEndDate: { $lte: now } },
+        { endTime: { $lte: now } }
+      ];
     } else {
       // ✅ FIXED: Return live, upcoming, AND finished vehicles if no status filter
       filter.$or = [
-        { status: 'live', auctionStartDate: { $lte: now }, auctionEndDate: { $gt: now } },
-        { status: 'upcoming', auctionStartDate: { $gt: now } },
-        { status: { $in: ['closed', 'completed', 'cancelled'] } }
+        { status: { $regex: /^live$/i }, auctionStartDate: { $lte: now }, auctionEndDate: { $gt: now } },
+        { status: { $regex: /^upcoming$/i }, auctionStartDate: { $gt: now } },
+        { status: terminalStatusRegex },
+        { auctionEndDate: { $lte: now } },
+        { endTime: { $lte: now } }
       ];
     }
 
@@ -325,6 +333,7 @@ const getAuctionVehicles = async (req, res) => {
     // Enrich vehicles with actual status based on dates (for redundancy)
     const enrichedVehicles = vehicles.map(vehicle => {
       const vehicleObj = vehicle.toObject();
+      vehicleObj.endTime = vehicleObj.endTime || vehicleObj.auctionEndDate;
       if (vehicleObj.auctionEndDate <= now) {
         vehicleObj.actualStatus = 'closed';
       } else if (vehicleObj.auctionStartDate <= now) {
@@ -580,7 +589,8 @@ const placeBid = async (req, res) => {
       });
     }
 
-    if (vehicle.status === 'closed') {
+    const statusLower = (vehicle.status || '').toLowerCase();
+    if (['closed', 'completed', 'cancelled'].includes(statusLower)) {
       return res.status(400).json({
         success: false,
         message: 'This auction is closed'
@@ -1351,12 +1361,21 @@ const acceptHighestBid = async (req, res) => {
     }
 
     // Mark auction as completed and record winner
+    const completedAt = new Date();
+    const winningBidderId = vehicle.highestBidder?._id || vehicle.highestBidder;
+    const finalPrice = vehicle.currentBid || vehicle.startingPrice || 0;
+    const winnerName = vehicle.highestBidder?.firstName
+      ? `${vehicle.highestBidder.firstName} ${vehicle.highestBidder.lastName || ''}`.trim()
+      : 'Highest Bidder';
+
     vehicle.status = 'completed';
-    vehicle.winnerId = vehicle.highestBidder?._id || vehicle.highestBidder;
-    vehicle.auctionEndDate = new Date();
+    vehicle.winnerId = winningBidderId;
+    vehicle.finalPrice = finalPrice;
+    vehicle.auctionEndDate = completedAt;
+    vehicle.endTime = completedAt;
     await vehicle.save();
 
-    console.log(`✅ [SELLER] Accepted highest bid from ${vehicle.highestBidder.firstName} for ${vehicle.currentBid || 0}`);
+    console.log(`✅ [SELLER] Accepted highest bid from ${winnerName} for ${finalPrice}`);
 
     // BROADCAST: Notify all users via Socket.io
     const io = req.app.get('io');
@@ -1364,21 +1383,36 @@ const acceptHighestBid = async (req, res) => {
       const roomName = `auction_${auctionId}`;
       io.to(roomName).emit('auctionEnded', {
         vehicleId: auctionId,
-        status: 'completed',
+        status: 'Completed',
+        normalizedStatus: 'completed',
         winner: {
-          _id: vehicle.highestBidder._id,
-          name: `${vehicle.highestBidder.firstName} ${vehicle.highestBidder.lastName}`
+          _id: winningBidderId,
+          name: winnerName
         },
-        finalBid: vehicle.currentBid,
+        finalBid: finalPrice,
+        finalPrice,
+        endTime: completedAt,
+        auctionEndDate: completedAt,
         message: 'Auction ended: Highest bid accepted by seller'
       });
       console.log(`📢 [EMISSION] Broadcasted auctionEnded to room: ${roomName}`);
     }
 
+    const responseData = {
+      ...vehicle.toObject(),
+      status: 'Completed',
+      endTime: vehicle.endTime || completedAt,
+      finalPrice
+    };
+
     res.json({
       success: true,
       message: 'Highest bid accepted. Auction ended.',
-      data: vehicle
+      status: 'Completed',
+      normalizedStatus: 'completed',
+      endTime: completedAt,
+      finalPrice,
+      data: responseData
     });
   } catch (error) {
     console.error('❌ Error accepting bid:', error);

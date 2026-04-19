@@ -134,6 +134,12 @@ const auctionVehicleSchema = new mongoose.Schema({
     }
   },
 
+  finalPrice: {
+    type: Number,
+    default: null,
+    min: [0, 'Final price cannot be negative']
+  },
+
   highestBidder: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -154,6 +160,10 @@ const auctionVehicleSchema = new mongoose.Schema({
   auctionEndDate: {
     type: Date,
     required: [true, 'Auction end date is required']
+  },
+
+  endTime: {
+    type: Date
   },
 
   status: {
@@ -213,6 +223,12 @@ auctionVehicleSchema.virtual('fullName').get(function() {
 // Pre-save middleware
 auctionVehicleSchema.pre('save', function(next) {
   this.updatedAt = new Date();
+
+  // Keep legacy endTime and canonical auctionEndDate in sync.
+  if (this.auctionEndDate) {
+    this.endTime = this.auctionEndDate;
+  }
+
   next();
 });
 

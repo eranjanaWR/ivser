@@ -47,13 +47,24 @@ const BiddingCard = ({ vehicle, user, onCountdownComplete }) => {
   }, []);
 
   const startDate = new Date(vehicle?.auctionStartDate);
-  const endDate = new Date(vehicle?.auctionEndDate);
+  const rawEndTime = vehicle?.endTime || vehicle?.auctionEndDate;
+  const endDate = rawEndTime ? new Date(rawEndTime) : null;
   const statusLower = vehicle?.status?.toLowerCase() || '';
+  const hasValidStart = !Number.isNaN(startDate.getTime());
+  const hasValidEnd = endDate instanceof Date && !Number.isNaN(endDate.getTime());
+  const isCancelled = statusLower === 'cancelled';
+  const hasEndedByTime = hasValidEnd && currentTime > endDate;
 
   // Determine dynamic status
-  const isUpcoming = currentTime < startDate;
-  const isLive = currentTime >= startDate && currentTime <= endDate && statusLower !== 'completed' && statusLower !== 'closed' && statusLower !== 'cancelled';
-  const auctionIsClosed = currentTime > endDate || ['closed', 'completed', 'cancelled'].includes(statusLower);
+  const isUpcoming = hasValidStart && currentTime < startDate;
+  const isLive =
+    hasValidStart &&
+    hasValidEnd &&
+    currentTime >= startDate &&
+    currentTime <= endDate &&
+    !['completed', 'closed', 'cancelled'].includes(statusLower);
+  const auctionIsClosed = hasEndedByTime || ['closed', 'completed', 'cancelled'].includes(statusLower);
+  const closedBadgeLabel = auctionIsClosed ? (isCancelled ? 'CANCELLED' : 'COMPLETED') : '';
 
   // ========== STRICT ID COMPARISON WITH .toString() ==========
   // Ensures both MongoDB ObjectId and String IDs are compared correctly
@@ -124,8 +135,8 @@ const BiddingCard = ({ vehicle, user, onCountdownComplete }) => {
       >
         <Chip
           icon={auctionIsClosed ? <TrophyIcon /> : isLive ? <TrendingUp /> : <Schedule />}
-          label={auctionIsClosed ? 'CLOSED' : isLive ? 'LIVE' : 'UPCOMING'}
-          color={auctionIsClosed ? 'success' : isLive ? 'error' : 'warning'}
+          label={auctionIsClosed ? closedBadgeLabel : isLive ? 'LIVE' : 'UPCOMING'}
+          color={isCancelled ? 'default' : auctionIsClosed ? 'success' : isLive ? 'error' : 'warning'}
           variant="filled"
           size="small"
           sx={{
@@ -208,9 +219,9 @@ const BiddingCard = ({ vehicle, user, onCountdownComplete }) => {
           <Box sx={{ mb: 2, p: 1.5, bgcolor: '#e8f5e9', borderRadius: 1, border: '1px solid #4caf50' }}>
             <Typography variant="body2" sx={{ fontWeight: 600, color: '#2e7d32', display: 'flex', alignItems: 'center', gap: 1 }}>
               <TrophyIcon fontSize="small" />
-              Auction Closed
+              {isCancelled ? 'Auction Cancelled' : 'Auction Completed'}
             </Typography>
-            {vehicle.highestBidder && (
+            {!isCancelled && vehicle.highestBidder?.firstName && (
               <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
                 Winner: {vehicle.highestBidder.firstName} {vehicle.highestBidder.lastName}
               </Typography>
@@ -249,7 +260,24 @@ const BiddingCard = ({ vehicle, user, onCountdownComplete }) => {
             {/* CLOSED AUCTION BUTTONS */}
             {auctionIsClosed ? (
               <>
-                {isWinner ? (
+                {isCancelled ? (
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    size="large"
+                    disabled
+                    sx={{
+                      mt: 'auto',
+                      mb: 1,
+                      backgroundColor: '#bdbdbd',
+                      color: '#616161',
+                      fontWeight: 700,
+                      textTransform: 'none',
+                    }}
+                  >
+                    Auction Cancelled
+                  </Button>
+                ) : isWinner ? (
                   // ✅ WINNER: Show green "Contact Seller" button
                   <Button
                     variant="contained"
