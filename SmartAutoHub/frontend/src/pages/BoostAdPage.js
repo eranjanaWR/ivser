@@ -42,38 +42,29 @@ import { useAuth } from '../context/AuthContext';
 
 const boostPackages = [
   {
-    id: 'free',
-    name: 'Free Boost',
-    duration: 28,
-    price: 0,
-    icon: <Bolt sx={{ fontSize: 32, color: '#9e9e9e' }} />,
-    features: ['28 days featured listing', 'Basic listing visibility', 'Email alert to seller', '⭐ One time redeemable'],
-    isFree: true,
-  },
-  {
     id: 'standard',
     name: 'Standard Boost',
     duration: 7,
-    price: 3999,
+    price: 1000,
     icon: <Bolt sx={{ fontSize: 32, color: '#ffd700' }} />,
-    features: ['7 days featured listing', 'Top search results', 'Email alerts to interests', 'Social media share'],
+    features: ['7 days featured listing', '24/7 visibility & support'],
   },
   {
     id: 'premium',
     name: 'Premium Boost',
     duration: 14,
-    price: 7999,
+    price: 2500,
     icon: <Star sx={{ fontSize: 32, color: '#ffd700' }} />,
-    features: ['14 days featured listing', 'Homepage spotlight', 'Priority search rankings', 'Unlimited email alerts', 'Direct buyer notifications', 'Weekly activity report'],
+    features: ['14 days featured listing', '24/7 visibility & support'],
     popular: true,
   },
   {
     id: 'elite',
     name: 'Elite Boost',
     duration: 30,
-    price: 13999,
+    price: 5000,
     icon: <EmojiEvents sx={{ fontSize: 32, color: '#ffd700' }} />,
-    features: ['30 days featured listing', 'Homepage top position', 'All premium features', 'Dedicated account manager', '24/7 visibility & support', 'Performance analytics', 'Re-boost discount (20% off)'],
+    features: ['30 days featured listing', '24/7 visibility & support'],
   },
 ];
 
@@ -86,11 +77,12 @@ const BoostAdPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [selectedPackage, setSelectedPackage] = useState('free'); // Default to FREE not PREMIUM
+  const [selectedPackage, setSelectedPackage] = useState(null); // Require explicit selection
   const [activeStep, setActiveStep] = useState(0);
   const [bankSlipPreview, setBankSlipPreview] = useState(null);
   const [cardProofPreview, setCardProofPreview] = useState(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [freeBoostUsed, setFreeBoostUsed] = useState(false);
   const [formData, setFormData] = useState({
     startDate: new Date().toISOString().split('T')[0],
     paymentMethod: 'credit_card',
@@ -113,7 +105,32 @@ const BoostAdPage = () => {
       return;
     }
     fetchVehicle();
+    fetchUserData();
   }, [vehicleId, isAuthenticated, navigate]);
+
+  const fetchUserData = async () => {
+    try {
+      const response = await api.get('/auth/me');
+      console.log('📊 [BOOST] Fetched user data:', response.data);
+      if (response.data.data.user) {
+        const userData = response.data.data.user;
+        console.log('👤 [BOOST] User usedPackages:', userData.usedPackages);
+        if (userData.usedPackages && userData.usedPackages.freeBoostUsed) {
+          console.log('⚠️ [BOOST] Free Boost already used by user');
+          setFreeBoostUsed(true);
+        } else {
+          console.log('✅ [BOOST] Free Boost not yet used');
+          setFreeBoostUsed(false);
+        }
+      } else {
+        console.warn('⚠️ [BOOST] No user data in response');
+        setFreeBoostUsed(false);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching user data:', error);
+      setFreeBoostUsed(false);
+    }
+  };
 
   const fetchVehicle = async () => {
     setLoading(true);
@@ -137,6 +154,12 @@ const BoostAdPage = () => {
   };
 
   const handlePackageSelect = (packageId) => {
+    // Check if user is trying to use Free Boost but has already used it
+    if (packageId === 'free' && freeBoostUsed) {
+      setError('You have already used the Free Boost package (one time redeemable). Please choose a different package.');
+      return;
+    }
+    
     setSelectedPackage(packageId);
     // Automatically set payment method to 'free' for free packages
     if (packageId === 'free') {
@@ -235,6 +258,14 @@ const BoostAdPage = () => {
         setError('Please select a boost package');
         return;
       }
+      
+      // Additional check: prevent proceeding with Free Boost if already used
+      if (selectedPackage === 'free' && freeBoostUsed) {
+        setError('You have already used the Free Boost package (one-time redeemable). Please select a different package.');
+        setSelectedPackage(null);
+        return;
+      }
+      
       setActiveStep(1);
       setError('');
       return;
@@ -286,6 +317,12 @@ const BoostAdPage = () => {
     try {
       if (!formData.contactPerson || !formData.contactPhone || !formData.startDate) {
         setError('Please fill in all required fields');
+        return;
+      }
+
+      // Safety check: prevent Free Boost submission if already used
+      if (selectedPackage === 'free' && freeBoostUsed) {
+        setError('You have already used the Free Boost package (one-time redeemable). Please select a different package.');
         return;
       }
 
@@ -396,6 +433,10 @@ const BoostAdPage = () => {
       console.log('🚀 [SUBMIT] Sending POST to /vehicles/' + vehicleId + '/boost');
       const { data } = await api.post(`/vehicles/${vehicleId}/boost`, submitData);
 
+      // Refresh user data to update freeBoostUsed state
+      console.log('🔄 [SUBMIT] Refreshing user data after successful boost...');
+      await fetchUserData();
+
       // Move to success step
       setActiveStep(3);
       setSubmitting(false);
@@ -473,21 +514,28 @@ const BoostAdPage = () => {
                 ✅ Selected: <strong>{boostPackages.find(p => p.id === selectedPackage)?.name}</strong>
               </Alert>
             )}
-            <Grid container spacing={3}>
+            <Grid container spacing={3} justifyContent="center">
               {boostPackages.map((pkg) => (
                 <Grid item xs={12} sm={6} md={3} lg={3} key={pkg.id}>
                   <Card
-                    onClick={() => handlePackageSelect(pkg.id)}
+                    onClick={() => {
+                      // Prevent clicking if Free Boost is already used
+                      if (!(pkg.id === 'free' && freeBoostUsed)) {
+                        handlePackageSelect(pkg.id);
+                      }
+                    }}
                     sx={{
-                      cursor: 'pointer',
+                      cursor: (pkg.id === 'free' && freeBoostUsed) ? 'not-allowed' : 'pointer',
                       border: selectedPackage === pkg.id ? '3px solid' : '1px solid',
                       borderColor: selectedPackage === pkg.id ? 'primary.main' : 'grey.300',
-                      bgcolor: selectedPackage === pkg.id ? 'primary.50' : 'white',
+                      bgcolor: (pkg.id === 'free' && freeBoostUsed) ? '#f5f5f5' : (selectedPackage === pkg.id ? 'primary.50' : 'white'),
+                      opacity: (pkg.id === 'free' && freeBoostUsed) ? 0.6 : 1,
                       transition: 'all 0.3s ease',
+                      pointerEvents: (pkg.id === 'free' && freeBoostUsed) ? 'none' : 'auto',
                       '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
-                        borderColor: 'primary.main',
+                        transform: (pkg.id === 'free' && freeBoostUsed) ? 'none' : 'translateY(-4px)',
+                        boxShadow: (pkg.id === 'free' && freeBoostUsed) ? 'none' : '0 8px 16px rgba(0,0,0,0.1)',
+                        borderColor: (pkg.id === 'free' && freeBoostUsed) ? 'grey.300' : 'primary.main',
                       },
                       position: 'relative',
                     }}
@@ -517,6 +565,13 @@ const BoostAdPage = () => {
                       </Box>
                     </CardContent>
                   </Card>
+                  {pkg.id === 'free' && freeBoostUsed && (
+                    <Box sx={{ bgcolor: '#fff3cd', p: 1.5, borderTop: '1px solid #ffc107', textAlign: 'center', mt: -2, position: 'relative', zIndex: 1 }}>
+                      <Typography variant="caption" sx={{ color: '#856404', fontWeight: 600 }}>
+                        ✓ Already Redeemed
+                      </Typography>
+                    </Box>
+                  )}
                 </Grid>
               ))}
             </Grid>

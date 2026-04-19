@@ -69,6 +69,13 @@ const VerificationPage = () => {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
+  // Auto-verify ID when file is selected using Tesseract.js
+  useEffect(() => {
+    if (idFile && activeStep === 1) {
+      handleUploadID();
+    }
+  }, [idFile, activeStep]);
+
   // Determine initial step based on user verification status
   useEffect(() => {
     if (user) {
@@ -176,17 +183,22 @@ const VerificationPage = () => {
       const response = await api.post('/auth/verify-id', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      await refreshUser();
       
-      // Check if manual verification is required
-      if (response.data.data?.manualVerificationRequired) {
-        setSuccess('ID submitted for manual verification. Admin will review shortly.');
+      // Only advance if verification was successful
+      if (response.data.success) {
+        await refreshUser();
+        setSuccess('ID verified successfully! A confirmation email has been sent to you.');
+        // Auto-move to next step after successful verification
+        setTimeout(() => setActiveStep(2), 1500);
       } else {
-        setSuccess('ID verified successfully!');
+        // If API returns false for success, treat as error
+        setError(response.data.message || 'ID verification failed');
+        setIdFile(null);
       }
-      setActiveStep(2);
     } catch (err) {
-      setError(err.response?.data?.message || 'ID verification failed');
+      setError(err.response?.data?.message || 'ID verification failed. Please try again with a clear photo.');
+      // Reset file selection on error
+      setIdFile(null);
     }
     setLoading(false);
   };
@@ -319,13 +331,45 @@ const VerificationPage = () => {
         return (
           <Card elevation={0} sx={{ border: '1px solid', borderColor: 'grey.200' }}>
             <CardContent sx={{ p: 4, textAlign: 'center' }}>
-              <Badge sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+              <Badge sx={{ fontSize: 64, color: loading ? 'warning.main' : 'primary.main', mb: 2 }} />
               <Typography variant="h6" fontWeight="bold" gutterBottom>
                 Upload Your ID
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Upload a clear photo of your government-issued ID (NIC, Passport, or Driver's License)
-              </Typography>
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'info.lighter', borderRadius: 1, textAlign: 'left' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 'bold' }}>
+                  📱 Photo Requirements:
+                </Typography>
+                <Typography variant="caption" component="div" sx={{ ml: 1, mb: 0.5, color: 'error.main', fontWeight: 'bold' }}>
+                  ✓ Upload only horizontal pics
+                </Typography>
+                <Typography variant="caption" component="div" color="text.secondary" sx={{ ml: 1, mb: 0.5 }}>
+                  ✓ <strong>Sharp & in focus</strong> - Not blurry
+                </Typography>
+                <Typography variant="caption" component="div" color="text.secondary" sx={{ ml: 1, mb: 0.5 }}>
+                  ✓ <strong>Good lighting</strong> - No shadows or glare
+                </Typography>
+                <Typography variant="caption" component="div" color="text.secondary" sx={{ ml: 1, mb: 0.5 }}>
+                  ✓ <strong>Straight-on angle</strong> - Not tilted
+                </Typography>
+                <Typography variant="caption" component="div" color="text.secondary" sx={{ ml: 1 }}>
+                  ✓ <strong>Full ID visible</strong> - All edges in frame
+                </Typography>
+                <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 1.5, fontStyle: 'italic' }}>
+                  Accepted documents: <strong>National ID Card (NIC), Passport, or Driver's License</strong>
+                </Typography>
+              </Box>
+              
+              {loading && (
+                <Box sx={{ mb: 3, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
+                  <CircularProgress size={32} sx={{ mb: 1 }} />
+                  <Typography variant="body2" color="info.main" sx={{ mt: 1 }}>
+                    Processing your ID with AI verification...
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    This may take a few seconds (Tesseract.js OCR processing)
+                  </Typography>
+                </Box>
+              )}
               
               <input
                 type="file"
@@ -333,35 +377,35 @@ const VerificationPage = () => {
                 accept="image/*"
                 style={{ display: 'none' }}
                 onChange={(e) => setIdFile(e.target.files[0])}
+                disabled={loading}
               />
               
               <Box
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => !loading && fileInputRef.current?.click()}
                 sx={{
                   border: '2px dashed',
                   borderColor: idFile ? 'primary.main' : 'grey.300',
                   borderRadius: 2,
                   p: 4,
                   mb: 3,
-                  cursor: 'pointer',
+                  cursor: loading ? 'not-allowed' : 'pointer',
                   bgcolor: idFile ? 'primary.light' : 'transparent',
-                  '&:hover': { borderColor: 'primary.main' },
+                  opacity: loading ? 0.6 : 1,
+                  '&:hover': { borderColor: loading ? 'grey.300' : 'primary.main' },
+                  transition: 'all 0.3s ease'
                 }}
               >
                 <CloudUpload sx={{ fontSize: 48, color: 'grey.500', mb: 1 }} />
                 <Typography>
-                  {idFile ? idFile.name : 'Click to upload or drag and drop'}
+                  {loading ? 'Verifying ID with Tesseract.js...' : idFile ? idFile.name : 'Click to upload or drag and drop'}
                 </Typography>
               </Box>
               
-              <Button
-                variant="contained"
-                onClick={handleUploadID}
-                disabled={loading || !idFile}
-                sx={{ px: 4 }}
-              >
-                {loading ? <CircularProgress size={24} /> : 'Verify ID'}
-              </Button>
+              {!loading && idFile && (
+                <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 1 }}>
+                  ✓ File selected. Verification starts automatically...
+                </Typography>
+              )}
             </CardContent>
           </Card>
         );

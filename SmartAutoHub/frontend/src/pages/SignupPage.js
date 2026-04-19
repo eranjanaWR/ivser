@@ -277,6 +277,7 @@ const SignupPage = () => {
               value={formData.idCardNumber}
               onChange={handleChange}
               required
+              autoComplete="off"
               sx={{ mb: 2.5 }}
               helperText="Enter your government-issued ID number"
             />

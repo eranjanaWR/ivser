@@ -9,9 +9,6 @@ import axios from 'axios';
 const api = axios.create({
   // Use relative URL to connect to same port/domain
   baseURL: '/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // Request interceptor to add auth token
@@ -21,6 +18,15 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Don't set Content-Type for FormData - let axios handle it
+    if (!(config.data instanceof FormData)) {
+      config.headers['Content-Type'] = 'application/json';
+    } else {
+      // Remove Content-Type header for FormData to allow axios to set it with boundary
+      delete config.headers['Content-Type'];
+    }
+    
     return config;
   },
   (error) => {
