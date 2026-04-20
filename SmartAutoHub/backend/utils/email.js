@@ -209,6 +209,104 @@ const sendBreakdownNotification = async (repairmanEmail, repairmanName, location
 };
 
 /**
+ * Send ID verification confirmation email
+ */
+const sendIDVerificationEmail = async (email, firstName) => {
+  try {
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping ID verification email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
+    
+    const subject = 'ID Verification Successful - TakGaala.lk';
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: subject,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; }
+            .header h1 { margin: 0; font-size: 28px; }
+            .content { padding: 40px; background: #f9f9f9; }
+            .success-box { background: #d4edda; border-left: 4px solid #28a745; padding: 20px; margin: 20px 0; border-radius: 4px; }
+            .success-box h3 { margin-top: 0; color: #155724; }
+            .success-box p { color: #155724; margin: 10px 0; }
+            .checkmark { font-size: 48px; color: #28a745; text-align: center; }
+            .verification-details { background: white; border: 1px solid #ddd; padding: 20px; margin: 20px 0; border-radius: 4px; }
+            .verification-details p { margin: 10px 0; }
+            .detail-label { font-weight: bold; color: #667eea; }
+            .next-steps { background: #e7f3ff; border-left: 4px solid #0066ff; padding: 20px; margin: 20px 0; border-radius: 4px; }
+            .next-steps h3 { margin-top: 0; color: #004085; }
+            .next-steps ol { padding-left: 20px; }
+            .next-steps li { color: #004085; margin: 8px 0; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+            .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 4px; margin: 20px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🎉 TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>ID Verification Successful, ${firstName}!</h2>
+              
+              <div class="success-box">
+                <div class="checkmark">✓</div>
+                <h3>Congratulations!</h3>
+                <p>Your identity document has been successfully verified. Your account is one step closer to being fully verified.</p>
+              </div>
+              
+              <div class="verification-details">
+                <h3 style="margin-top: 0; color: #333;">Verification Status</h3>
+                <p><span class="detail-label">Email Verification:</span> ✓ Completed</p>
+                <p><span class="detail-label">ID Verification:</span> ✓ Completed</p>
+                <p><span class="detail-label">Face Verification:</span> ⏳ Pending</p>
+              </div>
+              
+              <div class="next-steps">
+                <h3>What's Next?</h3>
+                <p>To complete your account verification, you need to:</p>
+                <ol>
+                  <li>Complete Face Verification by taking a selfie</li>
+                  <li>Your selfie will be compared with your ID document</li>
+                  <li>Once verified, your account will be fully activated</li>
+                </ol>
+              </div>
+              
+              <p style="text-align: center;">
+                <a href="${process.env.FRONTEND_URL}/verification" class="button">Continue to Face Verification</a>
+              </p>
+              
+              <p>If you have any questions or encounter any issues, please don't hesitate to contact our support team.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+              <p>This is an automated message, please do not reply to this email.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ ID Verification email sent successfully to:', email, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending ID verification email to', email, ':', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
  * Send generic email with template support
  */
 const sendEmail = async (options) => {
@@ -557,6 +655,7 @@ module.exports = {
   sendNotificationEmail,
   sendTestDriveNotification,
   sendBreakdownNotification,
+  sendIDVerificationEmail,
   sendEmail,
   sendPasswordResetOTP,
   sendPriceChangeNotification

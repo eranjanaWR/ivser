@@ -220,11 +220,25 @@ const getVehicleById = async (req, res) => {
  */
 const createVehicle = async (req, res) => {
   try {
+    console.log('🚗 ===== CREATE VEHICLE REQUEST =====');
+    console.log('📝 Body:', req.body);
+    console.log('📂 Files received:', req.files?.length || 0);
+    
     const {
       brand, model, year, mileage, price, fuelType, transmission,
       type, bodyType, color, engineCapacity, engineSize, doors, seats, condition,
       description, features, vin, location, manufacturedCountry
     } = req.body;
+    
+    console.log('📋 Extracted fields:');
+    console.log('  brand:', brand);
+    console.log('  model:', model);
+    console.log('  year:', year);
+    console.log('  price:', price);
+    console.log('  mileage:', mileage);
+    console.log('  fuelType:', fuelType);
+    console.log('  transmission:', transmission);
+    console.log('  type:', type, 'bodyType:', bodyType);
     
     // Parse features if it's a string or array
     let parsedFeatures = features;
@@ -1038,6 +1052,34 @@ const boostVehicleAd = async (req, res) => {
       });
     }
 
+    // Check if user is trying to use Free Boost and has already used it
+    if (packageType === 'free') {
+      const User = require('../models/User');
+      const packageKey = 'freeBoostUsed';
+      
+      // Check using userId if provided
+      if (userId) {
+        const user = await User.findById(userId);
+        if (user && user.usedPackages && user.usedPackages[packageKey]) {
+          console.warn('❌ [BOOST] Free boost already used by user:', userId);
+          return res.status(400).json({
+            success: false,
+            message: 'Free boost package is one-time redeemable. You have already used it.'
+          });
+        }
+      }
+      
+      // Also check using email as fallback
+      const userByEmail = await User.findOne({ email: notificationEmail.toLowerCase() });
+      if (userByEmail && userByEmail.usedPackages && userByEmail.usedPackages[packageKey]) {
+        console.warn('❌ [BOOST] Free boost already used by email:', notificationEmail);
+        return res.status(400).json({
+          success: false,
+          message: 'Free boost package is one-time redeemable. You have already used it.'
+        });
+      }
+    }
+
     // Check if vehicle exists
     const vehicle = await Vehicle.findById(vehicleId);
     if (!vehicle) {
@@ -1133,6 +1175,40 @@ const boostVehicleAd = async (req, res) => {
     console.log('  - bankSlipPath:', savedBoost.bankSlipPath || 'NOT SET');
     console.log('  - cardProofPath:', savedBoost.cardProofPath || 'NOT SET');
     console.log('  - duration:', savedBoost.duration);
+
+    // If Free Boost is used, mark it as used in user profile
+    if (packageType === 'free') {
+      const User = require('../models/User');
+      const updateData = {
+        'usedPackages.freeBoostUsed': true,
+        'usedPackages.freeBoostUsedAt': new Date(),
+        'usedPackages.freeBoostId': savedBoost._id
+      };
+      
+      // Try to update using userId first
+      if (userId) {
+        const updateResult = await User.findByIdAndUpdate(userId, updateData, { new: true });
+        if (updateResult) {
+          console.log('✓ Marked free boost package as used for userId:', userId);
+        } else {
+          console.warn('⚠️ [BOOST] Failed to update user by userId:', userId);
+        }
+      }
+      
+      // Fallback: update using email
+      if (!userId || !updateResult) {
+        const emailUpdateResult = await User.findOneAndUpdate(
+          { email: notificationEmail.toLowerCase() },
+          updateData,
+          { new: true }
+        );
+        if (emailUpdateResult) {
+          console.log('✓ Marked free boost package as used for email:', notificationEmail);
+        } else {
+          console.warn('⚠️ [BOOST] Failed to update user by email:', notificationEmail);
+        }
+      }
+    }
 
     // Send notification to admins only for paid boosts
     if (packageType !== 'free') {
