@@ -48,6 +48,17 @@ jobs:
       - name: Remove frontend node_modules from deployment package
         run: rm -rf "$APP_PATH/frontend/node_modules"
 
+      - name: Remove local backend env file from deployment package
+        run: rm -f "$APP_PATH/backend/.env"
+
+      - name: Create deployment ZIP from SmartAutoHub root
+        run: |
+          cd "$APP_PATH"
+          zip -r ../release.zip . \
+            -x "backend/node_modules/.cache/*" \
+            -x "frontend/node_modules/*" \
+            -x "**/.DS_Store"
+
       - name: Login to Azure with OIDC
         uses: azure/login@v2
         with:
@@ -60,5 +71,5 @@ jobs:
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           slot-name: Production
-          package: ${{ env.APP_PATH }}
+          package: release.zip
           
