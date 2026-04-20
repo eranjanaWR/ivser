@@ -377,11 +377,187 @@ const sendEmail = async (options) => {
   }
 };
 
+/**
+ * Send password reset OTP email
+ */
+const sendPasswordResetOTP = async (email, otp, firstName) => {
+  try {
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping password reset email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
+    
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Password Reset Request - TakGaala.lk',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .otp-box { background: #fff; border: 2px solid #d32f2f; padding: 20px; text-align: center; margin: 20px 0; }
+            .otp-code { font-size: 32px; font-weight: bold; color: #d32f2f; letter-spacing: 5px; }
+            .warning { background: #fff3e0; border-left: 4px solid #f57c00; padding: 15px; margin: 20px 0; color: #e65100; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>Password Reset Request</h2>
+              <p>Hello ${firstName},</p>
+              <p>We received a request to reset the password for your TakGaala.lk account.</p>
+              <p>Use the following OTP to reset your password:</p>
+              <div class="otp-box">
+                <div class="otp-code">${otp}</div>
+              </div>
+              <div class="warning">
+                <strong>⚠️ Important:</strong> This OTP is valid for <strong>1 minute only</strong>. Do not share this code with anyone.
+              </div>
+              <p>If you didn't request this password reset, please ignore this email. Your account remains secure.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Password reset OTP email sent successfully to:', email, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending password reset OTP email to', email, ':', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send price change notification email
+ */
+const sendPriceChangeNotification = async (buyerEmail, buyerName, vehicleInfo, oldPrice, newPrice) => {
+  try {
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping price change email to:', buyerEmail);
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    const priceChange = newPrice - oldPrice;
+    const priceChangePercent = ((priceChange / oldPrice) * 100).toFixed(1);
+    const isPriceIncrease = priceChange > 0;
+    
+    const priceColor = isPriceIncrease ? '#d32f2f' : '#2e7d32'; // Red for increase, Green for decrease
+    const priceChangeLabel = isPriceIncrease ? 'Price Increased' : 'Price Decreased';
+    const priceChangeIcon = isPriceIncrease ? '📈' : '📉';
+
+    const formatPrice = (price) => {
+      return new Intl.NumberFormat('en-LK', {
+        style: 'currency',
+        currency: 'LKR',
+        maximumFractionDigits: 0,
+      }).format(price);
+    };
+
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: buyerEmail,
+      subject: `Price Alert: ${vehicleInfo.brand} ${vehicleInfo.model} - ${priceChangeLabel}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .price-alert { background: #fff; border-left: 5px solid ${priceColor}; padding: 20px; margin: 20px 0; }
+            .price-box { background: ${priceColor}; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 15px 0; }
+            .old-price { font-size: 14px; opacity: 0.9; text-decoration: line-through; }
+            .new-price { font-size: 28px; font-weight: bold; }
+            .price-change { font-size: 18px; margin-top: 10px; }
+            .vehicle-info { background: #fff; padding: 15px; border: 1px solid #e0e0e0; border-radius: 8px; margin: 20px 0; }
+            .vehicle-name { font-size: 18px; font-weight: bold; color: #1a1a1a; }
+            .vehicle-year { color: #666; font-size: 14px; }
+            .action-button { background: #1976d2; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>${priceChangeIcon} Price Alert for Your Wishlist Vehicle</h2>
+              <p>Hello ${buyerName},</p>
+              <p>A vehicle you're watching in your wishlist has had a price change!</p>
+              
+              <div class="vehicle-info">
+                <div class="vehicle-name">${vehicleInfo.brand} ${vehicleInfo.model}</div>
+                <div class="vehicle-year">Year: ${vehicleInfo.year}</div>
+              </div>
+
+              <div class="price-alert">
+                <h3 style="color: ${priceColor}; margin-top: 0;">Price Changed</h3>
+                <div class="price-box">
+                  <div class="old-price">Previous Price: ${formatPrice(oldPrice)}</div>
+                  <div class="new-price">${formatPrice(newPrice)}</div>
+                  <div class="price-change" style="color: ${priceColor};">
+                    ${isPriceIncrease ? '+' : ''}${formatPrice(priceChange)} (${isPriceIncrease ? '+' : ''}${priceChangePercent}%)
+                  </div>
+                </div>
+              </div>
+
+              <p style="text-align: center; margin-top: 25px;">
+                <a href="${process.env.FRONTEND_URL}/vehicles/${vehicleInfo.vehicleId}" class="action-button">
+                  View Vehicle
+                </a>
+              </p>
+
+              <p style="color: #666; font-size: 14px; margin-top: 25px;">
+                You received this email because you have this vehicle in your wishlist and price change notifications enabled.
+              </p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Price change notification email sent to:', buyerEmail, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending price change email to', buyerEmail, ':', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   generateOTP,
   sendOTPEmail,
   sendNotificationEmail,
   sendTestDriveNotification,
   sendBreakdownNotification,
-  sendEmail
+  sendEmail,
+  sendPasswordResetOTP,
+  sendPriceChangeNotification
 };

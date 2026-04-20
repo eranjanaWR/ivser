@@ -11,6 +11,7 @@ const Boost = require('../models/Boost');
 const ViewHistory = require('../models/ViewHistory');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const notificationController = require('./notificationController');
+const priceNotificationController = require('./priceNotificationController');
 const { sendNotificationEmail } = require('../utils/email');
 
 /**
@@ -375,6 +376,11 @@ const updateVehicle = async (req, res) => {
       });
     }
     
+    // PRICE CHANGE NOTIFICATION: Capture old price before updating
+    const oldPrice = vehicle.price;
+    const newPrice = req.body.price ? parseFloat(req.body.price) : vehicle.price;
+    const priceChanged = oldPrice !== newPrice;
+    
     // Handle new image uploads - save to database
     if (req.files && req.files.length > 0) {
       const existingImageCount = vehicle.images ? vehicle.images.length : 0;
@@ -475,6 +481,46 @@ const updateVehicle = async (req, res) => {
     // Update other fields
     Object.assign(vehicle, req.body);
     vehicle = await vehicle.save({ runValidators: true });
+    
+    // PRICE CHANGE NOTIFICATION: Trigger price change notifications
+    if (priceChanged && vehicle.status === 'active') {
+      try {
+        console.log(`💰 Price changed for vehicle ${vehicle._id}: ${oldPrice} → ${newPrice}`);
+        
+        // Get all buyers who have this vehicle in their wishlist (savedBy array)
+        const buyerIds = vehicle.savedBy || [];
+        
+        if (buyerIds.length > 0) {
+          console.log(`📧 Found ${buyerIds.length} buyers with this vehicle in wishlist`);
+          
+          // Prepare vehicle info snapshot
+          const vehicleInfo = {
+            vehicleId: vehicle._id,
+            brand: vehicle.brand,
+            model: vehicle.model,
+            year: vehicle.year,
+            image: vehicle.images?.[0]
+          };
+          
+          // Call the price notification service
+          const result = await priceNotificationController.notifyPriceChange(
+            vehicle._id,
+            oldPrice,
+            newPrice,
+            vehicleInfo,
+            req.user._id,
+            buyerIds
+          );
+          
+          console.log(`✅ Price change notifications sent: ${result.notificationCount} notifications, ${result.emailCount} emails`);
+        } else {
+          console.log(`⚠️ No buyers with this vehicle in wishlist. No notifications sent.`);
+        }
+      } catch (notificationError) {
+        console.error('Error sending price change notifications:', notificationError);
+        // Don't fail the update if notification fails
+      }
+    }
     
     // Trigger notifications if vehicle is now available
     if (isBecomingAvailable && wasUnavailable) {

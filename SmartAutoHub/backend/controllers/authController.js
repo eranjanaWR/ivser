@@ -596,6 +596,139 @@ const getVerificationStatus = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Forgot Password - Send OTP to user's email
+ * @route   POST /api/auth/forgot-password
+ * @access  Public
+ */
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No user found with this email'
+      });
+    }
+    
+    // Generate OTP for password reset (1 minute validity)
+    const { generateOTP, sendPasswordResetOTP } = require('../utils');
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 1 * 60 * 1000); // 1 minute
+    
+    // Save OTP to user document
+    user.passwordResetOTP = {
+      code: otp,
+      expiresAt: otpExpiry
+    };
+    await user.save({ validateBeforeSave: false });
+    
+    // Send OTP email
+    const emailResult = await sendPasswordResetOTP(email, otp, user.firstName);
+    
+    res.json({
+      success: true,
+      message: 'Password reset OTP sent to your email',
+      data: {
+        emailSent: emailResult.success
+      }
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing forgot password request',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @desc    Verify Reset OTP and Reset Password
+ * @route   POST /api/auth/reset-password
+ * @access  Public
+ */
+const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    
+    // Validate input
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, OTP, and new password are required'
+      });
+    }
+    
+    // Validate password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters'
+      });
+    }
+    
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No user found with this email'
+      });
+    }
+    
+    // Check if OTP exists
+    if (!user.passwordResetOTP || !user.passwordResetOTP.code) {
+      return res.status(400).json({
+        success: false,
+        message: 'No OTP found. Please request a new one.'
+      });
+    }
+    
+    // Check OTP expiry (1 minute)
+    if (new Date() > user.passwordResetOTP.expiresAt) {
+      user.passwordResetOTP = undefined;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired. Please request a new one.'
+      });
+    }
+    
+    // Verify OTP
+    if (user.passwordResetOTP.code !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid OTP'
+      });
+    }
+    
+    // Update password
+    user.password = newPassword;
+    user.passwordResetOTP = undefined;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+    
+    res.json({
+      success: true,
+      message: 'Password reset successfully. You can now login with your new password.'
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error resetting password',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -605,5 +738,7 @@ module.exports = {
   verifyFace,
   getMe,
   updateProfile,
-  getVerificationStatus
+  getVerificationStatus,
+  forgotPassword,
+  resetPassword
 };

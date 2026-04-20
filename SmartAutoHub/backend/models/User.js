@@ -160,7 +160,17 @@ const userSchema = new mongoose.Schema({
     emailNotifications: {
       type: Boolean,
       default: true // Enable email notifications by default
+    },
+    priceChangeNotifications: {
+      type: Boolean,
+      default: true // Enable price change notifications by default
     }
+  },
+
+  // Notification Counts
+  unreadNotificationsCount: {
+    type: Number,
+    default: 0
   },
   
   // Account Status
@@ -173,6 +183,14 @@ const userSchema = new mongoose.Schema({
     default: false
   },
   flagReason: String,
+  
+  // Password Reset
+  passwordResetToken: String,
+  passwordResetExpires: Date,
+  passwordResetOTP: {
+    code: String,
+    expiresAt: Date
+  },
   
   // Timestamps
   lastLogin: Date,

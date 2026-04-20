@@ -483,7 +483,7 @@ const VehicleDetailPage = () => {
                   fullWidth
                   size="large"
                   startIcon={<AttachMoney />}
-                  onClick={() => navigate(`/financial-aids`)}
+                  onClick={() => navigate(`/financial-aids`, { state: { vehiclePrice: vehicle.price } })}
                   sx={{
                     backgroundColor: '#16a34a',
                     color: '#ffffff',
