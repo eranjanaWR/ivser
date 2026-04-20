@@ -722,22 +722,6 @@ const VehicleDetailPage = () => {
                       Delete Vehicle
                     </Button>
                   </Box>
-                  <Button
-                    variant="contained"
-                    fullWidth
-                    size="large"
-                    onClick={handleToggleSold}
-                    sx={{
-                      backgroundColor: '#000000',
-                      color: '#ffffff',
-                      fontWeight: 600,
-                      '&:hover': {
-                        backgroundColor: '#9CA3AF'
-                      }
-                    }}
-                  >
-                    {vehicle.status === 'available' ? 'Mark as Sold' : 'Mark as Available'}
-                  </Button>
                 </Box>
               )}
             </Paper>

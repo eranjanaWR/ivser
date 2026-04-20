@@ -16,7 +16,35 @@ exports.submitPackageRequest = async (req, res) => {
     console.log('=== Advertising Request Received ===');
     console.log('Body:', req.body);
 
-    const { name, email, phone, company, message, packageName, placement, adPhoto, adPhotoBase64, cardholderName, cardNumber, expiryDate, cvv, paymentRefNumber, paymentSlipBase64 } = req.body;
+    const { name, email, phone, company, message, packageName, placement, adPhoto, adPhotoBase64, cardholderName, cardNumber, expiryDate, cvv, paymentRefNumber, paymentSlipBase64, userId } = req.body;
+
+    // Check if user is trying to use Free Trial package and has already used it
+    if (packageName === 'Free Trial') {
+      const User = require('../models/User');
+      const packageKey = 'freeTrialUsed';
+      
+      // Check using userId if provided
+      if (userId) {
+        const user = await User.findById(userId);
+        if (user && user.usedPackages && user.usedPackages[packageKey]) {
+          console.warn(`${packageName} package already used by user:`, userId);
+          return res.status(400).json({
+            success: false,
+            error: `${packageName} package is one-time redeemable. You have already used it.`
+          });
+        }
+      }
+      
+      // Also check using email as fallback
+      const userByEmail = await User.findOne({ email: email.toLowerCase() });
+      if (userByEmail && userByEmail.usedPackages && userByEmail.usedPackages[packageKey]) {
+        console.warn(`${packageName} package already used by email:`, email);
+        return res.status(400).json({
+          success: false,
+          error: `${packageName} package is one-time redeemable. You have already used it.`
+        });
+      }
+    }
 
     // Validate required fields
     if (!name || !email || !phone) {
@@ -62,6 +90,7 @@ exports.submitPackageRequest = async (req, res) => {
     let advertisingRequest;
     try {
       const recordData = {
+        userId: userId || null,
         name,
         email,
         phone,
@@ -73,7 +102,7 @@ exports.submitPackageRequest = async (req, res) => {
         adPhotoBase64: adPhotoBase64 || null,
         status: 'pending',
         submittedAt: new Date(),
-        paymentStatus: packageName === 'Free Trial' ? 'free' : (cardNumber ? 'completed' : 'pending'),
+        paymentStatus: (packageName === 'Free Trial') ? 'free' : (cardNumber ? 'completed' : 'pending'),
         paymentMethod: cardNumber ? 'credit_card' : 'none',
         paymentRefNumber: paymentRefNumber || null,
         paymentSlipBase64: paymentSlipBase64 || null,
@@ -81,11 +110,42 @@ exports.submitPackageRequest = async (req, res) => {
         cardNumber: cardNumber ? cardNumber.slice(-4) : null, // Store only last 4 digits for security
         expiryDate: expiryDate || null,
         cvv: null, // Never store CVV for security reasons
-        paidAt: packageName === 'Free Trial' || cardNumber ? new Date() : null
+        paidAt: (packageName === 'Free Trial' || cardNumber) ? new Date() : null
       };
       console.log('Creating record with:', JSON.stringify(recordData, null, 2));
       advertisingRequest = await Advertising.create(recordData);
       console.log('✓ Database record created:', advertisingRequest._id);
+
+      // If Free Trial package is used, mark it as used in user profile
+      if (packageName === 'Free Trial') {
+        const User = require('../models/User');
+        const packageKey = 'freeTrialUsed';
+        const packageKeyAt = 'freeTrialUsedAt';
+        const packageKeyId = 'freeTrialAdId';
+        
+        // Try to update using userId first
+        if (userId) {
+          const updateData = {
+            [`usedPackages.${packageKey}`]: true,
+            [`usedPackages.${packageKeyAt}`]: new Date(),
+            [`usedPackages.${packageKeyId}`]: advertisingRequest._id
+          };
+          await User.findByIdAndUpdate(userId, updateData);
+          console.log(`✓ Marked ${packageName} package as used for userId:`, userId);
+        } else {
+          // Fallback: update using email
+          const updateData = {
+            [`usedPackages.${packageKey}`]: true,
+            [`usedPackages.${packageKeyAt}`]: new Date(),
+            [`usedPackages.${packageKeyId}`]: advertisingRequest._id
+          };
+          await User.findOneAndUpdate(
+            { email: email.toLowerCase() },
+            updateData
+          );
+          console.log(`✓ Marked ${packageName} package as used for email:`, email);
+        }
+      }
     } catch (dbError) {
       console.error('❌ Database error:', dbError.message);
       console.error('Database error details:', dbError);
@@ -177,6 +237,27 @@ exports.submitPackageRequest = async (req, res) => {
     }
 
     console.log('✓ Request completed successfully');
+    
+    // Emit socket event to notify all connected admins of new advertising request
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('newAdvertisingRequest', {
+          _id: advertisingRequest._id,
+          name: advertisingRequest.name,
+          company: advertisingRequest.company,
+          email: advertisingRequest.email,
+          packageName: advertisingRequest.packageName,
+          placement: advertisingRequest.placement,
+          status: advertisingRequest.status,
+          submittedAt: advertisingRequest.submittedAt
+        });
+        console.log('✓ Socket event emitted: newAdvertisingRequest');
+      }
+    } catch (socketError) {
+      console.warn('⚠ Socket emission error:', socketError.message);
+    }
+    
     res.status(201).json({
       success: true,
       message: `Thank you! Request submitted successfully. Check your email for confirmation (${email}).`,

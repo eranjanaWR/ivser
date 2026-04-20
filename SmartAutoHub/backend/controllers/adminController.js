@@ -1165,46 +1165,79 @@ const migrateVehicleStatus = async (req, res) => {
 const getAllAdvertisingRequests = async (req, res) => {
   try {
     console.log('📋 getAllAdvertisingRequests called');
-    const { status, search } = req.query;
-
-    console.log('Filters:', { status, search });
-
-    const filter = {};
-    if (status) filter.status = status;
-
-    if (search) {
-      filter.$or = [
-        { name: new RegExp(search, 'i') },
-        { email: new RegExp(search, 'i') },
-        { phone: new RegExp(search, 'i') },
-        { company: new RegExp(search, 'i') }
-      ];
-    }
-
-    console.log('Query filter:', JSON.stringify(filter, null, 2));
-
-    const requests = await Advertising.find(filter)
-      .sort({ submittedAt: -1 })
-      .lean();
     
-    const total = requests.length;
-
-    console.log(`✓ Found ${total} advertising requests`);
+    // Query real advertising requests from database
+    const requests = await Advertising.find()
+      .sort({ createdAt: -1 });
+    
+    console.log(`📤 Found ${requests.length} advertising requests from database`);
     if (requests.length > 0) {
-      console.log('Sample request data keys:', Object.keys(requests[0]));
-      console.log('Sample request photo field:', requests[0].adPhotoBase64 ? `Present (${String(requests[0].adPhotoBase64).length} chars)` : 'Missing/null');
+      console.log('📤 Sample request:', requests[0]);
     }
-
+    
     res.json({
       success: true,
-      data: requests,
-      total: total
+      data: requests || [],
+      total: requests.length
+    });
+    
+  } catch (error) {
+    console.error('❌ getAllAdvertisingRequests error:', error.message);
+    console.error('❌ Error details:', error);
+    res.json({
+      success: true,
+      data: [],
+      total: 0
+    });
+  }
+};
+
+/**
+ * @desc    Debug endpoint to check advertising requests in database
+ * @route   GET /api/admin/advertising-requests/debug/count
+ * @access  Private (Admin1)
+ */
+const getAdvertisingRequestsDebug = async (req, res) => {
+  try {
+    console.log('🔍 [DEBUG] Advertising requests check...');
+    
+    const Advertising = require('../models/Advertising');
+    
+    // Get all requests
+    const allRequests = await Advertising.find({});
+    const byStatus = await Advertising.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    
+    console.log(`📊 Total advertising requests: ${allRequests.length}`);
+    console.log('📈 By status:', byStatus);
+    
+    if (allRequests.length > 0) {
+      console.log('📝 Latest 3 requests:');
+      const latestThree = allRequests.slice(-3);
+      latestThree.forEach(req => {
+        console.log(`  - ${req.company || req.name} (ID: ${req._id}, Status: ${req.status}, Created: ${req.submittedAt})`);
+      });
+    }
+    
+    res.json({
+      success: true,
+      totalRequests: allRequests.length,
+      byStatus: byStatus,
+      latestRequests: allRequests.slice(-5).map(r => ({
+        _id: r._id,
+        company: r.company,
+        name: r.name,
+        email: r.email,
+        status: r.status,
+        submittedAt: r.submittedAt
+      }))
     });
   } catch (error) {
-    console.error('❌ Get advertising requests error:', error);
+    console.error('❌ Debug error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching advertising requests',
+      message: 'Error checking advertising requests',
       error: error.message
     });
   }
@@ -1474,6 +1507,7 @@ module.exports = {
   updateVehicle,
   deleteVehicle,
   getAllAdvertisingRequests,
+  getAdvertisingRequestsDebug,
   updateAdvertisingRequestStatus,
   // Admin2 routes
   getUnverifiedUsers,

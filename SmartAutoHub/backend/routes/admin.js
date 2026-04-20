@@ -195,6 +195,13 @@ router.put(
 
 // ==================== ADVERTISING REQUESTS (Admin1) ====================
 
+// Test endpoint to check advertising requests status (MUST come before parameterized routes)
+router.get(
+  '/advertising-requests/debug/count',
+  authorize('admin1'),
+  adminController.getAdvertisingRequestsDebug
+);
+
 // Get all advertising requests
 router.get(
   '/advertising-requests',
