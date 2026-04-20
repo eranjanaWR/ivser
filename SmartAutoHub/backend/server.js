@@ -66,7 +66,10 @@ const adminRoutes = require('./routes/admin');
 const predictionRoutes = require('./routes/prediction');
 const searchRoutes = require('./routes/search');
 const notificationRoutes = require('./routes/notification');
+const priceNotificationRoutes = require('./routes/priceNotifications');
 const advertisingRoutes = require('./routes/advertising');
+const financialRoutes = require('./routes/financial');
+
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -79,7 +82,9 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/prediction', predictionRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/user/price-notifications', priceNotificationRoutes);
 app.use('/api/advertising', advertisingRoutes);
+app.use('/api/financial', financialRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
