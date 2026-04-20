@@ -12,6 +12,7 @@ const ViewHistory = require('../models/ViewHistory');
 const BuyerBooking = require('../models/BuyerBooking');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const notificationController = require('./notificationController');
+const priceNotificationController = require('./priceNotificationController');
 const { sendNotificationEmail, sendTestDriveCancellationEmail } = require('../utils/email');
 
 /**
@@ -390,6 +391,11 @@ const updateVehicle = async (req, res) => {
       });
     }
     
+    // PRICE CHANGE NOTIFICATION: Capture old price before updating
+    const oldPrice = vehicle.price;
+    const newPrice = req.body.price ? parseFloat(req.body.price) : vehicle.price;
+    const priceChanged = oldPrice !== newPrice;
+    
     // Handle new image uploads - save to database
     if (req.files && req.files.length > 0) {
       const existingImageCount = vehicle.images ? vehicle.images.length : 0;
@@ -495,6 +501,11 @@ const updateVehicle = async (req, res) => {
     Object.assign(vehicle, req.body);
     vehicle = await vehicle.save({ runValidators: true });
     
+// Update other fields
+    Object.assign(vehicle, req.body);
+    vehicle = await vehicle.save({ runValidators: true });
+    
+    // 1. TEST DRIVE CANCELLATION LOGIC (ඔයාගේ code එක)
     if (isBecomingUnavailable && wasAvailable) {
       try {
         const activeBookings = await BuyerBooking.find({
@@ -539,6 +550,39 @@ const updateVehicle = async (req, res) => {
       }
     }
 
+    // 2. PRICE CHANGE NOTIFICATION LOGIC (GitHub එකෙන් ආපු code එක)
+    if (priceChanged && vehicle.status === 'active') {
+      try {
+        console.log(`💰 Price changed for vehicle ${vehicle._id}: ${oldPrice} → ${newPrice}`);
+        
+        const buyerIds = vehicle.savedBy || [];
+        
+        if (buyerIds.length > 0) {
+          console.log(`📧 Found ${buyerIds.length} buyers with this vehicle in wishlist`);
+          
+          const vehicleInfo = {
+            vehicleId: vehicle._id,
+            brand: vehicle.brand,
+            model: vehicle.model,
+            year: vehicle.year,
+            image: vehicle.images?.[0]
+          };
+          
+          const result = await priceNotificationController.notifyPriceChange(
+            vehicle._id,
+            oldPrice,
+            newPrice,
+            vehicleInfo,
+            req.user._id,
+            buyerIds
+          );
+          
+          console.log(`✅ Price change notifications sent: ${result.notificationCount} notifications, ${result.emailCount} emails`);
+        }
+      } catch (notificationError) {
+        console.error('Error sending price change notifications:', notificationError);
+      }
+    }
     // Trigger notifications if vehicle is now available
     if (isBecomingAvailable && wasUnavailable) {
       console.log(`Vehicle ${vehicle._id} is now available. Checking for subscriptions...`);

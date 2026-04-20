@@ -21,6 +21,9 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import VerificationPage from './pages/VerificationPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import NotificationHistoryPage from './pages/NotificationHistoryPage';
 import VehiclesPage from './pages/VehiclesPage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
 import ComparisonPage from './pages/ComparisonPage';
@@ -215,6 +218,8 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/vehicles" element={<VehiclesPage />} />
                 <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
                 <Route path="/vehicles/:vehicleId/boost" element={<BoostAdPage />} />
@@ -231,6 +236,11 @@ function App() {
                 <Route path="/verification" element={
                   <PrivateRoute>
                     <VerificationPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/notifications" element={
+                  <PrivateRoute>
+                    <NotificationHistoryPage />
                   </PrivateRoute>
                 } />
                 <Route path="/profile" element={

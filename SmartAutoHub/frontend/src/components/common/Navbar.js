@@ -40,6 +40,7 @@ import {
   VerifiedUser,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
+import NotificationBell from '../NotificationBell';
 
 const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -320,6 +321,7 @@ const Navbar = () => {
                     sx={{ display: { xs: 'none', sm: 'flex' } }}
                   />
                 )}
+                <NotificationBell />
                 <IconButton onClick={handleProfileMenuOpen}>
                   <Avatar
                     src={user?.profileImage}

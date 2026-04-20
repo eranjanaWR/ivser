@@ -189,6 +189,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Forgot password - request reset OTP
+  const forgotPassword = async (email) => {
+    try {
+      setError(null);
+      const response = await api.post('/auth/forgot-password', { email });
+      return { success: true, message: response.data.message };
+    } catch (err) {
+      const message = err.response?.data?.message || 'Failed to send reset email';
+      setError(message);
+      return { success: false, message };
+    }
+  };
+
+  // Reset password - verify OTP and set new password
+  const resetPassword = async (email, otp, newPassword) => {
+    try {
+      setError(null);
+      const response = await api.post('/auth/reset-password', { 
+        email, 
+        otp, 
+        newPassword 
+      });
+      return { success: true, message: response.data.message };
+    } catch (err) {
+      const message = err.response?.data?.message || 'Password reset failed';
+      setError(message);
+      return { success: false, message };
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -202,6 +232,8 @@ export const AuthProvider = ({ children }) => {
     verifyFace,
     updateProfile,
     refreshUser,
+    forgotPassword,
+    resetPassword,
     isAuthenticated: !!user,
     isFullyVerified: user?.isFullyVerified || false,
     clearError: () => setError(null)
