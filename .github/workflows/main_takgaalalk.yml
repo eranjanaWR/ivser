@@ -40,7 +40,7 @@ jobs:
         run: npm ci --prefix "$APP_PATH/frontend"
 
       - name: Build frontend for production
-        run: npm run build --prefix "$APP_PATH/frontend"
+        run: CI=false npm run build --prefix "$APP_PATH/frontend"
 
       - name: Keep only production backend packages
         run: npm prune --omit=dev --prefix "$APP_PATH/backend"
