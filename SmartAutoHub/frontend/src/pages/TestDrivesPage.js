@@ -1,113 +1,272 @@
-/**
- * Test Drives Page
- * Test drive requests management
- */
-
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Container,
-  Typography,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  Button,
-  IconButton,
-  CircularProgress,
   Alert,
+  Avatar,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Container,
   Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
+  DialogContent,
+  DialogTitle,
+  Divider,
+  IconButton,
+  Paper,
+  Stack,
+  Tab,
   TextField,
   Tabs,
-  Tab,
-  Avatar,
+  Typography
 } from '@mui/material';
 import {
+  CalendarToday,
   Check,
   Close,
-  Schedule,
-  Person,
   DirectionsCar,
-  CalendarToday,
+  Person,
+  Schedule
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import { getImageUrl } from '../utils/imageUrl';
 
 const TestDrivesPage = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
+
   const [testDrives, setTestDrives] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
   const [tab, setTab] = useState(0);
-  
-  // Response dialog
   const [responseOpen, setResponseOpen] = useState(false);
   const [selectedDrive, setSelectedDrive] = useState(null);
   const [responseMessage, setResponseMessage] = useState('');
   const [responding, setResponding] = useState(false);
 
-  const isSeller = user?.role === 'seller' || user?.role === 'admin1' || user?.role === 'admin2';
+  const isSeller = ['seller', 'buyer/seller', 'admin1', 'admin2'].includes(user?.role);
+
+  const getEndpointByTab = (tabIndex) => {
+    if (tabIndex === 0) {
+      return '/test-drives/my-requests';
+    }
+
+    if (tabIndex === 1) {
+      return '/test-drives/my-vehicles?status=active';
+    }
+
+    return '/test-drives/my-vehicles?status=history';
+  };
+
+  const fetchTestDrives = async () => {
+    setLoading(true);
+    setError('');
+
+    try {
+      const endpoint = getEndpointByTab(tab);
+      const response = await api.get(endpoint);
+      setTestDrives(response.data?.data || []);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch test drives');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchTestDrives();
   }, [tab]);
 
-  const fetchTestDrives = async () => {
-    setLoading(true);
-    try {
-      const endpoint = tab === 0 ? '/test-drives/my-requests' : '/test-drives/seller-requests';
-      const { data } = await api.get(endpoint);
-      setTestDrives(data.data || []);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch test drives');
+  const normalizeStatus = (status) => String(status || '').toLowerCase();
+
+  const getStatusColor = (status) => {
+    const normalized = normalizeStatus(status);
+    switch (normalized) {
+      case 'pending':
+        return 'warning';
+      case 'approved':
+        return 'success';
+      case 'rejected':
+        return 'error';
+      case 'completed':
+        return 'info';
+      case 'cancelled':
+        return 'default';
+      default:
+        return 'default';
     }
-    setLoading(false);
+  };
+
+  const formatDate = (dateValue) => {
+    if (!dateValue) {
+      return 'N/A';
+    }
+
+    return new Date(dateValue).toLocaleDateString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const openApproveDialog = (drive) => {
+    setSelectedDrive(drive);
+    setResponseMessage('');
+    setResponseOpen(true);
   };
 
   const handleResponse = async (status) => {
+    if (!selectedDrive) {
+      return;
+    }
+
     setResponding(true);
+    setError('');
+
     try {
-      await api.patch(`/test-drives/${selectedDrive._id}`, {
+      await api.put(`/test-drives/${selectedDrive._id}/status`, {
         status,
-        sellerResponse: responseMessage,
+        sellerNotes: responseMessage
       });
+
       setSuccess(`Test drive ${status}`);
       setResponseOpen(false);
+      setSelectedDrive(null);
       setResponseMessage('');
       fetchTestDrives();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update test drive');
+    } finally {
+      setResponding(false);
     }
-    setResponding(false);
   };
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+  const handleReject = async (drive) => {
+    setError('');
+    try {
+      await api.put(`/test-drives/${drive._id}/status`, {
+        status: 'rejected'
+      });
+
+      setSuccess('Test drive rejected');
+      fetchTestDrives();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reject test drive');
+    }
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending': return 'warning';
-      case 'approved': return 'success';
-      case 'completed': return 'info';
-      case 'rejected': return 'error';
-      case 'cancelled': return 'default';
-      default: return 'default';
+  const handleBuyerCancel = async (driveId) => {
+    setError('');
+    try {
+      await api.delete(`/test-drives/${driveId}`);
+      setSuccess('Request cancelled successfully');
+      fetchTestDrives();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to cancel request');
     }
+  };
+
+  const renderRow = (drive) => {
+    const vehicle = drive.vehicleId || {};
+    const buyer = drive.buyerId || {};
+    const seller = drive.sellerId || {};
+    const status = drive.status || '';
+    const pending = normalizeStatus(status) === 'pending';
+
+    const counterpart = tab === 0 ? seller : buyer;
+    const counterpartName = `${counterpart.firstName || ''} ${counterpart.lastName || ''}`.trim() || 'N/A';
+    const slotText = drive.selectedSlot
+      ? `${drive.selectedSlot.startTime} - ${drive.selectedSlot.endTime}`
+      : '';
+
+    return (
+      <Paper key={drive._id} elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'grey.200' }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }}>
+          <Stack direction="row" spacing={2} sx={{ flex: 1, width: '100%' }}>
+            <Avatar
+              variant="rounded"
+              src={getImageUrl(vehicle.images?.[0] || vehicle.image)}
+              sx={{ width: 72, height: 54 }}
+            >
+              <DirectionsCar />
+            </Avatar>
+
+            <Box sx={{ flex: 1 }}>
+              <Typography fontWeight={700}>
+                {vehicle.year} {vehicle.brand} {vehicle.model}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {tab === 0 ? 'Seller' : 'Buyer'}: {counterpartName}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {counterpart.phone || counterpart.email || 'No contact info'}
+              </Typography>
+            </Box>
+          </Stack>
+
+          <Stack spacing={0.5} sx={{ minWidth: 220 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <CalendarToday fontSize="small" color="action" />
+              <Typography variant="body2">
+                {formatDate(drive.scheduledDate || drive.date || drive.preferredDate)}
+              </Typography>
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              {drive.scheduledTime || drive.time || 'N/A'}
+            </Typography>
+            {slotText && (
+              <Typography variant="caption" color="text.secondary">
+                Slot: {slotText}
+              </Typography>
+            )}
+          </Stack>
+
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 170 }}>
+            <Chip label={status} size="small" color={getStatusColor(status)} />
+          </Stack>
+
+          <Stack direction="row" spacing={1} alignItems="center">
+            {tab === 1 && pending && (
+              <>
+                <IconButton size="small" color="success" onClick={() => openApproveDialog(drive)}>
+                  <Check fontSize="small" />
+                </IconButton>
+                <IconButton size="small" color="error" onClick={() => handleReject(drive)}>
+                  <Close fontSize="small" />
+                </IconButton>
+              </>
+            )}
+
+            {tab === 0 && pending && (
+              <Button size="small" color="error" onClick={() => handleBuyerCancel(drive._id)}>
+                Cancel
+              </Button>
+            )}
+          </Stack>
+        </Stack>
+
+        {(drive.sellerNotes || drive.buyerNotes) && (
+          <>
+            <Divider sx={{ my: 1.5 }} />
+            {drive.sellerNotes && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                Seller Note: {drive.sellerNotes}
+              </Typography>
+            )}
+            {drive.buyerNotes && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                Buyer Note: {drive.buyerNotes}
+              </Typography>
+            )}
+          </>
+        )}
+      </Paper>
+    );
   };
 
   return (
@@ -116,191 +275,72 @@ const TestDrivesPage = () => {
         <Typography variant="h4" fontWeight="bold" gutterBottom>
           Test Drives
         </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
           Manage your test drive requests
         </Typography>
 
-        {/* Alerts */}
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
             {error}
           </Alert>
         )}
+
         {success && (
-          <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
+          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
             {success}
           </Alert>
         )}
 
-        {/* Tabs */}
         {isSeller && (
-          <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 3 }}>
-            <Tab label="My Requests" icon={<Schedule />} iconPosition="start" />
-            <Tab label="Received Requests" icon={<Person />} iconPosition="start" />
+          <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
+            <Tab icon={<Schedule />} iconPosition="start" label="My Requests" />
+            <Tab icon={<Person />} iconPosition="start" label="Received Requests" />
+            <Tab icon={<Schedule />} iconPosition="start" label="Booking History" />
           </Tabs>
         )}
 
         {loading ? (
-          <Box sx={{ textAlign: 'center', py: 8 }}>
+          <Box sx={{ py: 8, textAlign: 'center' }}>
             <CircularProgress />
           </Box>
         ) : testDrives.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 8 }}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
+          <Paper elevation={0} sx={{ p: 4, border: '1px solid', borderColor: 'grey.200', textAlign: 'center' }}>
+            <Typography variant="h6" gutterBottom>
               No test drive requests
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              {tab === 0 
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              {tab === 0
                 ? 'Browse vehicles and request a test drive'
-                : 'No one has requested a test drive for your vehicles yet'
-              }
+                : 'No requests found for this section'}
             </Typography>
             {tab === 0 && (
-              <Button component={Link} to="/vehicles" variant="contained">
+              <Button variant="contained" onClick={() => navigate('/vehicles')}>
                 Browse Vehicles
               </Button>
             )}
-          </Box>
+          </Paper>
         ) : (
-          <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid', borderColor: 'grey.200' }}>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.50' }}>
-                  <TableCell>Vehicle</TableCell>
-                  <TableCell>{tab === 0 ? 'Seller' : 'Buyer'}</TableCell>
-                  <TableCell>Date & Time</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {testDrives.map((drive) => (
-                  <TableRow key={drive._id} hover>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar
-                          variant="rounded"
-                          src={drive.vehicle?.images?.[0]}
-                          sx={{ width: 60, height: 45 }}
-                        >
-                          <DirectionsCar />
-                        </Avatar>
-                        <Box>
-                          <Typography fontWeight="medium">
-                            {drive.vehicle?.brand} {drive.vehicle?.model}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {drive.vehicle?.year}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                          {(tab === 0 ? drive.seller?.name : drive.buyer?.name)?.[0]}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="body2">
-                            {tab === 0 ? drive.seller?.name : drive.buyer?.name}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {tab === 0 ? drive.seller?.phone : drive.buyer?.phone}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CalendarToday fontSize="small" color="action" />
-                        <Box>
-                          <Typography variant="body2">
-                            {formatDate(drive.preferredDate)}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {drive.preferredTime}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={drive.status}
-                        size="small"
-                        color={getStatusColor(drive.status)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {tab === 1 && drive.status === 'pending' && (
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <IconButton
-                            size="small"
-                            color="success"
-                            onClick={() => {
-                              setSelectedDrive(drive);
-                              setResponseOpen(true);
-                            }}
-                          >
-                            <Check />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => {
-                              setSelectedDrive(drive);
-                              handleResponse('rejected');
-                            }}
-                          >
-                            <Close />
-                          </IconButton>
-                        </Box>
-                      )}
-                      {tab === 0 && drive.status === 'pending' && (
-                        <Button
-                          size="small"
-                          color="error"
-                          onClick={async () => {
-                            try {
-                              await api.delete(`/test-drives/${drive._id}`);
-                              setSuccess('Request cancelled');
-                              fetchTestDrives();
-                            } catch (err) {
-                              setError('Failed to cancel request');
-                            }
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                      {drive.status === 'approved' && (
-                        <Typography variant="caption" color="success.main">
-                          Approved
-                        </Typography>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+          <Stack spacing={1.5}>
+            {testDrives.map(renderRow)}
+          </Stack>
         )}
 
-        {/* Response Dialog */}
         <Dialog open={responseOpen} onClose={() => setResponseOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>Approve Test Drive</DialogTitle>
           <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Approve test drive request from {selectedDrive?.buyer?.name} for{' '}
-              {selectedDrive?.vehicle?.brand} {selectedDrive?.vehicle?.model}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Approve this test drive request and optionally include a note for the buyer.
             </Typography>
+
             <TextField
               fullWidth
-              label="Message (Optional)"
               multiline
               rows={3}
+              label="Message (Optional)"
               value={responseMessage}
-              onChange={(e) => setResponseMessage(e.target.value)}
-              placeholder="Include meeting location or any special instructions..."
+              onChange={(event) => setResponseMessage(event.target.value)}
+              placeholder="Meeting location, notes, or instructions"
+              sx={{ mt: 1 }}
             />
           </DialogContent>
           <DialogActions>
@@ -309,8 +349,9 @@ const TestDrivesPage = () => {
               variant="contained"
               onClick={() => handleResponse('approved')}
               disabled={responding}
+              startIcon={responding ? <CircularProgress size={16} color="inherit" /> : <Check />}
             >
-              {responding ? <CircularProgress size={24} /> : 'Approve'}
+              {responding ? 'Approving...' : 'Approve'}
             </Button>
           </DialogActions>
         </Dialog>

@@ -1,95 +1,129 @@
 /**
  * Test Drive Controller
- * Handles scheduling and managing test drives
+ * Handles scheduling and managing test drives using legacy and slot-booking models.
  */
 
 const TestDrive = require('../models/TestDrive');
+const BuyerBooking = require('../models/BuyerBooking');
 const Vehicle = require('../models/Vehicle');
-const User = require('../models/User');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
-const { sendTestDriveNotification } = require('../utils/email');
+const {
+  sendTestDriveNotification,
+  sendTestDriveApprovedEmail,
+  sendTestDriveRejectedEmail
+} = require('../utils/email');
 
 /**
- * @desc    Schedule a test drive
+ * @desc    Schedule a no-slot test drive request
  * @route   POST /api/test-drives
- * @access  Private (Verified Buyers)
+ * @access  Private
  */
 const scheduleTestDrive = async (req, res) => {
   try {
-    const { vehicleId, date, time, buyerNotes, location, contactPreference, duration } = req.body;
-    
-    // Get vehicle and seller info
-    const vehicle = await Vehicle.findById(vehicleId).populate('sellerId', 'email firstName');
-    
+    const {
+      vehicleId,
+      date,
+      time,
+      preferredDate,
+      buyerNotes,
+      location,
+      contactPreference,
+      duration
+    } = req.body;
+
+    const vehicle = await Vehicle.findById(vehicleId).populate('sellerId', 'email firstName lastName phone');
+
     if (!vehicle) {
       return res.status(404).json({
         success: false,
         message: 'Vehicle not found'
       });
     }
-    
-    if (vehicle.status !== 'available') {
-      return res.status(400).json({
-        success: false,
-        message: 'Vehicle is not available for test drives'
-      });
-    }
-    
-    // Can't schedule test drive for your own vehicle
+
     if (vehicle.sellerId._id.toString() === req.user._id.toString()) {
       return res.status(400).json({
         success: false,
         message: 'You cannot schedule a test drive for your own vehicle'
       });
     }
-    
-    // Check for existing pending test drive for same vehicle
+
     const existingTestDrive = await TestDrive.findOne({
       vehicleId,
       buyerId: req.user._id,
       status: { $in: ['pending', 'approved'] }
     });
-    
+
     if (existingTestDrive) {
       return res.status(400).json({
         success: false,
         message: 'You already have a pending or approved test drive for this vehicle'
       });
     }
-    
-    // Create test drive
+
+    if (!preferredDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Preferred date is required'
+      });
+    }
+
+    const parsedPreferredDate = new Date(preferredDate);
+
+    if (Number.isNaN(parsedPreferredDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid preferred date'
+      });
+    }
+
+    const preferredDateOnly = new Date(parsedPreferredDate);
+    preferredDateOnly.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (preferredDateOnly < today) {
+      return res.status(400).json({
+        success: false,
+        message: 'Preferred date must be today or in the future'
+      });
+    }
+
+    const parsedLocation = typeof location === 'string' ? JSON.parse(location) : location;
+
     const testDrive = await TestDrive.create({
       vehicleId,
       buyerId: req.user._id,
       sellerId: vehicle.sellerId._id,
       date: new Date(date),
       time,
+      preferredDate: parsedPreferredDate,
       duration: duration || 30,
-      location: location ? JSON.parse(location) : undefined,
+      location: parsedLocation,
       buyerNotes,
       contactPreference: contactPreference || 'email'
     });
-    
-    // Send notification to seller
+
     const vehicleName = `${vehicle.year} ${vehicle.brand} ${vehicle.model}`;
-    const buyerName = `${req.user.firstName} ${req.user.lastName}`;
+    const buyerName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || 'Buyer';
+
     await sendTestDriveNotification(
       vehicle.sellerId.email,
-      vehicle.sellerId.firstName,
+      vehicle.sellerId.firstName || 'Seller',
       buyerName,
       vehicleName,
       new Date(date).toLocaleDateString(),
       time
     );
-    
-    res.status(201).json({
+
+    return res.status(201).json({
       success: true,
       message: 'Test drive scheduled successfully. Waiting for seller approval.',
       data: testDrive
     });
   } catch (error) {
     console.error('Schedule test drive error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error scheduling test drive',
       error: error.message
@@ -98,7 +132,7 @@ const scheduleTestDrive = async (req, res) => {
 };
 
 /**
- * @desc    Get test drives for buyer
+ * @desc    Get test drives for current buyer
  * @route   GET /api/test-drives/my-requests
  * @access  Private
  */
@@ -106,27 +140,29 @@ const getMyTestDriveRequests = async (req, res) => {
   try {
     const { status, page, limit } = req.query;
     const { skip, limit: limitNum, page: pageNum } = paginate(page, limit);
-    
+
     const filter = { buyerId: req.user._id };
-    if (status) filter.status = status;
-    
+    if (status) {
+      filter.status = status;
+    }
+
     const [testDrives, total] = await Promise.all([
-      TestDrive.find(filter)
-        .populate('vehicleId', 'brand model year price images')
+      BuyerBooking.find(filter)
+        .populate('vehicleId', 'name brand model year image images price')
         .populate('sellerId', 'firstName lastName phone email')
-        .sort({ date: -1 })
+        .sort({ scheduledDate: -1 })
         .skip(skip)
         .limit(limitNum),
-      TestDrive.countDocuments(filter)
+      BuyerBooking.countDocuments(filter)
     ]);
-    
-    res.json({
+
+    return res.json({
       success: true,
       ...formatPaginationResponse(testDrives, total, pageNum, limitNum)
     });
   } catch (error) {
     console.error('Get my test drive requests error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error fetching test drive requests',
       error: error.message
@@ -135,36 +171,46 @@ const getMyTestDriveRequests = async (req, res) => {
 };
 
 /**
- * @desc    Get test drives for seller
+ * @desc    Get test drives for current seller's vehicles
  * @route   GET /api/test-drives/my-vehicles
- * @access  Private (Sellers)
+ * @access  Private
  */
 const getTestDrivesForMyVehicles = async (req, res) => {
   try {
     const { status, vehicleId, page, limit } = req.query;
     const { skip, limit: limitNum, page: pageNum } = paginate(page, limit);
-    
+
     const filter = { sellerId: req.user._id };
-    if (status) filter.status = status;
-    if (vehicleId) filter.vehicleId = vehicleId;
-    
+
+    if (status === 'active') {
+      filter.status = { $in: ['Pending', 'Accepted', 'pending', 'approved'] };
+    } else if (status === 'history') {
+      filter.status = { $in: ['Rejected', 'Cancelled', 'Completed', 'rejected', 'cancelled', 'completed'] };
+    } else if (status) {
+      filter.status = status;
+    }
+
+    if (vehicleId) {
+      filter.vehicleId = vehicleId;
+    }
+
     const [testDrives, total] = await Promise.all([
-      TestDrive.find(filter)
-        .populate('vehicleId', 'brand model year price images')
+      BuyerBooking.find(filter)
+        .populate('vehicleId', 'name brand model year image images price')
         .populate('buyerId', 'firstName lastName phone email profileImage isFullyVerified')
-        .sort({ date: 1 })
+        .sort({ scheduledDate: 1 })
         .skip(skip)
         .limit(limitNum),
-      TestDrive.countDocuments(filter)
+      BuyerBooking.countDocuments(filter)
     ]);
-    
-    res.json({
+
+    return res.json({
       success: true,
       ...formatPaginationResponse(testDrives, total, pageNum, limitNum)
     });
   } catch (error) {
     console.error('Get test drives for my vehicles error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error fetching test drives',
       error: error.message
@@ -173,66 +219,120 @@ const getTestDrivesForMyVehicles = async (req, res) => {
 };
 
 /**
- * @desc    Update test drive status (approve/reject)
+ * @desc    Update test drive status
  * @route   PUT /api/test-drives/:id/status
- * @access  Private (Seller only)
+ * @access  Private
  */
 const updateTestDriveStatus = async (req, res) => {
   try {
     const { status, sellerNotes } = req.body;
-    
-    const allowedStatuses = ['approved', 'rejected', 'completed', 'cancelled'];
-    if (!allowedStatuses.includes(status)) {
+
+    const normalizedInput = String(status || '').trim();
+    let normalizedStatus = normalizedInput
+      ? normalizedInput.charAt(0).toUpperCase() + normalizedInput.slice(1).toLowerCase()
+      : '';
+
+    if (normalizedStatus === 'Approved') {
+      normalizedStatus = 'Accepted';
+    }
+
+    const allowedStatuses = ['Accepted', 'Rejected', 'Completed', 'Cancelled'];
+    if (!allowedStatuses.includes(normalizedStatus)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid status'
       });
     }
-    
-    let testDrive = await TestDrive.findById(req.params.id);
-    
-    if (!testDrive) {
+
+    const booking = await BuyerBooking.findById(req.params.id)
+      .populate('buyerId', 'firstName lastName email phone')
+      .populate('vehicleId', 'brand model year')
+      .populate('sellerId', 'firstName lastName email phone');
+
+    if (!booking) {
       return res.status(404).json({
         success: false,
         message: 'Test drive not found'
       });
     }
-    
-    // Check authorization (seller can approve/reject, buyer can cancel)
-    const isSeller = testDrive.sellerId.toString() === req.user._id.toString();
-    const isBuyer = testDrive.buyerId.toString() === req.user._id.toString();
-    
+
+    const userId = req.user._id.toString();
+    const sellerRef = booking.sellerId?._id || booking.sellerId;
+    const buyerRef = booking.buyerId?._id || booking.buyerId;
+    const isSeller = sellerRef.toString() === userId;
+    const isBuyer = buyerRef.toString() === userId;
+
     if (!isSeller && !isBuyer) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update this test drive'
       });
     }
-    
-    // Only seller can approve/reject/complete
-    if (['approved', 'rejected', 'completed'].includes(status) && !isSeller) {
+
+    if (['Accepted', 'Rejected', 'Completed'].includes(normalizedStatus) && !isSeller) {
       return res.status(403).json({
         success: false,
         message: 'Only the seller can perform this action'
       });
     }
-    
-    // Update test drive
-    testDrive.status = status;
-    if (sellerNotes) testDrive.sellerNotes = sellerNotes;
-    testDrive.respondedAt = new Date();
-    if (status === 'completed') testDrive.completedAt = new Date();
-    
-    await testDrive.save();
-    
-    res.json({
+
+    const previousStatus = booking.status;
+    booking.status = normalizedStatus;
+
+    if (sellerNotes !== undefined) {
+      booking.sellerNotes = sellerNotes;
+    }
+
+    await booking.save();
+
+    const buyerEmail = booking.buyerId?.email || booking.buyerInfo?.email;
+    const buyerFirstName = booking.buyerId?.firstName || booking.buyerInfo?.fullName || 'Buyer';
+    const sellerName = `${booking.sellerId?.firstName || ''} ${booking.sellerId?.lastName || ''}`.trim() || 'Seller';
+    const sellerPhone = booking.sellerId?.phone || 'N/A';
+    const vehicleName = `${booking.vehicleId?.year || ''} ${booking.vehicleId?.brand || ''} ${booking.vehicleId?.model || ''}`
+      .trim()
+      .replace(/\s+/g, ' ');
+    const details = {
+      date: booking.scheduledDate
+        ? new Date(booking.scheduledDate).toLocaleDateString()
+        : booking.date
+          ? new Date(booking.date).toLocaleDateString()
+          : 'N/A',
+      time: booking.scheduledTime || booking.time || 'N/A',
+      sellerName,
+      sellerPhone
+    };
+
+    if (buyerEmail && normalizedStatus === 'Accepted' && previousStatus !== 'Accepted') {
+      await sendTestDriveApprovedEmail(
+        buyerEmail,
+        buyerFirstName,
+        vehicleName,
+        details
+      );
+    }
+
+    if (
+      buyerEmail &&
+      (normalizedStatus === 'Rejected' || normalizedStatus === 'Cancelled') &&
+      !['Rejected', 'Cancelled'].includes(previousStatus)
+    ) {
+      await sendTestDriveRejectedEmail(
+        buyerEmail,
+        buyerFirstName,
+        vehicleName,
+        details
+      );
+    }
+
+    return res.json({
       success: true,
-      message: `Test drive ${status}`,
-      data: testDrive
+      message: `Test drive ${normalizedStatus}`,
+      data: booking
     });
   } catch (error) {
     console.error('Update test drive status error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error updating test drive status',
       error: error.message
@@ -251,33 +351,32 @@ const getTestDriveById = async (req, res) => {
       .populate('vehicleId', 'brand model year price images location')
       .populate('sellerId', 'firstName lastName phone email profileImage')
       .populate('buyerId', 'firstName lastName phone email profileImage');
-    
+
     if (!testDrive) {
       return res.status(404).json({
         success: false,
         message: 'Test drive not found'
       });
     }
-    
-    // Check authorization
+
     const isSeller = testDrive.sellerId._id.toString() === req.user._id.toString();
     const isBuyer = testDrive.buyerId._id.toString() === req.user._id.toString();
     const isAdmin = ['admin1', 'admin2'].includes(req.user.role);
-    
+
     if (!isSeller && !isBuyer && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to view this test drive'
       });
     }
-    
-    res.json({
+
+    return res.json({
       success: true,
       data: testDrive
     });
   } catch (error) {
     console.error('Get test drive error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error fetching test drive',
       error: error.message
@@ -292,43 +391,41 @@ const getTestDriveById = async (req, res) => {
  */
 const deleteTestDrive = async (req, res) => {
   try {
-    const testDrive = await TestDrive.findById(req.params.id);
-    
-    if (!testDrive) {
+    const booking = await BuyerBooking.findById(req.params.id);
+
+    if (!booking) {
       return res.status(404).json({
         success: false,
         message: 'Test drive not found'
       });
     }
-    
-    // Check authorization
-    const isBuyer = testDrive.buyerId.toString() === req.user._id.toString();
+
+    const isBuyer = booking.buyerId.toString() === req.user._id.toString();
     const isAdmin = ['admin1', 'admin2'].includes(req.user.role);
-    
+
     if (!isBuyer && !isAdmin) {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this test drive'
       });
     }
-    
-    // Only allow deletion if status is pending
-    if (testDrive.status !== 'pending' && !isAdmin) {
+
+    if ((booking.status || '').toLowerCase() !== 'pending' && !isAdmin) {
       return res.status(400).json({
         success: false,
         message: 'Can only delete pending test drives'
       });
     }
-    
-    await TestDrive.findByIdAndDelete(req.params.id);
-    
-    res.json({
+
+    await BuyerBooking.findByIdAndDelete(req.params.id);
+
+    return res.json({
       success: true,
       message: 'Test drive deleted successfully'
     });
   } catch (error) {
     console.error('Delete test drive error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Error deleting test drive',
       error: error.message
