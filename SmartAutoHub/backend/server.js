@@ -9,6 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const connectDB = require('./config/db');
 
 // Allow both single-port mode (5000) and optional split-port local dev.
@@ -50,7 +51,18 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Serve frontend build files
 const frontendPath = path.join(__dirname, '../frontend/build');
-app.use(express.static(frontendPath));
+const isProduction = process.env.NODE_ENV === 'production';
+const serveFrontendBuild = isProduction || process.env.SERVE_FRONTEND_BUILD === 'true';
+const frontendDevServer = process.env.FRONTEND_DEV_SERVER || 'http://localhost:3000';
+const frontendDevProxy = createProxyMiddleware({
+  target: frontendDevServer,
+  changeOrigin: true,
+  ws: true
+});
+
+if (serveFrontendBuild) {
+  app.use(express.static(frontendPath));
+}
 
 // Make io accessible to routes
 app.set('io', io);
@@ -144,8 +156,14 @@ app.use((err, req, res, next) => {
 });
 
 // Serve React frontend for any non-API route (must be after API routes)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(frontendPath, 'index.html'));
+app.get('*', (req, res, next) => {
+  if (serveFrontendBuild) {
+    return res.sendFile(path.join(frontendPath, 'index.html'));
+  }
+
+  // In development, forward non-API routes to CRA so HMR works,
+  // while keeping backend and API on localhost:5000.
+  return frontendDevProxy(req, res, next);
 });
 
 // Start server

@@ -1,0 +1,14 @@
+{
+  "name": "smartauto-hub",
+  "private": true,
+  "scripts": {
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "dev": "npm --prefix frontend run build && SERVE_FRONTEND_BUILD=true npm --prefix backend run dev",
+    "dev:split": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend start\"",
+    "build": "npm --prefix frontend run build",
+    "start": "npm --prefix backend start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

@@ -150,7 +150,7 @@ cp .env.example .env
 4. Configure environment variables in `.env` (do not change the existing .env file):
 ```
 NODE_ENV=development
-PORT=5001
+PORT=5000
 MONGODB_URI=mongodb+srv://your-connection-string
 JWT_SECRET=your-secret-key
 JWT_EXPIRE=30d
@@ -164,7 +164,7 @@ EMAIL_PASS=your-app-password
 GOOGLE_MAPS_API_KEY=your-api-key
 ```
 
-**Important**: Do not modify the existing `.env` file. The port is set to 5001 and should remain unchanged.
+**Important**: Keep backend `PORT=5000` for the single-port setup.
 
 5. Download face-api.js models (for face verification):
 ```bash
@@ -191,7 +191,7 @@ npm install
 
 3. Create `.env` file:
 ```
-REACT_APP_API_URL=http://localhost:5001
+REACT_APP_API_URL=/api
 REACT_APP_GOOGLE_MAPS_API_KEY=your-api-key
 ```
 
@@ -199,6 +199,77 @@ REACT_APP_GOOGLE_MAPS_API_KEY=your-api-key
 ```bash
 npm start
 ```
+
+### Run frontend + backend with one command (single-port access)
+
+From the `SmartAutoHub` directory run:
+
+```bash
+npm run dev
+```
+
+This command builds the frontend and starts the backend. Open:
+
+- `http://localhost:5000` for the web app
+- `http://localhost:5000/api/health` for API health
+
+### Optional split-port development mode
+
+If you still want separate dev servers (frontend with hot reload + backend API), run:
+
+```bash
+npm run dev:split
+```
+
+This mode uses frontend on `http://localhost:3000` and backend on `http://localhost:5000`.
+
+## Azure Web App Deployment (GitHub Actions)
+
+This repository is configured to deploy `SmartAutoHub` to Azure App Service using GitHub Actions via:
+
+- `.github/workflows/main_takgaalalk.yml`
+
+### 1. Create Azure resources
+
+- Create an Azure Web App (Linux, Node.js 20).
+- Set the startup command to:
+
+```bash
+npm start
+```
+
+### 2. Configure Web App application settings
+
+In Azure Portal -> Web App -> Environment Variables, add:
+
+- `NODE_ENV=production`
+- `MONGODB_URI=...`
+- `JWT_SECRET=...`
+- `EMAIL_SERVICE=...`
+- `EMAIL_USER=...`
+- `EMAIL_PASS=...`
+- `SENDGRID_API_KEY=...` (if used)
+- `GOOGLE_MAPS_API_KEY=...`
+- `FRONTEND_URL=https://<your-app-name>.azurewebsites.net`
+
+Do not set `PORT` manually in Azure App Service.
+
+### 3. Configure GitHub repository secrets
+
+The workflow uses OIDC-based Azure login and expects these repository secrets:
+
+- `AZUREAPPSERVICE_CLIENTID_CE75FE4440144D4CA1FCE444D018822E`
+- `AZUREAPPSERVICE_TENANTID_A48B2BDAFFB44E749F223D2B4089F9E3`
+- `AZUREAPPSERVICE_SUBSCRIPTIONID_E8F98E3DE184456081C5110E95017CD6`
+
+### 4. Deploy
+
+- Push to `main` (changes under `SmartAutoHub/`) or run the workflow manually from the Actions tab.
+- The workflow will:
+	- Install backend and frontend dependencies
+	- Build frontend production bundle
+	- Keep only backend production dependencies
+	- Deploy `SmartAutoHub` to Azure Web App
 
 ## API Endpoints
 
