@@ -1196,19 +1196,63 @@ const getAllAdvertisingRequests = async (req, res) => {
 
     
     if (requests.length > 0) {
-      console.log('Sample request data keys:', Object.keys(requests[0]));
-      console.log('Sample request photo field:', requests[0].adPhotoBase64 ? `Present (${String(requests[0].adPhotoBase64).length} chars)` : 'Missing/null');
+      console.log('📤 Sample request:', requests[0]);
     }
+    
+    res.json({
+      success: true,
+      data: requests || [],
+      total: requests.length
+    });
+    
+  } catch (error) {
+    console.error('❌ getAllAdvertisingRequests error:', error.message);
+    console.error('❌ Error details:', error);
+    res.json({
+      success: true,
+      data: [],
+      total: 0
+    });
+  }
+};
 
+/**
+ * @desc    Debug endpoint to check advertising requests in database
+ * @route   GET /api/admin/advertising-requests/debug/count
+ * @access  Private (Admin1)
+ */
+const getAdvertisingRequestsDebug = async (req, res) => {
+  try {
+    console.log('🔍 [DEBUG] Advertising requests check...');
+    
+    const Advertising = require('../models/Advertising');
+    
+    // Get all requests
+    const allRequests = await Advertising.find({});
+    const byStatus = await Advertising.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    
+    console.log(`📊 Total advertising requests: ${allRequests.length}`);
+    console.log('📈 By status:', byStatus);
+    
+    if (allRequests.length > 0) {
+      console.log('📝 Latest 3 requests:');
+      const latestThree = allRequests.slice(-3);
+      latestThree.forEach(req => {
+        console.log(`  - ${req.company || req.name} (ID: ${req._id}, Status: ${req.status}, Created: ${req.submittedAt})`);
+      });
+    }
+    
     res.json({
       success: true,
       ...formatPaginationResponse(requests, total, pageNum, limitNum)
     });
   } catch (error) {
-    console.error('❌ Get advertising requests error:', error);
+    console.error('❌ Debug error:', error);
     res.status(500).json({
       success: false,
-      message: 'Error fetching advertising requests',
+      message: 'Error checking advertising requests',
       error: error.message
     });
   }
@@ -1478,6 +1522,7 @@ module.exports = {
   updateVehicle,
   deleteVehicle,
   getAllAdvertisingRequests,
+  getAdvertisingRequestsDebug,
   updateAdvertisingRequestStatus,
   // Admin2 routes
   getUnverifiedUsers,

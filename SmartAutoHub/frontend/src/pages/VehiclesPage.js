@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -83,6 +83,7 @@ const vehicleTypeIcons = {
 const VehiclesPage = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const isAdmin = user && ['admin1', 'admin2'].includes(user.role);
   
   const [searchParams, setSearchParams] = useSearchParams();
@@ -114,10 +115,11 @@ const VehiclesPage = () => {
     transmission: searchParams.get('transmission') || '',
     condition: searchParams.get('condition') || '',
     minPrice: searchParams.get('minPrice') || 0,
-    maxPrice: searchParams.get('maxPrice') || 50000000,
+    maxPrice: searchParams.get('maxPrice') || 999999999, // Increased from 50000000 to show all vehicles by default
     page: parseInt(searchParams.get('page')) || 1,
   });
 
+  // Force refetch when page mounts or when filters change
   useEffect(() => {
     fetchVehicles();
   }, [filters, sort]);
@@ -132,15 +134,28 @@ const VehiclesPage = () => {
       transmission: searchParams.get('transmission') || '',
       condition: searchParams.get('condition') || '',
       minPrice: searchParams.get('minPrice') || 0,
-      maxPrice: searchParams.get('maxPrice') || 50000000,
+      maxPrice: searchParams.get('maxPrice') || 999999999, // Show all vehicles by default
       page: parseInt(searchParams.get('page')) || 1,
     });
   }, [searchParams]);
 
+  // Mount effect - ensure fresh data fetch when navigating to /vehicles page
   useEffect(() => {
-    console.log('🎯 VehiclesPage mounted - fetching approved ads');
-    fetchApprovedAds();
-  }, []);
+    console.log('🎯 VehiclesPage mounted or location changed - ensuring fresh vehicle data');
+    // Only fetch approved ads on mount
+    const fetchAds = async () => {
+      try {
+        const { data } = await api.get('/advertising/approved');
+        if (data.success) {
+          setApprovedAds(data.data || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch approved ads:', err);
+      }
+    };
+    fetchAds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const logSearch = async (searchQuery, resultsCount) => {
     try {

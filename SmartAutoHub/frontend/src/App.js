@@ -62,6 +62,11 @@ import RepairmanDashboard from './pages/RepairmanDashboard';
 import PredictionPage from './pages/PredictionPage';
 import Admin1Dashboard from './pages/Admin1Dashboard';
 import Admin2Dashboard from './pages/Admin2Dashboard';
+import BoostAdPage from './pages/BoostAdPage';
+import PremiumPostsPage from './pages/PremiumPostsPage';
+import AdvertisePackagesPage from './pages/AdvertisePackagesPage';
+import FinancialAidsPage from './pages/FinancialAidsPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 // Professional UI Theme Settings
 const theme = createTheme({
@@ -135,6 +140,7 @@ function App() {
                 <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
                 <Route path="/vehicles/saved" element={<PrivateRoute><WishlistPage /></PrivateRoute>} />
                 <Route path="/add-vehicle" element={<PrivateRoute><AddVehiclePage /></PrivateRoute>} />
+                <Route path="/financial-aids" element={<FinancialAidsPage />} />
                 
                 {/* Seller & Admin specific Vehicles */}
                 <Route path="/my-vehicles" element={<PrivateRoute roles={['seller', 'buyer/seller', 'admin1']}><MyVehiclesPage /></PrivateRoute>} />

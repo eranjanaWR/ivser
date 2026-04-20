@@ -293,6 +293,43 @@ const sendAuctionWinnerNotificationEmail = async ({
 
             <div class="footer">
               <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+              <h1>🎉 TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>ID Verification Successful, ${firstName}!</h2>
+              
+              <div class="success-box">
+                <div class="checkmark">✓</div>
+                <h3>Congratulations!</h3>
+                <p>Your identity document has been successfully verified. Your account is one step closer to being fully verified.</p>
+              </div>
+              
+              <div class="verification-details">
+                <h3 style="margin-top: 0; color: #333;">Verification Status</h3>
+                <p><span class="detail-label">Email Verification:</span> ✓ Completed</p>
+                <p><span class="detail-label">ID Verification:</span> ✓ Completed</p>
+                <p><span class="detail-label">Face Verification:</span> ⏳ Pending</p>
+              </div>
+              
+              <div class="next-steps">
+                <h3>What's Next?</h3>
+                <p>To complete your account verification, you need to:</p>
+                <ol>
+                  <li>Complete Face Verification by taking a selfie</li>
+                  <li>Your selfie will be compared with your ID document</li>
+                  <li>Once verified, your account will be fully activated</li>
+                </ol>
+              </div>
+              
+              <p style="text-align: center;">
+                <a href="${process.env.FRONTEND_URL}/verification" class="button">Continue to Face Verification</a>
+              </p>
+              
+              <p>If you have any questions or encounter any issues, please don't hesitate to contact our support team.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+              <p>This is an automated message, please do not reply to this email.</p>
             </div>
           </div>
         </body>
@@ -305,6 +342,14 @@ const sendAuctionWinnerNotificationEmail = async ({
     return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('❌ Error sending auction winner email:', error.message);
+      `
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ ID Verification email sent successfully to:', email, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending ID verification email to', email, ':', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -608,5 +653,6 @@ module.exports = {
   sendTestDriveApprovedEmail,
   sendTestDriveRejectedEmail,
   sendTestDriveCancellationEmail,
+  sendIDVerificationEmail,
   sendEmail
 };
