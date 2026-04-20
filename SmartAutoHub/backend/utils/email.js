@@ -193,6 +193,71 @@ const sendTestDriveNotification = async (sellerEmail, sellerName, buyerName, veh
 };
 
 /**
+ * Send approved test drive email to buyer
+ */
+const sendTestDriveApprovedEmail = async (buyerEmail, buyerFirstName, vehicleName, details = {}) => {
+  const subject = 'Test Drive Request Approved - TakGaala.lk';
+  const message = `
+    Great news! Your test drive request has been approved.<br><br>
+    <strong>Vehicle:</strong> ${vehicleName}<br>
+    <strong>Date:</strong> ${details.date || 'N/A'}<br>
+    <strong>Time:</strong> ${details.time || 'N/A'}<br>
+    <strong>Seller:</strong> ${details.sellerName || 'N/A'}<br>
+    <strong>Seller Contact:</strong> ${details.sellerPhone || 'N/A'}<br><br>
+    Please contact the seller if you need any additional details before the appointment.
+  `;
+
+  return await sendNotificationEmail(
+    buyerEmail,
+    subject,
+    message,
+    buyerFirstName || 'Buyer'
+  );
+};
+
+/**
+ * Send rejected/cancelled test drive email to buyer
+ */
+const sendTestDriveRejectedEmail = async (buyerEmail, buyerFirstName, vehicleName, details = {}) => {
+  const subject = 'Test Drive Request Update - TakGaala.lk';
+  const message = `
+    Your test drive request has been updated.<br><br>
+    <strong>Vehicle:</strong> ${vehicleName}<br>
+    <strong>Date:</strong> ${details.date || 'N/A'}<br>
+    <strong>Time:</strong> ${details.time || 'N/A'}<br>
+    <strong>Seller:</strong> ${details.sellerName || 'N/A'}<br><br>
+    If needed, you can submit a new request with another preferred time.
+  `;
+
+  return await sendNotificationEmail(
+    buyerEmail,
+    subject,
+    message,
+    buyerFirstName || 'Buyer'
+  );
+};
+
+/**
+ * Send cancellation email to buyers when vehicle becomes unavailable/deleted
+ */
+const sendTestDriveCancellationEmail = async (buyerEmail, buyerName, vehicleName, reason) => {
+  const subject = 'Test Drive Cancelled - TakGaala.lk';
+  const message = `
+    We are sorry, your active test drive has been cancelled.<br><br>
+    <strong>Vehicle:</strong> ${vehicleName}<br>
+    <strong>Reason:</strong> ${reason || 'Vehicle is no longer available'}<br><br>
+    You can browse similar vehicles and submit another test drive request.
+  `;
+
+  return await sendNotificationEmail(
+    buyerEmail,
+    subject,
+    message,
+    buyerName || 'Buyer'
+  );
+};
+
+/**
  * Send breakdown notification to repairman
  */
 const sendBreakdownNotification = async (repairmanEmail, repairmanName, location, description, category) => {
@@ -480,6 +545,9 @@ module.exports = {
   sendOTPEmail,
   sendNotificationEmail,
   sendTestDriveNotification,
+  sendTestDriveApprovedEmail,
+  sendTestDriveRejectedEmail,
+  sendTestDriveCancellationEmail,
   sendBreakdownNotification,
   sendIDVerificationEmail,
   sendEmail

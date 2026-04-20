@@ -36,6 +36,22 @@ const testDriveSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Time is required']
   },
+  preferredDate: {
+    type: Date,
+    required: [true, 'Preferred date is required'],
+    validate: {
+      validator: function validatePreferredDate(value) {
+        const preferredDate = new Date(value);
+        preferredDate.setHours(0, 0, 0, 0);
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        return preferredDate >= today;
+      },
+      message: 'Preferred date must be today or in the future'
+    }
+  },
   
   // Duration (in minutes)
   duration: {
@@ -91,7 +107,8 @@ const testDriveSchema = new mongoose.Schema({
     default: Date.now
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  collection: 'testdrives'
 });
 
 // Indexes

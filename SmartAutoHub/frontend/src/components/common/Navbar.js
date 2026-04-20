@@ -79,6 +79,8 @@ const Navbar = () => {
     { label: 'Breakdown Assist', path: '/breakdown', icon: <Build /> },
   ];
 
+  const canManageAvailability = ['seller', 'buyer/seller', 'admin1'].includes(user?.role);
+
   const sellerNavItems = [
     { label: 'My Vehicles', path: '/my-vehicles', icon: <DirectionsCar /> },
     { label: 'Add Vehicle', path: '/add-vehicle', icon: <DirectionsCar /> },
@@ -132,6 +134,17 @@ const Navbar = () => {
             <ListItemText primary={item.label} />
           </ListItem>
         ))}
+        {isAuthenticated && canManageAvailability && (
+          <ListItem
+            button
+            component={Link}
+            to="/seller-availability"
+            onClick={handleDrawerToggle}
+          >
+            <ListItemIcon><Schedule /></ListItemIcon>
+            <ListItemText primary="Test Drive Availability" />
+          </ListItem>
+        )}
         {isAuthenticated && (
           <ListItem 
             button 
@@ -267,6 +280,16 @@ const Navbar = () => {
                   {item.label}
                 </Button>
               ))}
+              {isAuthenticated && canManageAvailability && (
+                <Button
+                  component={Link}
+                  to="/seller-availability"
+                  color="inherit"
+                  startIcon={<Schedule />}
+                >
+                  Test Drive Availability
+                </Button>
+              )}
               {isAuthenticated && (
                 <Button
                   component={Link}

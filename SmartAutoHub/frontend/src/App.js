@@ -29,6 +29,8 @@ import LeaseCalculatorPage from './pages/LeaseCalculatorPage';
 import AddVehiclePage from './pages/AddVehiclePage';
 import MyVehiclesPage from './pages/MyVehiclesPage';
 import TestDrivesPage from './pages/TestDrivesPage';
+import BookTestDrivePage from './pages/BookTestDrivePage';
+import SellerAvailability from './pages/SellerAvailability';
 import BreakdownPage from './pages/BreakdownPage';
 import RepairmanMapPage from './pages/RepairmanMapPage';
 import RepairmanDashboard from './pages/RepairmanDashboard';
@@ -254,6 +256,16 @@ function App() {
                 <Route path="/test-drives" element={
                   <PrivateRoute>
                     <TestDrivesPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/book-test-drive/:vehicleId" element={
+                  <PrivateRoute>
+                    <BookTestDrivePage />
+                  </PrivateRoute>
+                } />
+                <Route path="/seller-availability" element={
+                  <PrivateRoute roles={['seller', 'buyer/seller', 'admin1']}>
+                    <SellerAvailability />
                   </PrivateRoute>
                 } />
                 <Route path="/breakdown" element={

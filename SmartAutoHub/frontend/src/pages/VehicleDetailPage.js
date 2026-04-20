@@ -36,6 +36,7 @@ import {
   Phone,
   Email,
   Event,
+  Schedule,
   ChevronLeft,
   ChevronRight,
   VerifiedUser,
@@ -174,10 +175,11 @@ const VehicleDetailPage = () => {
     setSubmitting(true);
     try {
       await api.post('/test-drives', {
-        vehicle: id,
+        vehicleId: id,
+        date: testDriveDate,
+        time: testDriveTime,
         preferredDate: testDriveDate,
-        preferredTime: testDriveTime,
-        message: testDriveMessage,
+        buyerNotes: testDriveMessage,
       });
       setSuccess('Test drive booked successfully!');
       setTestDriveOpen(false);
@@ -428,7 +430,7 @@ const VehicleDetailPage = () => {
                   fullWidth
                   size="large"
                   startIcon={<Event />}
-                  onClick={() => setTestDriveOpen(true)}
+                  onClick={() => navigate(`/book-test-drive/${id}`)}
                   sx={{
                     backgroundColor: '#4281da',
                     color: '#ffffff',
@@ -689,6 +691,24 @@ const VehicleDetailPage = () => {
               {/* Owner/Admin Actions (Edit, Delete, Mark as Sold) */}
               {(isOwner || isAdmin) && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {isOwner && (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      size="large"
+                      startIcon={<Schedule />}
+                      onClick={() => navigate('/seller-availability')}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: '#9CA3AF'
+                        }
+                      }}
+                    >
+                      Manage Test Drive Availability
+                    </Button>
+                  )}
+
                   <Box sx={{ display: 'flex', gap: 2 }}>
                     <Button
                       variant="contained"

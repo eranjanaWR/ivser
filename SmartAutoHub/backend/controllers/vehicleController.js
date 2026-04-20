@@ -9,9 +9,10 @@ const Vehicle = require('../models/Vehicle');
 const Image = require('../models/Image');
 const Boost = require('../models/Boost');
 const ViewHistory = require('../models/ViewHistory');
+const BuyerBooking = require('../models/BuyerBooking');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const notificationController = require('./notificationController');
-const { sendNotificationEmail } = require('../utils/email');
+const { sendNotificationEmail, sendTestDriveCancellationEmail } = require('../utils/email');
 
 /**
  * @desc    Get all vehicles with filters
@@ -482,14 +483,62 @@ const updateVehicle = async (req, res) => {
       }
     });
 
-    // Check if status is changing to 'available' to trigger notifications
-    const wasUnavailable = vehicle.status !== 'available';
-    const isBecomingAvailable = req.body.status === 'available';
+    const previousStatus = vehicle.status;
+    const nextStatus = req.body.status;
+
+    const wasUnavailable = previousStatus !== 'active';
+    const isBecomingAvailable = nextStatus === 'active';
+    const wasAvailable = ['active', 'pending'].includes(previousStatus);
+    const isBecomingUnavailable = ['sold', 'removed', 'inactive'].includes(nextStatus);
     
     // Update other fields
     Object.assign(vehicle, req.body);
     vehicle = await vehicle.save({ runValidators: true });
     
+    if (isBecomingUnavailable && wasAvailable) {
+      try {
+        const activeBookings = await BuyerBooking.find({
+          vehicleId: vehicle._id,
+          status: { $in: ['Pending', 'Accepted'] }
+        }).populate('buyerId', 'email firstName lastName');
+
+        const cancellationReasonMap = {
+          sold: 'Vehicle has been sold',
+          removed: 'Vehicle listing was removed',
+          inactive: 'Vehicle is no longer available for test drives'
+        };
+
+        const cancellationReason = cancellationReasonMap[nextStatus] || 'Vehicle is no longer available';
+        const vehicleName = `${vehicle.year} ${vehicle.brand} ${vehicle.model}`;
+
+        for (const booking of activeBookings) {
+          try {
+            const buyerEmail = booking.buyerId?.email || booking.buyerInfo?.email;
+            const buyerName =
+              `${booking.buyerId?.firstName || ''} ${booking.buyerId?.lastName || ''}`.trim() ||
+              booking.buyerInfo?.fullName ||
+              'Buyer';
+
+            if (buyerEmail) {
+              await sendTestDriveCancellationEmail(
+                buyerEmail,
+                buyerName,
+                vehicleName,
+                cancellationReason
+              );
+            }
+          } catch (emailError) {
+            console.error('Failed to send test drive cancellation email:', emailError.message);
+          }
+
+          booking.status = 'Cancelled';
+          await booking.save();
+        }
+      } catch (testDriveError) {
+        console.error('Error cancelling active test drives on vehicle status change:', testDriveError);
+      }
+    }
+
     // Trigger notifications if vehicle is now available
     if (isBecomingAvailable && wasUnavailable) {
       console.log(`Vehicle ${vehicle._id} is now available. Checking for subscriptions...`);
@@ -536,6 +585,42 @@ const deleteVehicle = async (req, res) => {
       });
     }
     
+    try {
+      const activeBookings = await BuyerBooking.find({
+        vehicleId: vehicle._id,
+        status: { $in: ['Pending', 'Accepted'] }
+      }).populate('buyerId', 'email firstName lastName');
+
+      const vehicleName = `${vehicle.year} ${vehicle.brand} ${vehicle.model}`;
+      const cancellationReason = 'Vehicle listing was removed';
+
+      for (const booking of activeBookings) {
+        try {
+          const buyerEmail = booking.buyerId?.email || booking.buyerInfo?.email;
+          const buyerName =
+            `${booking.buyerId?.firstName || ''} ${booking.buyerId?.lastName || ''}`.trim() ||
+            booking.buyerInfo?.fullName ||
+            'Buyer';
+
+          if (buyerEmail) {
+            await sendTestDriveCancellationEmail(
+              buyerEmail,
+              buyerName,
+              vehicleName,
+              cancellationReason
+            );
+          }
+        } catch (emailError) {
+          console.error('Failed to send test drive cancellation email during vehicle delete:', emailError.message);
+        }
+
+        booking.status = 'Cancelled';
+        await booking.save();
+      }
+    } catch (testDriveError) {
+      console.error('Error handling active test drive cancellations during delete:', testDriveError);
+    }
+
     // Delete all associated images from database
     if (vehicle.images && vehicle.images.length > 0) {
       try {

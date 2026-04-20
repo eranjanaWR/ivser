@@ -6,6 +6,8 @@
 const User = require('./User');
 const Vehicle = require('./Vehicle');
 const TestDrive = require('./TestDrive');
+const BuyerBooking = require('./BuyerBooking');
+const DealerAvailability = require('./DealerAvailability');
 const Breakdown = require('./Breakdown');
 const Search = require('./Search');
 const Notification = require('./Notification');
@@ -18,6 +20,8 @@ module.exports = {
   User,
   Vehicle,
   TestDrive,
+  BuyerBooking,
+  DealerAvailability,
   Breakdown,
   Search,
   Notification,
