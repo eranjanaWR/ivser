@@ -15,6 +15,10 @@ const { validateLogin, validateOTP } = require('../middlewares/validation');
 router.post('/register', uploadProfileImage, authController.register);
 router.post('/login', validateLogin, authController.login);
 
+// Password reset (public routes - user not logged in)
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
+
 // Protected routes (requires authentication)
 router.use(protect);
 
