@@ -73,6 +73,7 @@ const Navbar = () => {
   const navItems = [
     { label: 'Vehicles', path: '/vehicles', icon: <DirectionsCar /> },
     { label: 'Price Prediction', path: '/prediction', icon: <TrendingUp /> },
+    { label: 'Takgaala-AI', path: '/takgaala-ai', icon: <TrendingUp /> },
   ];
 
   const authNavItems = [
