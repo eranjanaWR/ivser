@@ -85,6 +85,10 @@ const Navbar = () => {
     { label: 'Add Vehicle', path: '/add-vehicle', icon: <DirectionsCar /> },
   ];
 
+  const repairmanNavItems = [
+    { label: 'Repairman Dashboard', path: '/repairman-dashboard', icon: <Dashboard /> },
+  ];
+
   // Mobile drawer content
   const drawer = (
     <Box sx={{ width: 260, pt: 2 }}>
@@ -126,6 +130,18 @@ const Navbar = () => {
             button 
             key={item.path} 
             component={Link} 
+            to={item.path}
+            onClick={handleDrawerToggle}
+          >
+            <ListItemIcon>{item.icon}</ListItemIcon>
+            <ListItemText primary={item.label} />
+          </ListItem>
+        ))}
+        {isAuthenticated && user?.role === 'repairman' && repairmanNavItems.map((item) => (
+          <ListItem
+            button
+            key={item.path}
+            component={Link}
             to={item.path}
             onClick={handleDrawerToggle}
           >
@@ -268,6 +284,17 @@ const Navbar = () => {
                   {item.label}
                 </Button>
               ))}
+              {isAuthenticated && user?.role === 'repairman' && repairmanNavItems.map((item) => (
+                <Button
+                  key={item.path}
+                  component={Link}
+                  to={item.path}
+                  color="inherit"
+                  startIcon={item.icon}
+                >
+                  {item.label}
+                </Button>
+              ))}
               {isAuthenticated && (
                 <Button
                   component={Link}
@@ -328,6 +355,12 @@ const Navbar = () => {
                     <MenuItem component={Link} to="/my-vehicles" onClick={handleMenuClose}>
                       <ListItemIcon><DirectionsCar fontSize="small" /></ListItemIcon>
                       My Vehicles
+                    </MenuItem>
+                  )}
+                  {user?.role === 'repairman' && (
+                    <MenuItem component={Link} to="/repairman-dashboard" onClick={handleMenuClose}>
+                      <ListItemIcon><Dashboard fontSize="small" /></ListItemIcon>
+                      Repairman Dashboard
                     </MenuItem>
                   )}
                   {['admin1', 'admin2'].includes(user?.role) && (

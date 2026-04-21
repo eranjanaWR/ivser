@@ -190,9 +190,29 @@ const validateTestDrive = [
  * Breakdown Validation
  */
 const validateBreakdown = [
-  body('location.coordinates')
-    .notEmpty().withMessage('Location coordinates are required')
-    .isArray({ min: 2, max: 2 }).withMessage('Coordinates must be [longitude, latitude]'),
+  body('location')
+    .custom((value) => {
+      let locationObj;
+      if (typeof value === 'string') {
+        try {
+          locationObj = JSON.parse(value);
+        } catch (e) {
+          throw new Error('Invalid location format');
+        }
+      } else {
+        locationObj = value;
+      }
+      
+      if (!locationObj || !locationObj.coordinates) {
+        throw new Error('Location coordinates are required');
+      }
+      
+      if (!Array.isArray(locationObj.coordinates) || locationObj.coordinates.length !== 2) {
+        throw new Error('Coordinates must be [longitude, latitude]');
+      }
+      
+      return true;
+    }),
   
   body('description')
     .trim()

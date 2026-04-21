@@ -34,6 +34,10 @@ import {
   Divider,
   Skeleton,
   Fade,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   MyLocation,
@@ -47,11 +51,13 @@ import {
   NearMe,
   ArrowForward,
   Refresh,
+  Engineering,
 } from '@mui/icons-material';
 import { io } from 'socket.io-client';
 import api from '../services/api';
 import { RepairmanMap, RepairmanTracker } from '../components';
 import { reverseGeocode } from '../utils/geocoding';
+import { useAuth } from '../context/AuthContext';
 
 const issueTypes = [
   'Engine Problem',
@@ -65,9 +71,22 @@ const issueTypes = [
   'Other',
 ];
 
+const mapIssueTypeToCategory = (issueType) => {
+  const normalized = String(issueType || '').toLowerCase();
+  if (normalized.includes('engine')) return 'engine';
+  if (normalized.includes('electrical')) return 'electrical';
+  if (normalized.includes('tire')) return 'tire';
+  if (normalized.includes('battery')) return 'battery';
+  if (normalized.includes('fuel')) return 'fuel';
+  if (normalized.includes('brake')) return 'brakes';
+  if (normalized.includes('transmission')) return 'transmission';
+  return 'other';
+};
+
 const steps = ['Describe Issue', 'Confirm Location', 'Track Repairman'];
 
 const BreakdownPage = () => {
+  const { user, refreshUser } = useAuth();
   const fileInputRef = useRef(null);
   const socketRef = useRef(null);
   
@@ -95,6 +114,16 @@ const BreakdownPage = () => {
   const [assignedRepairman, setAssignedRepairman] = useState(null);
   const [repairmanLocation, setRepairmanLocation] = useState(null);
   const [currentStatus, setCurrentStatus] = useState('pending');
+
+  // Repairman registration state (Breakdown section only)
+  const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [repairmanForm, setRepairmanForm] = useState({
+    phone: '',
+    specialization: '',
+    experience: '',
+    serviceRadius: '10',
+  });
 
   // Fetch breakdown details
   const fetchBreakdownDetails = useCallback(async () => {
@@ -202,6 +231,12 @@ const BreakdownPage = () => {
     }
   }, [breakdownId, fetchBreakdownDetails]);
 
+  useEffect(() => {
+    if (user?.phone) {
+      setRepairmanForm((prev) => ({ ...prev, phone: prev.phone || user.phone }));
+    }
+  }, [user]);
+
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
     if (images.length + files.length > 5) {
@@ -255,14 +290,22 @@ const BreakdownPage = () => {
     
     try {
       const formData = new FormData();
-      formData.append('issueType', issueType);
-      formData.append('description', description);
-      formData.append('latitude', location.lat);
-      formData.append('longitude', location.lng);
-      formData.append('address', address || detectedAddress);
-      formData.append('vehicleBrand', vehicleInfo.brand);
-      formData.append('vehicleModel', vehicleInfo.model);
-      formData.append('vehicleYear', vehicleInfo.year);
+
+      const normalizedDescription = description?.trim() || `Issue reported: ${issueType}`;
+      const payloadLocation = {
+        coordinates: [location.lng, location.lat],
+        address: address || detectedAddress,
+      };
+      const payloadVehicleDetails = {
+        brand: vehicleInfo.brand?.trim() || undefined,
+        model: vehicleInfo.model?.trim() || undefined,
+        year: vehicleInfo.year ? Number(vehicleInfo.year) : undefined,
+      };
+
+      formData.append('description', normalizedDescription);
+      formData.append('category', mapIssueTypeToCategory(issueType));
+      formData.append('location', JSON.stringify(payloadLocation));
+      formData.append('vehicleDetails', JSON.stringify(payloadVehicleDetails));
       
       imageFiles.forEach((file) => {
         formData.append('images', file);
@@ -271,10 +314,11 @@ const BreakdownPage = () => {
       const { data } = await api.post('/breakdowns', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      
-      setBreakdownId(data.data._id);
-      setBreakdown(data.data);
-      setNearbyRepairmen(data.data.nearbyRepairmen || []);
+
+      const createdBreakdown = data?.data?.breakdown || data?.data;
+      setBreakdownId(createdBreakdown?._id || null);
+      setBreakdown(createdBreakdown || null);
+      setNearbyRepairmen(data?.data?.nearbyRepairmen || []);
       setActiveStep(2);
       setSuccess('Breakdown request sent! Waiting for a repairman to accept.');
     } catch (err) {
@@ -296,6 +340,34 @@ const BreakdownPage = () => {
     } catch (err) {
       console.error('Error submitting rating:', err);
     }
+  };
+
+  const handleRegisterFieldChange = (field) => (e) => {
+    setRepairmanForm((prev) => ({ ...prev, [field]: e.target.value }));
+  };
+
+  const handleRegisterRepairman = async () => {
+    setRegisterLoading(true);
+    setError('');
+
+    try {
+      await api.post('/breakdowns/register-repairman', {
+        phone: repairmanForm.phone,
+        specialization: repairmanForm.specialization,
+        experience: repairmanForm.experience,
+        serviceRadius: repairmanForm.serviceRadius,
+        latitude: location?.lat,
+        longitude: location?.lng,
+      });
+
+      await refreshUser();
+      setRegisterDialogOpen(false);
+      setSuccess('You are now registered as a repairman.');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to register as repairman');
+    }
+
+    setRegisterLoading(false);
   };
 
   // Step 0: Describe Issue
@@ -664,13 +736,106 @@ const BreakdownPage = () => {
     <Box sx={{ py: 4, bgcolor: '#f8f9fa', minHeight: '80vh' }}>
       <Container maxWidth="md">
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            Emergency Breakdown
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Get help from nearby verified repairmen in minutes
-          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: { xs: 'flex-start', sm: 'center' },
+              justifyContent: 'space-between',
+              gap: 2,
+              flexDirection: { xs: 'column', sm: 'row' },
+            }}
+          >
+            <Box>
+              <Typography variant="h4" fontWeight="bold" gutterBottom>
+                Emergency Breakdown
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Get help from nearby verified repairmen in minutes
+              </Typography>
+            </Box>
+            {user?.role !== 'repairman' && (
+              <Button
+                variant="outlined"
+                startIcon={<Engineering />}
+                onClick={() => setRegisterDialogOpen(true)}
+              >
+                Register as Repairman
+              </Button>
+            )}
+          </Box>
         </Box>
+
+        <Dialog
+          open={registerDialogOpen}
+          onClose={() => !registerLoading && setRegisterDialogOpen(false)}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Register as Repairman</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Complete this form to receive breakdown requests in your area.
+            </Typography>
+            <TextField
+              fullWidth
+              label="Phone Number"
+              margin="normal"
+              value={repairmanForm.phone}
+              onChange={handleRegisterFieldChange('phone')}
+            />
+            <TextField
+              fullWidth
+              required
+              label="Specializations"
+              margin="normal"
+              value={repairmanForm.specialization}
+              onChange={handleRegisterFieldChange('specialization')}
+              placeholder="engine, electrical, tire"
+              helperText="Comma-separated values"
+            />
+            <Grid container spacing={2} sx={{ mt: 0.5 }}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  required
+                  label="Experience (years)"
+                  type="number"
+                  value={repairmanForm.experience}
+                  onChange={handleRegisterFieldChange('experience')}
+                  inputProps={{ min: 0, max: 60 }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  required
+                  label="Service Radius (km)"
+                  type="number"
+                  value={repairmanForm.serviceRadius}
+                  onChange={handleRegisterFieldChange('serviceRadius')}
+                  inputProps={{ min: 1, max: 100 }}
+                />
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setRegisterDialogOpen(false)} disabled={registerLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleRegisterRepairman}
+              disabled={
+                registerLoading ||
+                !repairmanForm.specialization.trim() ||
+                repairmanForm.experience === '' ||
+                repairmanForm.serviceRadius === ''
+              }
+            >
+              {registerLoading ? 'Registering...' : 'Submit Registration'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {error && (
           <Fade in>

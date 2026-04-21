@@ -114,6 +114,102 @@ const createBreakdown = async (req, res) => {
 };
 
 /**
+ * @desc    Register current user as repairman from breakdown flow
+ * @route   POST /api/breakdowns/register-repairman
+ * @access  Private
+ */
+const registerAsRepairman = async (req, res) => {
+  try {
+    const {
+      phone,
+      specialization,
+      experience,
+      serviceRadius,
+      latitude,
+      longitude
+    } = req.body;
+
+    const parsedExperience = Number(experience);
+    const parsedServiceRadius = Number(serviceRadius);
+    const parsedLatitude = Number(latitude);
+    const parsedLongitude = Number(longitude);
+
+    let parsedSpecialization = [];
+    if (Array.isArray(specialization)) {
+      parsedSpecialization = specialization
+        .map(item => String(item).trim().toLowerCase())
+        .filter(Boolean);
+    } else if (typeof specialization === 'string') {
+      parsedSpecialization = specialization
+        .split(',')
+        .map(item => item.trim().toLowerCase())
+        .filter(Boolean);
+    }
+
+    if (!parsedSpecialization.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one specialization is required'
+      });
+    }
+
+    if (!Number.isFinite(parsedExperience) || parsedExperience < 0 || parsedExperience > 60) {
+      return res.status(400).json({
+        success: false,
+        message: 'Experience must be between 0 and 60 years'
+      });
+    }
+
+    if (!Number.isFinite(parsedServiceRadius) || parsedServiceRadius < 1 || parsedServiceRadius > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Service radius must be between 1 and 100 km'
+      });
+    }
+
+    const updates = {
+      role: 'repairman',
+      'repairmanDetails.specialization': parsedSpecialization,
+      'repairmanDetails.experience': parsedExperience,
+      'repairmanDetails.serviceRadius': parsedServiceRadius,
+      'repairmanDetails.isAvailable': true
+    };
+
+    if (phone && String(phone).trim()) {
+      updates.phone = String(phone).trim();
+    }
+
+    if (Number.isFinite(parsedLatitude) && Number.isFinite(parsedLongitude)) {
+      updates.location = {
+        type: 'Point',
+        coordinates: [parsedLongitude, parsedLatitude]
+      };
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      updates,
+      { new: true, runValidators: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'You are now registered as a repairman',
+      data: {
+        user: user.getPublicProfile()
+      }
+    });
+  } catch (error) {
+    console.error('Register repairman error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error registering as repairman',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Helper function to find nearby repairmen
  */
 const findNearbyRepairmen = async (longitude, latitude, radiusKm = 20) => {
@@ -243,10 +339,11 @@ const getRepairmanJobs = async (req, res) => {
         'requestsSent.repairmanId': req.user._id
       };
     } else if (status) {
-      // Get jobs assigned to this repairman
+      // Get jobs assigned to this repairman (supports multiple status query params)
+      const statusList = Array.isArray(status) ? status : [status];
       filter = {
         repairmanId: req.user._id,
-        status: status
+        status: statusList.length === 1 ? statusList[0] : { $in: statusList }
       };
     } else {
       // Get all jobs for this repairman (assigned or requested)
@@ -703,6 +800,7 @@ const calculateETA = async (req, res) => {
 };
 
 module.exports = {
+  registerAsRepairman,
   createBreakdown,
   getNearbyRepairmen,
   getMyBreakdowns,
