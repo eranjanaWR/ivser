@@ -336,7 +336,10 @@ const getRepairmanJobs = async (req, res) => {
       // Get available jobs (pending and not yet assigned)
       filter = {
         status: 'pending',
-        'requestsSent.repairmanId': req.user._id
+        $or: [
+          { repairmanId: { $exists: false } },
+          { repairmanId: null }
+        ]
       };
     } else if (status) {
       // Get jobs assigned to this repairman (supports multiple status query params)
@@ -403,9 +406,11 @@ const acceptBreakdown = async (req, res) => {
       });
     }
     
-    // Verify this repairman was notified
-    const wasNotified = breakdown.requestsSent.some(
-      req => req.repairmanId.toString() === req.user._id.toString()
+    const requestEntries = Array.isArray(breakdown.requestsSent) ? breakdown.requestsSent : [];
+
+    // Verify whether this repairman was already notified
+    const wasNotified = requestEntries.some(
+      (entry) => entry.repairmanId?.toString() === req.user._id.toString()
     );
     
     // Update breakdown
@@ -414,13 +419,27 @@ const acceptBreakdown = async (req, res) => {
     breakdown.estimatedCost = estimatedCost;
     breakdown.eta = eta;
     
-    // Update request response
-    breakdown.requestsSent = breakdown.requestsSent.map(req => {
-      if (req.repairmanId.toString() === req.user._id.toString()) {
-        return { ...req.toObject(), response: 'accepted', respondedAt: new Date() };
-      }
-      return { ...req.toObject(), response: 'rejected', respondedAt: new Date() };
+    // Update request response history
+    breakdown.requestsSent = requestEntries.map((entry) => {
+      const isCurrentRepairman = entry.repairmanId?.toString() === req.user._id.toString();
+      const entryObject = typeof entry.toObject === 'function' ? entry.toObject() : entry;
+
+      return {
+        ...entryObject,
+        response: isCurrentRepairman ? 'accepted' : 'rejected',
+        respondedAt: new Date()
+      };
     });
+
+    // If this repairman accepted without a prior notification record, add one.
+    if (!wasNotified) {
+      breakdown.requestsSent.push({
+        repairmanId: req.user._id,
+        sentAt: new Date(),
+        response: 'accepted',
+        respondedAt: new Date()
+      });
+    }
     
     await breakdown.save();
     

@@ -308,7 +308,7 @@ const BreakdownPage = () => {
       formData.append('vehicleDetails', JSON.stringify(payloadVehicleDetails));
       
       imageFiles.forEach((file) => {
-        formData.append('images', file);
+        formData.append('breakdownImages', file);
       });
       
       const { data } = await api.post('/breakdowns', formData, {
@@ -322,7 +322,8 @@ const BreakdownPage = () => {
       setActiveStep(2);
       setSuccess('Breakdown request sent! Waiting for a repairman to accept.');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to submit breakdown request');
+      const firstValidationError = err.response?.data?.errors?.[0]?.message;
+      setError(firstValidationError || err.response?.data?.message || 'Failed to submit breakdown request');
     }
     setLoading(false);
   };

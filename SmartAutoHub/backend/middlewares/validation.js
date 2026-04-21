@@ -202,13 +202,29 @@ const validateBreakdown = [
       } else {
         locationObj = value;
       }
-      
-      if (!locationObj || !locationObj.coordinates) {
+
+      if (!locationObj) {
         throw new Error('Location coordinates are required');
       }
-      
-      if (!Array.isArray(locationObj.coordinates) || locationObj.coordinates.length !== 2) {
+
+      // Accept either GeoJSON-style coordinates or lat/lng for compatibility
+      let coordinates = locationObj.coordinates;
+      if (!coordinates && locationObj.lat !== undefined && locationObj.lng !== undefined) {
+        coordinates = [locationObj.lng, locationObj.lat];
+      }
+
+      if (!Array.isArray(coordinates) || coordinates.length !== 2) {
         throw new Error('Coordinates must be [longitude, latitude]');
+      }
+
+      const longitude = Number(coordinates[0]);
+      const latitude = Number(coordinates[1]);
+      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+        throw new Error('Coordinates must contain valid numbers');
+      }
+
+      if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
+        throw new Error('Coordinates are out of valid range');
       }
       
       return true;
