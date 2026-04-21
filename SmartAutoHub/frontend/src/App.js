@@ -44,6 +44,7 @@ import BoostAdPage from './pages/BoostAdPage';
 import PremiumPostsPage from './pages/PremiumPostsPage';
 import AdvertisePackagesPage from './pages/AdvertisePackagesPage';
 import FinancialAidsPage from './pages/FinancialAidsPage';
+import TakgaalaAIPage from './pages/TakgaalaAIPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Professional, minimal theme similar to Uber
@@ -229,6 +230,7 @@ function App() {
                 <Route path="/premium-posts" element={<PremiumPostsPage />} />
                 <Route path="/advertise-packages" element={<AdvertisePackagesPage />} />
                 <Route path="/financial-aids" element={<FinancialAidsPage />} />
+                <Route path="/takgaala-ai" element={<TakgaalaAIPage />} />
                 
                 {/* Protected Routes */}
                 <Route path="/verification" element={
