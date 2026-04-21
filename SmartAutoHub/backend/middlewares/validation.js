@@ -190,9 +190,45 @@ const validateTestDrive = [
  * Breakdown Validation
  */
 const validateBreakdown = [
-  body('location.coordinates')
-    .notEmpty().withMessage('Location coordinates are required')
-    .isArray({ min: 2, max: 2 }).withMessage('Coordinates must be [longitude, latitude]'),
+  body('location')
+    .custom((value) => {
+      let locationObj;
+      if (typeof value === 'string') {
+        try {
+          locationObj = JSON.parse(value);
+        } catch (e) {
+          throw new Error('Invalid location format');
+        }
+      } else {
+        locationObj = value;
+      }
+
+      if (!locationObj) {
+        throw new Error('Location coordinates are required');
+      }
+
+      // Accept either GeoJSON-style coordinates or lat/lng for compatibility
+      let coordinates = locationObj.coordinates;
+      if (!coordinates && locationObj.lat !== undefined && locationObj.lng !== undefined) {
+        coordinates = [locationObj.lng, locationObj.lat];
+      }
+
+      if (!Array.isArray(coordinates) || coordinates.length !== 2) {
+        throw new Error('Coordinates must be [longitude, latitude]');
+      }
+
+      const longitude = Number(coordinates[0]);
+      const latitude = Number(coordinates[1]);
+      if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+        throw new Error('Coordinates must contain valid numbers');
+      }
+
+      if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
+        throw new Error('Coordinates are out of valid range');
+      }
+      
+      return true;
+    }),
   
   body('description')
     .trim()

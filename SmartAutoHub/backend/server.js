@@ -112,6 +112,13 @@ io.on('connection', (socket) => {
     socket.join(`breakdown_${breakdownId}`);
     console.log(`User joined breakdown room: ${breakdownId}`);
   });
+
+  // Join a repairman-specific room for incoming job notifications
+  socket.on('joinRepairmanRoom', (repairmanId) => {
+    if (!repairmanId) return;
+    socket.join(`repairman_${repairmanId}`);
+    console.log(`Repairman joined room: ${repairmanId}`);
+  });
   
   // Leave a breakdown room
   socket.on('leaveBreakdownRoom', (breakdownId) => {
