@@ -114,6 +114,102 @@ const createBreakdown = async (req, res) => {
 };
 
 /**
+ * @desc    Register current user as repairman from breakdown flow
+ * @route   POST /api/breakdowns/register-repairman
+ * @access  Private
+ */
+const registerAsRepairman = async (req, res) => {
+  try {
+    const {
+      phone,
+      specialization,
+      experience,
+      serviceRadius,
+      latitude,
+      longitude
+    } = req.body;
+
+    const parsedExperience = Number(experience);
+    const parsedServiceRadius = Number(serviceRadius);
+    const parsedLatitude = Number(latitude);
+    const parsedLongitude = Number(longitude);
+
+    let parsedSpecialization = [];
+    if (Array.isArray(specialization)) {
+      parsedSpecialization = specialization
+        .map(item => String(item).trim().toLowerCase())
+        .filter(Boolean);
+    } else if (typeof specialization === 'string') {
+      parsedSpecialization = specialization
+        .split(',')
+        .map(item => item.trim().toLowerCase())
+        .filter(Boolean);
+    }
+
+    if (!parsedSpecialization.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one specialization is required'
+      });
+    }
+
+    if (!Number.isFinite(parsedExperience) || parsedExperience < 0 || parsedExperience > 60) {
+      return res.status(400).json({
+        success: false,
+        message: 'Experience must be between 0 and 60 years'
+      });
+    }
+
+    if (!Number.isFinite(parsedServiceRadius) || parsedServiceRadius < 1 || parsedServiceRadius > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Service radius must be between 1 and 100 km'
+      });
+    }
+
+    const updates = {
+      role: 'repairman',
+      'repairmanDetails.specialization': parsedSpecialization,
+      'repairmanDetails.experience': parsedExperience,
+      'repairmanDetails.serviceRadius': parsedServiceRadius,
+      'repairmanDetails.isAvailable': true
+    };
+
+    if (phone && String(phone).trim()) {
+      updates.phone = String(phone).trim();
+    }
+
+    if (Number.isFinite(parsedLatitude) && Number.isFinite(parsedLongitude)) {
+      updates.location = {
+        type: 'Point',
+        coordinates: [parsedLongitude, parsedLatitude]
+      };
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      updates,
+      { new: true, runValidators: true }
+    );
+
+    res.json({
+      success: true,
+      message: 'You are now registered as a repairman',
+      data: {
+        user: user.getPublicProfile()
+      }
+    });
+  } catch (error) {
+    console.error('Register repairman error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error registering as repairman',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Helper function to find nearby repairmen
  */
 const findNearbyRepairmen = async (longitude, latitude, radiusKm = 20) => {
@@ -240,13 +336,17 @@ const getRepairmanJobs = async (req, res) => {
       // Get available jobs (pending and not yet assigned)
       filter = {
         status: 'pending',
-        'requestsSent.repairmanId': req.user._id
+        $or: [
+          { repairmanId: { $exists: false } },
+          { repairmanId: null }
+        ]
       };
     } else if (status) {
-      // Get jobs assigned to this repairman
+      // Get jobs assigned to this repairman (supports multiple status query params)
+      const statusList = Array.isArray(status) ? status : [status];
       filter = {
         repairmanId: req.user._id,
-        status: status
+        status: statusList.length === 1 ? statusList[0] : { $in: statusList }
       };
     } else {
       // Get all jobs for this repairman (assigned or requested)
@@ -306,9 +406,11 @@ const acceptBreakdown = async (req, res) => {
       });
     }
     
-    // Verify this repairman was notified
-    const wasNotified = breakdown.requestsSent.some(
-      req => req.repairmanId.toString() === req.user._id.toString()
+    const requestEntries = Array.isArray(breakdown.requestsSent) ? breakdown.requestsSent : [];
+
+    // Verify whether this repairman was already notified
+    const wasNotified = requestEntries.some(
+      (entry) => entry.repairmanId?.toString() === req.user._id.toString()
     );
     
     // Update breakdown
@@ -317,13 +419,27 @@ const acceptBreakdown = async (req, res) => {
     breakdown.estimatedCost = estimatedCost;
     breakdown.eta = eta;
     
-    // Update request response
-    breakdown.requestsSent = breakdown.requestsSent.map(req => {
-      if (req.repairmanId.toString() === req.user._id.toString()) {
-        return { ...req.toObject(), response: 'accepted', respondedAt: new Date() };
-      }
-      return { ...req.toObject(), response: 'rejected', respondedAt: new Date() };
+    // Update request response history
+    breakdown.requestsSent = requestEntries.map((entry) => {
+      const isCurrentRepairman = entry.repairmanId?.toString() === req.user._id.toString();
+      const entryObject = typeof entry.toObject === 'function' ? entry.toObject() : entry;
+
+      return {
+        ...entryObject,
+        response: isCurrentRepairman ? 'accepted' : 'rejected',
+        respondedAt: new Date()
+      };
     });
+
+    // If this repairman accepted without a prior notification record, add one.
+    if (!wasNotified) {
+      breakdown.requestsSent.push({
+        repairmanId: req.user._id,
+        sentAt: new Date(),
+        response: 'accepted',
+        respondedAt: new Date()
+      });
+    }
     
     await breakdown.save();
     
@@ -703,6 +819,7 @@ const calculateETA = async (req, res) => {
 };
 
 module.exports = {
+  registerAsRepairman,
   createBreakdown,
   getNearbyRepairmen,
   getMyBreakdowns,
