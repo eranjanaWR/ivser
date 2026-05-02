@@ -46,6 +46,7 @@ import BoostAdPage from './pages/BoostAdPage';
 import PremiumPostsPage from './pages/PremiumPostsPage';
 import AdvertisePackagesPage from './pages/AdvertisePackagesPage';
 import FinancialAidsPage from './pages/FinancialAidsPage';
+import BiddingPage from './pages/BiddingPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Professional, minimal theme similar to Uber
@@ -282,6 +283,9 @@ function App() {
                   <PrivateRoute>
                     <BreakdownPage />
                   </PrivateRoute>
+                } />
+                <Route path="/bidding" element={
+                  <BiddingPage />
                 } />
                 <Route path="/repairman-map" element={
                   <PrivateRoute>

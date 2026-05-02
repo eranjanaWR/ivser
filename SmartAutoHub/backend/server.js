@@ -71,6 +71,7 @@ const notificationRoutes = require('./routes/notification');
 const priceNotificationRoutes = require('./routes/priceNotifications');
 const advertisingRoutes = require('./routes/advertising');
 const financialRoutes = require('./routes/financial');
+const biddingRoutes = require('./routes/bidding');
 
 
 // API Routes
@@ -89,6 +90,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/user/price-notifications', priceNotificationRoutes);
 app.use('/api/advertising', advertisingRoutes);
 app.use('/api/financial', financialRoutes);
+app.use('/api/bidding', biddingRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
