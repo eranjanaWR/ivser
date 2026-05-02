@@ -38,7 +38,6 @@ import {
   TrendingUp,
   Home,
   VerifiedUser,
-  Gavel,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
 import NotificationBell from '../NotificationBell';
@@ -79,7 +78,6 @@ const Navbar = () => {
   const authNavItems = [
     { label: 'Test Drives', path: '/test-drives', icon: <Schedule /> },
     { label: 'Breakdown Assist', path: '/breakdown', icon: <Build /> },
-    { label: 'Bidding', path: '/bidding', icon: <Gavel /> },
   ];
 
   const canManageAvailability = ['seller', 'buyer/seller', 'admin1'].includes(user?.role);

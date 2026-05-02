@@ -18,7 +18,7 @@ export { default as SellerAvailability } from './SellerAvailability';
 export { default as TestDriveScheduling } from './TestDriveScheduling';
 export { default as TestDriveBooking } from './TestDriveBooking';
 export { default as BreakdownPage } from './BreakdownPage';
-export { default as BiddingPage } from './BiddingPage';
+
 export { default as RepairmanMapPage } from './RepairmanMapPage';
 export { default as RepairmanDashboard } from './RepairmanDashboard';
 export { default as PredictionPage } from './PredictionPage';

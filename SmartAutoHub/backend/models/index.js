@@ -15,8 +15,7 @@ const UserAlert = require('./UserAlert');
 const Image = require('./Image');
 const Boost = require('./Boost');
 const Advertising = require('./Advertising');
-const Auction = require('./Auction');
-const Bid = require('./Bid');
+
 
 module.exports = {
   User,
@@ -31,6 +30,5 @@ module.exports = {
   Image,
   Boost,
   Advertising,
-  Auction,
-  Bid
+  
 };
