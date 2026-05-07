@@ -81,6 +81,8 @@ const Navbar = () => {
     { label: 'Breakdown Assist', path: '/breakdown', icon: <Build /> },
   ];
 
+  const canManageAvailability = ['seller', 'buyer/seller', 'admin1'].includes(user?.role);
+
   const sellerNavItems = [
     { label: 'My Vehicles', path: '/my-vehicles', icon: <DirectionsCar /> },
     { label: 'Add Vehicle', path: '/add-vehicle', icon: <DirectionsCar /> },
