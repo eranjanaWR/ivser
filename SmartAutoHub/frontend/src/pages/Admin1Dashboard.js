@@ -193,8 +193,8 @@ const Admin1Dashboard = () => {
           setBreakdowns(data.data || []);
         } catch (e) {
           setBreakdowns([
-            { _id: '1', issueType: 'Flat Tire', status: 'completed', user: { name: 'User 1' }, repairman: { name: 'Mike Mechanic' }, createdAt: new Date() },
-            { _id: '2', issueType: 'Engine Problem', status: 'in_progress', user: { name: 'User 2' }, repairman: { name: 'Mike Mechanic' }, createdAt: new Date() },
+            { _id: '1', description: 'Flat Tire', status: 'completed', userId: { firstName: 'User', lastName: '1' }, repairmanId: { firstName: 'Mike', lastName: 'Mechanic' }, createdAt: new Date() },
+            { _id: '2', description: 'Engine Problem', status: 'in_progress', userId: { firstName: 'User', lastName: '2' }, repairmanId: { firstName: 'Mike', lastName: 'Mechanic' }, createdAt: new Date() },
           ]);
         }
       } else if (tab === 3) {
@@ -756,41 +756,142 @@ const Admin1Dashboard = () => {
               )}
 
               {tab === 2 && (
-                <Table>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: 'grey.50' }}>
-                      <TableCell>Issue</TableCell>
-                      <TableCell>User</TableCell>
-                      <TableCell>Repairman</TableCell>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Status</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {breakdowns.map((breakdown) => (
-                      <TableRow key={breakdown._id} hover>
-                        <TableCell>{breakdown.issueType}</TableCell>
-                        <TableCell>{breakdown.user?.name}</TableCell>
-                        <TableCell>{breakdown.repairman?.name || '-'}</TableCell>
-                        <TableCell>
-                          {new Date(breakdown.createdAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={breakdown.status}
-                            size="small"
-                            color={
-                              breakdown.status === 'completed' ? 'success' :
-                              breakdown.status === 'in_progress' ? 'warning' :
-                              'default'
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
+    <Table>
+      <TableHead>
+        <TableRow sx={{ bgcolor: 'grey.50' }}>
+          <TableCell>Issue</TableCell>
+          <TableCell>User</TableCell>
+          <TableCell>Repairman</TableCell>
+          <TableCell>Date</TableCell>
+          <TableCell>Status</TableCell>
+        </TableRow>
+      </TableHead>
+
+      <TableBody>
+        {breakdowns.map((breakdown) => {
+          // Support different possible backend field names
+          const user =
+            breakdown.userId ||
+            breakdown.user ||
+            breakdown.userDetails ||
+            null;
+
+          const repairman =
+            breakdown.repairmanId ||
+            breakdown.repairman ||
+            breakdown.repairmanDetails ||
+            null;
+
+          const userName = user
+            ? user.name ||
+              `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
+              user.email ||
+              '-'
+            : '-';
+
+          const repairmanName = repairman
+            ? repairman.name ||
+              `${repairman.firstName || ''} ${repairman.lastName || ''}`.trim() ||
+              repairman.email ||
+              '-'
+            : '-';
+
+          const issue =
+            breakdown.description ||
+            breakdown.issueType ||
+            breakdown.issue ||
+            breakdown.problem ||
+            'No description';
+
+          // location is stored as a GeoJSON object ({ type, coordinates, address, city, state })
+          const locationText =
+            typeof breakdown.location === 'string'
+              ? breakdown.location
+              : breakdown.location?.address ||
+                [breakdown.location?.city, breakdown.location?.state]
+                  .filter(Boolean)
+                  .join(', ') ||
+                (Array.isArray(breakdown.location?.coordinates)
+                  ? breakdown.location.coordinates.join(', ')
+                  : null);
+
+          return (
+            <TableRow key={breakdown._id} hover>
+              <TableCell>
+                <Typography fontWeight="medium">
+                  {issue}
+                </Typography>
+
+                {locationText && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                  >
+                    Location: {locationText}
+                  </Typography>
+                )}
+              </TableCell>
+
+              <TableCell>
+                <Typography>
+                  {userName}
+                </Typography>
+
+                {user?.email && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                  >
+                    {user.email}
+                  </Typography>
+                )}
+              </TableCell>
+
+              <TableCell>
+                <Typography>
+                  {repairmanName}
+                </Typography>
+
+                {repairman?.email && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                  >
+                    {repairman.email}
+                  </Typography>
+                )}
+              </TableCell>
+
+              <TableCell>
+                {breakdown.createdAt
+                  ? new Date(breakdown.createdAt).toLocaleDateString()
+                  : '-'}
+              </TableCell>
+
+              <TableCell>
+                <Chip
+                  label={breakdown.status || 'pending'}
+                  size="small"
+                  color={
+                    breakdown.status === 'completed'
+                      ? 'success'
+                      : breakdown.status === 'in_progress'
+                      ? 'warning'
+                      : breakdown.status === 'cancelled'
+                      ? 'error'
+                      : 'default'
+                  }
+                />
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  )}
 
               {tab === 3 && (
                 <>
