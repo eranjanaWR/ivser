@@ -13,35 +13,35 @@ function FinanceCompanySelector({ selectedCompanies, onSelectCompany }) {
       name: 'LB Finance',
       interestRate: 7.5,
       maxLoanAmount: 5000000,
-      logo: '/uploads/download.png'
+      logo: '/images/download.png'
     },
     {
       id: 'lolc-finance',
       name: 'LOLC Finance',
       interestRate: 8.0,
       maxLoanAmount: 4500000,
-      logo: '/uploads/download.jpg'
+      logo: '/images/download.jpg'
     },
     {
       id: 'central-finance',
       name: 'Central Finance',
       interestRate: 7.8,
       maxLoanAmount: 5500000,
-      logo: '/uploads/download1.png'
+      logo: '/images/download (1).png'
     },
     {
       id: 'hnb-finance',
       name: 'HNB Finance',
       interestRate: 7.2,
       maxLoanAmount: 6000000,
-      logo: '/uploads/download2.png'
+      logo: '/images/download (2).png'
     },
     {
       id: 'singer-finance',
       name: 'Singer Finance',
       interestRate: 8.5,
       maxLoanAmount: 4000000,
-      logo: '/uploads/download3.png'
+      logo: '/images/download (3).png'
     }
   ];
 
