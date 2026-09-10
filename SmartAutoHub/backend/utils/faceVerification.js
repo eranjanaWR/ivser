@@ -4,13 +4,20 @@
  */
 
 const faceapi = require('face-api.js');
-const canvas = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
-// Configure face-api.js to use canvas for Node.js
-const { Canvas, Image, ImageData } = canvas;
-faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
+let canvas;
+let Image;
+
+const initializeCanvas = () => {
+  if (canvas) return;
+
+  canvas = require('canvas');
+  const { Canvas, Image: CanvasImage, ImageData } = canvas;
+  Image = CanvasImage;
+  faceapi.env.monkeyPatch({ Canvas, Image: CanvasImage, ImageData });
+};
 
 // Track if models are loaded
 let modelsLoaded = false;
@@ -21,6 +28,8 @@ let modelsLoaded = false;
  */
 const loadModels = async () => {
   if (modelsLoaded) return;
+
+  initializeCanvas();
   
   const modelsPath = path.join(__dirname, '../models/face-api-models');
   

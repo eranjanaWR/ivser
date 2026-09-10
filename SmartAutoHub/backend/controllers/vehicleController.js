@@ -1220,6 +1220,10 @@ const boostVehicleAd = async (req, res) => {
       console.log(`✅ [BOOST] cardProof saved: ${cardProofPath}`);
     }
 
+    // A stale client date must not create a boost that is already expired.
+    const requestedStartDate = new Date(startDate);
+    const effectiveStartDate = requestedStartDate < new Date() ? new Date() : requestedStartDate;
+
     // Create and save boost record to database
     const newBoost = new Boost({
       vehicleId,
@@ -1227,8 +1231,8 @@ const boostVehicleAd = async (req, res) => {
       packageType,
       duration,
       amount,
-      startDate: new Date(startDate),
-      endDate: new Date(new Date(startDate).getTime() + duration * 24 * 60 * 60 * 1000),
+      startDate: effectiveStartDate,
+      endDate: new Date(effectiveStartDate.getTime() + duration * 24 * 60 * 60 * 1000),
       paymentMethod,
       contactPerson,
       contactPhone,
@@ -1482,6 +1486,10 @@ const approveBoostRequest = async (req, res) => {
     boost.status = 'active';
     boost.approvedBy = adminId;
     boost.approvalDate = new Date();
+    if (boost.endDate < new Date()) {
+      boost.startDate = new Date();
+      boost.endDate = new Date(boost.startDate.getTime() + boost.duration * 24 * 60 * 60 * 1000);
+    }
     if (adminNotes) boost.adminNotes = adminNotes;
     
     await boost.save();
