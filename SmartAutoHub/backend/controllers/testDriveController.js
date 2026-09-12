@@ -142,7 +142,9 @@ const getMyTestDriveRequests = async (req, res) => {
     const { skip, limit: limitNum, page: pageNum } = paginate(page, limit);
 
     const filter = { buyerId: req.user._id };
-    if (status) {
+    if (status === 'history') {
+      filter.status = { $in: ['Accepted', 'Confirmed', 'Rejected', 'Cancelled', 'Completed', 'accepted', 'confirmed', 'rejected', 'cancelled', 'completed'] };
+    } else if (status) {
       filter.status = status;
     }
 
@@ -185,7 +187,12 @@ const getTestDrivesForMyVehicles = async (req, res) => {
     if (status === 'active') {
       filter.status = { $in: ['Pending', 'Accepted', 'pending', 'approved'] };
     } else if (status === 'history') {
-      filter.status = { $in: ['Rejected', 'Cancelled', 'Completed', 'rejected', 'cancelled', 'completed'] };
+      filter.$or = [
+        { sellerId: req.user._id },
+        { buyerId: req.user._id }
+      ];
+      delete filter.sellerId;
+      filter.status = { $in: ['Accepted', 'Confirmed', 'Rejected', 'Cancelled', 'Completed', 'accepted', 'confirmed', 'rejected', 'cancelled', 'completed'] };
     } else if (status) {
       filter.status = status;
     }
