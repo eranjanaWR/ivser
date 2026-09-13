@@ -328,15 +328,30 @@ const BookTestDrivePage = () => {
     setSubmitting(true);
 
     try {
-      const response = await api.post('/test-drives', {
+      const selectedTimeMinutes = toMinutes(preferredTime);
+      const endTimeMinutes = Math.min(selectedTimeMinutes + 60, (23 * 60) + 59);
+      const endHours = Math.floor(endTimeMinutes / 60);
+      const endMinutes = endTimeMinutes % 60;
+      const endTime = `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+
+      const response = await api.post('/buyer/book-testdrive', {
         vehicleId,
-        date: preferredDate,
-        time: preferredTime,
-        preferredDate,
+        selectedSlot: {
+          startTime: preferredTime,
+          endTime,
+          days: [true, true, true, true, true, true, true]
+        },
+        scheduledDate: preferredDate,
+        scheduledTime: preferredTime,
+        buyerInfo: {
+          fullName: formData.fullName.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim()
+        },
         buyerNotes: requestMessage
       });
 
-      setBookingId(response.data?.data?._id || '');
+      setBookingId(response.data?.data?.bookingId || '');
       setSuccess(true);
       setTimeout(() => navigate('/test-drives'), 3500);
     } catch (err) {
