@@ -5,65 +5,22 @@
 
 const express = require('express');
 const router = express.Router();
+const { getActiveFinanceCompanies } = require('../controllers/financeCompanyController');
+const { createFinancingPlan, getFinancingPlans, deleteFinancingPlan } = require('../controllers/financingPlanController');
+const { protect } = require('../middlewares/auth');
 
 /**
  * GET /api/financial/companies
- * Get all available finance companies with rates
+ * Get all available finance companies with rates.
+ *
+ * Step 4: now backed by the FinanceCompany MongoDB collection (via
+ * financeCompanyController.getActiveFinanceCompanies) instead of the old
+ * hardcoded array. The endpoint URL and the previously-existing fields
+ * (id, name, interestRate, maxLoanAmount, logo) are preserved for backward
+ * compatibility with existing frontend code; new fields (minDownPayment,
+ * processingFee, loanPeriod, phone, email, website, branches) are added.
  */
-router.get('/companies', (req, res) => {
-  try {
-    const companies = [
-      {
-        id: 'lb-finance',
-        name: 'LB Finance',
-        interestRate: 7.5,
-        maxLoanAmount: 5000000,
-        logo: '/uploads/download.png'
-      },
-      {
-        id: 'lolc-finance',
-        name: 'LOLC Finance',
-        interestRate: 8.0,
-        maxLoanAmount: 4500000,
-        logo: '/uploads/download.jpg'
-      },
-      {
-        id: 'central-finance',
-        name: 'Central Finance',
-        interestRate: 7.8,
-        maxLoanAmount: 5500000,
-        logo: '/uploads/download1.png'
-      },
-      {
-        id: 'hnb-finance',
-        name: 'HNB Finance',
-        interestRate: 7.2,
-        maxLoanAmount: 6000000,
-        logo: '/uploads/download2.png'
-      },
-      {
-        id: 'singer-finance',
-        name: 'Singer Finance',
-        interestRate: 8.5,
-        maxLoanAmount: 4000000,
-        logo: '/uploads/download3.png'
-      }
-    ];
-
-    res.json({
-      success: true,
-      data: companies,
-      message: 'Finance companies retrieved successfully'
-    });
-  } catch (error) {
-    console.error('Error fetching companies:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching finance companies',
-      error: error.message
-    });
-  }
-});
+router.get('/companies', getActiveFinanceCompanies);
 
 /**
  * POST /api/financial/calculate
@@ -179,5 +136,27 @@ router.post('/schedule-meeting', (req, res) => {
     });
   }
 });
+
+/**
+ * Step 6: Save Financing Plan endpoints (protected - authenticated buyer only)
+ */
+
+/**
+ * POST /api/financial/plans
+ * Save a financing plan for the authenticated user
+ */
+router.post('/plans', protect, createFinancingPlan);
+
+/**
+ * GET /api/financial/plans
+ * Get all financing plans belonging to the authenticated user
+ */
+router.get('/plans', protect, getFinancingPlans);
+
+/**
+ * DELETE /api/financial/plans/:id
+ * Delete a financing plan owned by the authenticated user
+ */
+router.delete('/plans/:id', protect, deleteFinancingPlan);
 
 module.exports = router;
