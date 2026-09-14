@@ -9,7 +9,7 @@ const { sendTestDriveNotification } = require('../utils/email');
  */
 const createBooking = async (req, res) => {
   try {
-    const { vehicleId, selectedSlot, scheduledDate, scheduledTime, buyerInfo } = req.body;
+    const { vehicleId, selectedSlot, scheduledDate, scheduledTime, buyerInfo, buyerNotes } = req.body;
     const buyerId = req.user._id;
 
     if (!vehicleId || !selectedSlot || !scheduledDate || !scheduledTime || !buyerInfo) {
@@ -51,7 +51,8 @@ const createBooking = async (req, res) => {
       selectedSlot,
       scheduledDate: new Date(scheduledDate),
       scheduledTime,
-      buyerInfo
+      buyerInfo,
+      buyerNotes
     };
 
     const booking = await new BuyerBooking(bookingData).save();

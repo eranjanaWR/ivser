@@ -48,11 +48,20 @@ const TestDrivesPage = () => {
   const [responseMessage, setResponseMessage] = useState('');
   const [responding, setResponding] = useState(false);
 
-  const isSeller = ['seller', 'buyer/seller', 'admin1', 'admin2'].includes(user?.role);
+  const userRole = String(user?.role || '').toLowerCase();
+  const isSeller = ['seller', 'buyer/seller', 'admin1', 'admin2'].includes(userRole);
+
+  const handleTabChange = (_, nextTab) => {
+    setTab(Math.max(0, Math.min(nextTab, isSeller ? 2 : 1)));
+  };
 
   const getEndpointByTab = (tabIndex) => {
     if (tabIndex === 0) {
       return '/test-drives/my-requests';
+    }
+
+    if (!isSeller) {
+      return '/test-drives/my-requests?status=history';
     }
 
     if (tabIndex === 1) {
@@ -79,7 +88,7 @@ const TestDrivesPage = () => {
 
   useEffect(() => {
     fetchTestDrives();
-  }, [tab]);
+  }, [tab, isSeller]);
 
   const normalizeStatus = (status) => String(status || '').toLowerCase();
 
@@ -178,7 +187,7 @@ const TestDrivesPage = () => {
     const status = drive.status || '';
     const pending = normalizeStatus(status) === 'pending';
 
-    const counterpart = tab === 0 ? seller : buyer;
+    const counterpart = tab === 0 || !isSeller ? seller : buyer;
     const counterpartName = `${counterpart.firstName || ''} ${counterpart.lastName || ''}`.trim() || 'N/A';
     const slotText = drive.selectedSlot
       ? `${drive.selectedSlot.startTime} - ${drive.selectedSlot.endTime}`
@@ -231,7 +240,7 @@ const TestDrivesPage = () => {
           </Stack>
 
           <Stack direction="row" spacing={1} alignItems="center">
-            {tab === 1 && pending && (
+            {isSeller && tab === 1 && pending && (
               <>
                 <IconButton size="small" color="success" onClick={() => openApproveDialog(drive)}>
                   <Check fontSize="small" />
@@ -291,13 +300,20 @@ const TestDrivesPage = () => {
           </Alert>
         )}
 
-        {isSeller && (
-          <Tabs value={tab} onChange={(_, value) => setTab(value)} sx={{ mb: 2 }}>
-            <Tab icon={<Schedule />} iconPosition="start" label="My Requests" />
-            <Tab icon={<Person />} iconPosition="start" label="Received Requests" />
-            <Tab icon={<Schedule />} iconPosition="start" label="Booking History" />
-          </Tabs>
-        )}
+        <Tabs value={tab} onChange={handleTabChange} sx={{ mb: 2 }}>
+          {!isSeller ? (
+            <>
+              <Tab onClick={() => setTab(0)} icon={<Schedule />} iconPosition="start" label="My Requests" />
+              <Tab onClick={() => setTab(1)} icon={<Schedule />} iconPosition="start" label="Booking History" />
+            </>
+          ) : (
+            <>
+              <Tab onClick={() => setTab(0)} icon={<Schedule />} iconPosition="start" label="My Requests" />
+              <Tab onClick={() => setTab(1)} icon={<Person />} iconPosition="start" label="Received Requests" />
+              <Tab onClick={() => setTab(2)} icon={<Schedule />} iconPosition="start" label="Booking History" />
+            </>
+          )}
+        </Tabs>
 
         {loading ? (
           <Box sx={{ py: 8, textAlign: 'center' }}>
