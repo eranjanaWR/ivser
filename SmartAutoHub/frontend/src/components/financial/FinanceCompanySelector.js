@@ -4,46 +4,71 @@
  */
 
 import React from 'react';
-import { Box, Card, CardActionArea, CardContent, Typography, Grid } from '@mui/material';
+import { Box, Card, CardActionArea, CardContent, Typography, Grid, CircularProgress, Alert } from '@mui/material';
 
-function FinanceCompanySelector({ selectedCompanies, onSelectCompany }) {
-  const FINANCE_COMPANIES = [
-    {
-      id: 'lb-finance',
-      name: 'LB Finance',
-      interestRate: 7.5,
-      maxLoanAmount: 5000000,
-      logo: '/images/download.png'
-    },
-    {
-      id: 'lolc-finance',
-      name: 'LOLC Finance',
-      interestRate: 8.0,
-      maxLoanAmount: 4500000,
-      logo: '/images/download.jpg'
-    },
-    {
-      id: 'central-finance',
-      name: 'Central Finance',
-      interestRate: 7.8,
-      maxLoanAmount: 5500000,
-      logo: '/images/download (1).png'
-    },
-    {
-      id: 'hnb-finance',
-      name: 'HNB Finance',
-      interestRate: 7.2,
-      maxLoanAmount: 6000000,
-      logo: '/images/download (2).png'
-    },
-    {
-      id: 'singer-finance',
-      name: 'Singer Finance',
-      interestRate: 8.5,
-      maxLoanAmount: 4000000,
-      logo: '/images/download (3).png'
-    }
-  ];
+// Fallback used only if the API can't be reached (e.g. before Step 4's companies prop is
+// supplied by a parent that doesn't fetch). Keeps this component safe to reuse standalone.
+const FALLBACK_FINANCE_COMPANIES = [
+  {
+    id: 'lb-finance',
+    name: 'LB Finance',
+    interestRate: 7.5,
+    maxLoanAmount: 5000000,
+    logo: '/images/download.png'
+  },
+  {
+    id: 'lolc-finance',
+    name: 'LOLC Finance',
+    interestRate: 8.0,
+    maxLoanAmount: 4500000,
+    logo: '/images/download.jpg'
+  },
+  {
+    id: 'central-finance',
+    name: 'Central Finance',
+    interestRate: 7.8,
+    maxLoanAmount: 5500000,
+    logo: '/images/download (1).png'
+  },
+  {
+    id: 'hnb-finance',
+    name: 'HNB Finance',
+    interestRate: 7.2,
+    maxLoanAmount: 6000000,
+    logo: '/images/download (2).png'
+  },
+  {
+    id: 'singer-finance',
+    name: 'Singer Finance',
+    interestRate: 8.5,
+    maxLoanAmount: 4000000,
+    logo: '/images/download (3).png'
+  }
+];
+
+function FinanceCompanySelector({ selectedCompanies, onSelectCompany, companies, loading, error }) {
+  // Step 4: prefer the companies fetched from the API (single source of truth) via
+  // FinancialAidsPage; only fall back to the static list if none were supplied at all.
+  const FINANCE_COMPANIES = companies && companies.length > 0 ? companies : FALLBACK_FINANCE_COMPANIES;
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+        <CircularProgress size={20} />
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          Loading finance companies...
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return <Alert severity="error">{error}</Alert>;
+  }
+
+  if (!FINANCE_COMPANIES || FINANCE_COMPANIES.length === 0) {
+    return <Alert severity="info">No finance companies are currently available.</Alert>;
+  }
 
   return (
     <Grid container spacing={2}>

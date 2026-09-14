@@ -15,6 +15,9 @@ const UserAlert = require('./UserAlert');
 const Image = require('./Image');
 const Boost = require('./Boost');
 const Advertising = require('./Advertising');
+const FinancialInquiry = require('./FinancialInquiry');
+const FinanceCompany = require('./FinanceCompany');
+const FinancingPlan = require('./FinancingPlan');
 
 
 module.exports = {
@@ -30,5 +33,8 @@ module.exports = {
   Image,
   Boost,
   Advertising,
+  FinancialInquiry,
+  FinanceCompany,
+  FinancingPlan,
   
 };
