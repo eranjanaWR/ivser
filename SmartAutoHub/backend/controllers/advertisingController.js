@@ -18,34 +18,32 @@ exports.submitPackageRequest = async (req, res) => {
 
     const { name, email, phone, company, message, packageName, placement, adPhoto, adPhotoBase64, cardholderName, cardNumber, expiryDate, cvv, paymentRefNumber, paymentSlipBase64, userId } = req.body;
 
-    // Check if user is trying to use Free Trial package and has already used it
-    if (packageName === 'Free Trial') {
-      const User = require('../models/User');
-      const packageKey = 'freeTrialUsed';
-      
-      // Check using userId if provided
-      if (userId) {
-        const user = await User.findById(userId);
-        if (user && user.usedPackages && user.usedPackages[packageKey]) {
-          console.warn(`${packageName} package already used by user:`, userId);
+        // Free Trial: Admins can use it unlimited times.
+      if (packageName === 'Free Trial') {
+        const User = require('../models/User');
+        const packageKey = 'freeTrialUsed';
+
+        let user = null;
+
+        if (userId) {
+          user = await User.findById(userId);
+        }
+
+        if (!user && email) {
+          user = await User.findOne({ email: email.toLowerCase() });
+        }
+
+        // Admins are never blocked by the Free Trial limit.
+        if (user && ['admin1', 'admin2'].includes(user.role)) {
+          console.log('Admin user: Free Trial unlimited access allowed.');
+        } else if (user && user.usedPackages && user.usedPackages[packageKey]) {
+          console.warn(`${packageName} package already used by user:`, user._id);
           return res.status(400).json({
             success: false,
             error: `${packageName} package is one-time redeemable. You have already used it.`
           });
         }
       }
-      
-      // Also check using email as fallback
-      const userByEmail = await User.findOne({ email: email.toLowerCase() });
-      if (userByEmail && userByEmail.usedPackages && userByEmail.usedPackages[packageKey]) {
-        console.warn(`${packageName} package already used by email:`, email);
-        return res.status(400).json({
-          success: false,
-          error: `${packageName} package is one-time redeemable. You have already used it.`
-        });
-      }
-    }
-
     // Validate required fields
     if (!name || !email || !phone) {
       console.warn('Validation failed - missing required fields');
@@ -122,28 +120,47 @@ exports.submitPackageRequest = async (req, res) => {
         const packageKey = 'freeTrialUsed';
         const packageKeyAt = 'freeTrialUsedAt';
         const packageKeyId = 'freeTrialAdId';
-        
-        // Try to update using userId first
+
+        // Admin users can use Free Trial unlimited times.
+        let isAdmin = false;
+
         if (userId) {
-          const updateData = {
-            [`usedPackages.${packageKey}`]: true,
-            [`usedPackages.${packageKeyAt}`]: new Date(),
-            [`usedPackages.${packageKeyId}`]: advertisingRequest._id
-          };
-          await User.findByIdAndUpdate(userId, updateData);
-          console.log(`✓ Marked ${packageName} package as used for userId:`, userId);
+          const adminUser = await User.findById(userId);
+          isAdmin = adminUser && ['admin1', 'admin2'].includes(adminUser.role);
         } else {
-          // Fallback: update using email
-          const updateData = {
-            [`usedPackages.${packageKey}`]: true,
-            [`usedPackages.${packageKeyAt}`]: new Date(),
-            [`usedPackages.${packageKeyId}`]: advertisingRequest._id
-          };
-          await User.findOneAndUpdate(
-            { email: email.toLowerCase() },
-            updateData
-          );
-          console.log(`✓ Marked ${packageName} package as used for email:`, email);
+          const adminUser = await User.findOne({
+            email: email.toLowerCase()
+          });
+          isAdmin = adminUser && ['admin1', 'admin2'].includes(adminUser.role);
+        }
+
+        // Only mark Free Trial as used for normal users.
+        if (!isAdmin) {
+          if (userId) {
+            const updateData = {
+              [`usedPackages.${packageKey}`]: true,
+              [`usedPackages.${packageKeyAt}`]: new Date(),
+              [`usedPackages.${packageKeyId}`]: advertisingRequest._id
+            };
+
+            await User.findByIdAndUpdate(userId, updateData);
+            console.log(`Marked ${packageName} package as used for userId:`, userId);
+          } else {
+            const updateData = {
+              [`usedPackages.${packageKey}`]: true,
+              [`usedPackages.${packageKeyAt}`]: new Date(),
+              [`usedPackages.${packageKeyId}`]: advertisingRequest._id
+            };
+
+            await User.findOneAndUpdate(
+              { email: email.toLowerCase() },
+              updateData
+            );
+
+            console.log(`Marked ${packageName} package as used for email:`, email);
+          }
+        } else {
+          console.log('Admin user: Free Trial usage limit bypassed.');
         }
       }
     } catch (dbError) {
@@ -315,3 +332,15 @@ exports.checkRequestStatus = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+
