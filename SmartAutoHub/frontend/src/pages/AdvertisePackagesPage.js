@@ -163,7 +163,7 @@ const AdvertisePackagesPage = () => {
 
   const handleSelectPackage = (pkg) => {
     // Check if user is trying to use Free Trial but has already used it
-    if (pkg.name === 'Free Trial' && freeTrialUsed) {
+    if (pkg.name === 'Free Trial' && freeTrialUsed && !['admin1', 'admin2'].includes(currentUser?.role)) {
       alert('You have already redeemed the Free Trial package (one time redeemable). Please choose a different package.');
       return;
     }
@@ -376,7 +376,7 @@ const AdvertisePackagesPage = () => {
       }
 
       // Get userId from localStorage
-      const userId = localStorage.getItem('userId');
+      const userId = currentUser?.id || null;
 
       // Prepare form data
       const submitData = {
@@ -583,23 +583,23 @@ const AdvertisePackagesPage = () => {
                 <Button
                   fullWidth
                   variant="contained"
-                  disabled={(pkg.name === 'Free Trial' && freeTrialUsed)}
+                  disabled={(pkg.name === 'Free Trial' && freeTrialUsed && !['admin1', 'admin2'].includes(currentUser?.role))}
                   sx={{
-                    bgcolor: ((pkg.name === 'Free Trial' && freeTrialUsed)) ? '#cccccc' : pkg.color,
+                    bgcolor: ((pkg.name === 'Free Trial' && freeTrialUsed && !['admin1', 'admin2'].includes(currentUser?.role))) ? '#cccccc' : pkg.color,
                     color: 'white',
                     fontWeight: 600,
-                    cursor: ((pkg.name === 'Free Trial' && freeTrialUsed)) ? 'not-allowed' : 'pointer',
+                    cursor: ((pkg.name === 'Free Trial' && freeTrialUsed && !['admin1', 'admin2'].includes(currentUser?.role))) ? 'not-allowed' : 'pointer',
                     '&:hover': {
-                      bgcolor: ((pkg.name === 'Free Trial' && freeTrialUsed)) ? '#cccccc' : pkg.color,
-                      opacity: ((pkg.name === 'Free Trial' && freeTrialUsed)) ? 1 : 0.9,
+                      bgcolor: ((pkg.name === 'Free Trial' && freeTrialUsed && !['admin1', 'admin2'].includes(currentUser?.role))) ? '#cccccc' : pkg.color,
+                      opacity: ((pkg.name === 'Free Trial' && freeTrialUsed && !['admin1', 'admin2'].includes(currentUser?.role))) ? 1 : 0.9,
                     },
                   }}
                   onClick={() => handleSelectPackage(pkg)}
                 >
-                  {((pkg.name === 'Free Trial' && freeTrialUsed)) ? 'Already Redeemed' : 'Choose Plan'}
+                  {((pkg.name === 'Free Trial' && freeTrialUsed && !['admin1', 'admin2'].includes(currentUser?.role))) ? 'Already Redeemed' : 'Choose Plan'}
                 </Button>
               </CardActions>
-              {((pkg.name === 'Free Trial' && freeTrialUsed)) && (
+              {((pkg.name === 'Free Trial' && freeTrialUsed && !['admin1', 'admin2'].includes(currentUser?.role))) && (
                 <Box sx={{ bgcolor: '#fff3cd', p: 2, borderTop: '1px solid #ffc107' }}>
                   <Typography variant="body2" sx={{ color: '#856404', textAlign: 'center', m: 0 }}>
                     ✓ You have already redeemed this one-time offer. Choose a different package.
@@ -1192,3 +1192,6 @@ const AdvertisePackagesPage = () => {
 };
 
 export default AdvertisePackagesPage;
+
+
+

@@ -245,6 +245,7 @@ const Admin1Dashboard = () => {
           
           // Set whatever data we got (could be real or empty array)
           console.log(`📊 Setting ${adRequests.length} requests to state`);
+          adRequests.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
           setAdvertisingRequests(adRequests);
           
         } catch (e) {
@@ -301,7 +302,8 @@ const Admin1Dashboard = () => {
       }
       
       console.log(`✅ Got ${adRequests.length} advertising requests`);
-      setAdvertisingRequests(adRequests);
+      adRequests.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+          setAdvertisingRequests(adRequests);
     } catch (err) {
       console.error('❌ Failed to fetch advertising requests:', err.message);
       // Keep previous data on error instead of showing stale mock data
@@ -1843,3 +1845,5 @@ const Admin1Dashboard = () => {
 };
 
 export default Admin1Dashboard;
+
+
