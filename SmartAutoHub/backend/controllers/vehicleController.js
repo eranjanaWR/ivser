@@ -94,7 +94,7 @@ const getVehicles = async (req, res) => {
     // Execute query
     const [vehicles, total] = await Promise.all([
       Vehicle.find(filter)
-        .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified isFaceVerified')
+        .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified')
         .populate({
           path: 'images',
           select: '_id filename mimeType order'  // Exclude imageData for list views (performance)
@@ -168,7 +168,7 @@ const getVehicles = async (req, res) => {
 const getVehicleById = async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id)
-      .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified isIDVerified isFaceVerified')
+      .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified')
       .populate({
         path: 'images',
         select: 'filename imageData mimeType order'
@@ -1892,3 +1892,4 @@ module.exports = {
   getFeaturedVehicles,
   getAllBoosts
 };
+

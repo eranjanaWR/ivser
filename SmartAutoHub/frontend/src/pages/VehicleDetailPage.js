@@ -38,9 +38,7 @@ import {
   Event,
   Schedule,
   ChevronLeft,
-  ChevronRight,
-  VerifiedUser,
-  Edit,
+  ChevronRight,  Edit,
   Delete,
   CompareArrows,
   Favorite,
@@ -640,9 +638,6 @@ const VehicleDetailPage = () => {
                           <Typography variant="h6" fontWeight="bold">
                             {vehicle.sellerId.firstName} {vehicle.sellerId.lastName}
                           </Typography>
-                          {vehicle.sellerId.isFaceVerified && (
-                            <VerifiedUser fontSize="small" sx={{ color: '#27ae60' }} title="Face Verified" />
-                          )}
                         </Box>
                         <Typography variant="caption" color="text.secondary">
                           Seller ID: {typeof vehicle.sellerId === 'string' ? vehicle.sellerId.slice(0, 8) : vehicle.sellerId._id?.slice(0, 8)}
@@ -840,3 +835,5 @@ const VehicleDetailPage = () => {
 };
 
 export default VehicleDetailPage;
+
+

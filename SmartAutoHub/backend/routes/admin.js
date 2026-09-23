@@ -168,31 +168,6 @@ router.put(
   adminController.rejectUser
 );
 
-// ==================== MANUAL ID VERIFICATION (Admin2) ====================
-
-// Get all users who requested manual ID verification
-router.get(
-  '/manual-id-verifications',
-  authorize('admin2', 'admin1'),
-  adminController.getManualIDVerifications
-);
-
-// Approve a manual ID verification request
-router.put(
-  '/users/:id/approve-manual-id',
-  authorize('admin2', 'admin1'),
-  validateObjectId(),
-  adminController.approveManualID
-);
-
-// Reject a manual ID verification request
-router.put(
-  '/users/:id/reject-manual-id',
-  authorize('admin2', 'admin1'),
-  validateObjectId(),
-  adminController.rejectManualID
-);
-
 // ==================== ADVERTISING REQUESTS (Admin1) ====================
 
 // Test endpoint to check advertising requests status (MUST come before parameterized routes)
@@ -229,3 +204,4 @@ router.get(
 );
 
 module.exports = router;
+

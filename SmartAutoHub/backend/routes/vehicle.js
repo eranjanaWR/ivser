@@ -11,7 +11,7 @@
 const express = require('express');
 const router = express.Router();
 const vehicleController = require('../controllers/vehicleController');
-const { protect, authorize, requireFullyVerified, optionalAuth } = require('../middlewares/auth');
+const { protect, authorize, optionalAuth } = require('../middlewares/auth');
 const { uploadVehicleImages, uploadSingle, uploadFields } = require('../middlewares/upload');
 const { validateVehicle, validateObjectId, validatePagination } = require('../middlewares/validation');
 
@@ -199,3 +199,4 @@ router.delete(
 );
 
 module.exports = router;
+

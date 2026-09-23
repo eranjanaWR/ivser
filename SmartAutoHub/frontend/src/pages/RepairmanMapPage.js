@@ -27,9 +27,7 @@ import {
   Build,
   Phone,
   LocationOn,
-  MyLocation,
-  VerifiedUser,
-} from '@mui/icons-material';
+  MyLocation,} from '@mui/icons-material';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import api from '../services/api';
 
@@ -97,7 +95,6 @@ const RepairmanMapPage = () => {
           phone: '+94 77 123 4567',
           rating: 4.5,
           isAvailable: true,
-          isFaceVerified: true,
           location: { coordinates: [79.8700, 6.9200] },
         },
         {
@@ -106,7 +103,6 @@ const RepairmanMapPage = () => {
           phone: '+94 77 234 5678',
           rating: 4.8,
           isAvailable: true,
-          isFaceVerified: true,
           location: { coordinates: [79.8500, 6.9350] },
         },
         {
@@ -115,7 +111,6 @@ const RepairmanMapPage = () => {
           phone: '+94 77 345 6789',
           rating: 4.2,
           isAvailable: false,
-          isFaceVerified: true,
           location: { coordinates: [79.8800, 6.9100] },
         },
       ]);
@@ -252,9 +247,6 @@ const RepairmanMapPage = () => {
                           <Typography fontWeight="bold">
                             {selectedRepairman.name}
                           </Typography>
-                          {selectedRepairman.isFaceVerified && (
-                            <VerifiedUser fontSize="small" color="primary" />
-                          )}
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <Rating value={selectedRepairman.rating || 0} readOnly size="small" />
@@ -353,9 +345,6 @@ const RepairmanMapPage = () => {
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             {repairman.name}
-                            {repairman.isFaceVerified && (
-                              <VerifiedUser fontSize="small" color="primary" />
-                            )}
                           </Box>
                         }
                         secondary={
@@ -385,3 +374,6 @@ const RepairmanMapPage = () => {
 };
 
 export default RepairmanMapPage;
+
+
+

@@ -266,16 +266,6 @@ const validateOTP = [
   handleValidationErrors
 ];
 
-/**
- * ID Verification Validation
- */
-const validateIDVerification = [
-  body('idNumber')
-    .trim()
-    .notEmpty().withMessage('ID number is required'),
-  
-  handleValidationErrors
-];
 
 /**
  * Pagination Validation
@@ -301,6 +291,7 @@ module.exports = {
   validateBreakdown,
   validateObjectId,
   validateOTP,
-  validateIDVerification,
   validatePagination
 };
+
+

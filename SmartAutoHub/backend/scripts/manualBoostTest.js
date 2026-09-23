@@ -48,8 +48,6 @@ const createBoostManually = async () => {
         password: 'Test@123',
         role: 'seller',
         isEmailVerified: true,
-        isIDVerified: true,
-        isFaceVerified: true,
       });
       console.log('✓ Created test user');
     }
@@ -130,3 +128,4 @@ const createBoostManually = async () => {
 };
 
 createBoostManually();
+
