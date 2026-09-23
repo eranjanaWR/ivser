@@ -131,37 +131,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Verify ID
-  const verifyID = async (formData) => {
-    try {
-      setError(null);
-      const response = await api.post('/auth/verify-id', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setUser(response.data.data.user);
-      return { success: true, verification: response.data.data.verification };
-    } catch (err) {
-      const message = err.response?.data?.message || 'ID verification failed';
-      setError(message);
-      return { success: false, message };
-    }
-  };
-
-  // Verify Face
-  const verifyFace = async (formData) => {
-    try {
-      setError(null);
-      const response = await api.post('/auth/verify-face', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setUser(response.data.data.user);
-      return { success: true, verification: response.data.data.verification };
-    } catch (err) {
-      const message = err.response?.data?.message || 'Face verification failed';
-      setError(message);
-      return { success: false, message };
-    }
-  };
 
   // Update profile
   const updateProfile = async (formData) => {
@@ -228,8 +197,6 @@ export const AuthProvider = ({ children }) => {
     logout,
     verifyEmail,
     resendOTP,
-    verifyID,
-    verifyFace,
     updateProfile,
     refreshUser,
     forgotPassword,
@@ -247,3 +214,5 @@ export const AuthProvider = ({ children }) => {
 };
 
 export default AuthContext;
+
+

@@ -4,9 +4,7 @@
  */
 
 const User = require('../models/User');
-const { generateToken, generateOTP, sendOTPEmail, sendIDVerificationEmail } = require('../utils');
-const { extractIDText, verifyIDNumber } = require('../utils/ocr');
-const { compareFaces } = require('../utils/faceVerification');
+const { generateToken, generateOTP, sendOTPEmail } = require('../utils');
 const path = require('path');
 
 /**
@@ -19,7 +17,7 @@ const path = require('path');
  */
 const register = async (req, res) => {
   try {
-    const { firstName, lastName, email, password, phone, role, idCardNumber } = req.body;
+    const { firstName, lastName, email, password, phone, role } = req.body;
     
     // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -58,13 +56,6 @@ const register = async (req, res) => {
         expiresAt: otpExpiry
       }
     };
-
-    // Store ID card number if provided
-    if (idCardNumber) {
-      userData.idVerification = {
-        idNumber: idCardNumber
-      };
-    }
     
     // Create user
     const user = await User.create(userData);
@@ -287,243 +278,6 @@ const resendOTP = async (req, res) => {
 };
 
 /**
- * @desc    Upload and verify ID using Tesseract.js OCR
- * @route   POST /api/auth/verify-id
- * @access  Private
- * 
- * Steps:
- * 1. Accept uploaded ID image (idFront or idDocument field)
- * 2. Get the ID number stored during registration (idVerification.idNumber)
- * 3. Use Tesseract.js to extract text from the uploaded ID image
- * 4. Compare extracted ID number with the stored ID number
- * 5. If match: set isIDVerified = true
- * 6. If no match or OCR fails: set manualIDVerification = true for Admin2 review
- */
-const verifyID = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-    
-    // Check if already verified
-    if (user.isIDVerified) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID is already verified'
-      });
-    }
-    
-    // Get ID image from either idFront, idDocument, or idImage field
-    let idImagePath = null;
-    if (req.files) {
-      if (req.files.idFront && req.files.idFront[0]) {
-        idImagePath = req.files.idFront[0].path;
-      } else if (req.files.idDocument && req.files.idDocument[0]) {
-        idImagePath = req.files.idDocument[0].path;
-      } else if (req.files.idImage && req.files.idImage[0]) {
-        idImagePath = req.files.idImage[0].path;
-      }
-    }
-    
-    // Check if file was uploaded
-    if (!idImagePath) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID image is required. Please upload your ID document.'
-      });
-    }
-    
-    // Get ID number: from request body or from stored registration data
-    let idNumber = req.body.idNumber;
-    if (!idNumber && user.idVerification && user.idVerification.idNumber) {
-      idNumber = user.idVerification.idNumber;
-    }
-    
-    if (!idNumber) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID number not found. Please ensure you entered your ID number during registration.'
-      });
-    }
-    
-    // Optional: get back image if provided
-    const idBackPath = req.files && req.files.idBack ? req.files.idBack[0].path : null;
-    
-    // Try to extract text from ID image using Tesseract.js OCR
-    let extractedText = null;
-    let ocrSuccess = false;
-    let verificationResult = null;
-    
-    try {
-      extractedText = await extractIDText(idImagePath, idBackPath);
-      ocrSuccess = true;
-      
-      console.log('📄 [OCR RESULT] Extracted text length:', extractedText.combinedText.length);
-      console.log('📄 [OCR RESULT] First 150 chars:', extractedText.combinedText.substring(0, 150));
-      
-      // Verify ID number against extracted text
-      verificationResult = verifyIDNumber(idNumber, extractedText.combinedText);
-      
-      console.log('🔍 [VERIFICATION] Entered ID:', idNumber);
-      console.log('🔍 [VERIFICATION] Normalized Entered ID:', verificationResult.enteredID);
-      console.log('🔍 [VERIFICATION] Extracted text (normalized):', verificationResult.extractedText);
-      console.log('🔍 [VERIFICATION] Match result:', verificationResult.isMatch);
-      console.log('🔍 [VERIFICATION] Confidence:', verificationResult.confidence);
-    } catch (ocrError) {
-      console.error('OCR processing error:', ocrError.message);
-      
-      // Special handling for image quality detection
-      if (ocrError.message === 'IMAGE_QUALITY_TOO_LOW') {
-        console.log('🚨 [OCR QUALITY] Image quality too poor to read');
-        ocrSuccess = false;
-      } else {
-        ocrSuccess = false;
-      }
-    }
-    
-    // Decision logic: STRICT - only accept exact matches
-    // This ensures the ID number is actually found on the photo, not just scattered characters
-    if (ocrSuccess && verificationResult && verificationResult.isMatch) {
-      // ✅ ID verified successfully
-      console.log('✅ [APPROVED] ID verification PASSED | Exact Match | Confidence:', verificationResult.confidence + '%');
-      
-      user.isIDVerified = true;
-      user.manualIDVerification = false;
-      user.manualIDStatus = null;
-      user.idVerification = {
-        idNumber: idNumber,
-        idFrontImage: idImagePath,
-        idBackImage: idBackPath,
-        extractedText: extractedText ? extractedText.combinedText : '',
-        ocrConfidence: verificationResult ? verificationResult.confidence : 0,
-        verifiedAt: new Date()
-      };
-      await user.save({ validateBeforeSave: false });
-      
-      // 📧 Send ID verification email notification
-      await sendIDVerificationEmail(user.email, user.firstName);
-      
-      return res.json({
-        success: true,
-        message: 'ID verified successfully. A confirmation email has been sent to you.',
-        data: {
-          user: user.getPublicProfile(),
-          verification: verificationResult
-        }
-      });
-    } else {
-      // ❌ OCR failed or numbers don't match - Return error
-      let errorMessage = 'ID verification failed. ';
-      
-      if (!ocrSuccess) {
-        // Check if it was a quality issue
-        if (verificationResult && verificationResult.message && verificationResult.message.includes('quality')) {
-          errorMessage = 'Photo quality is too poor to read your ID. Please upload a clearer image with: Sharp focus • Straight-on view • Good lighting • Full ID visible';
-        } else {
-          errorMessage += 'Could not read ID document. Please upload a clear, sharp photo of your actual ID card (NIC, Passport, or Driver\'s License).';
-        }
-      } else if (verificationResult && !verificationResult.isMatch) {
-        errorMessage += 'ID number does not match the photo. Please verify you uploaded the correct ID card and entered the correct ID number.';
-      }
-      
-      console.log('❌ [REJECTION] Error:', errorMessage);
-      
-      return res.status(400).json({
-        success: false,
-        message: errorMessage,
-        data: {
-          ocrConfidence: verificationResult ? verificationResult.confidence : 0,
-          hint: 'Requirements: Clear image, sharp focus, straight angle, good lighting'
-        }
-      });
-    }
-  } catch (error) {
-    console.error('ID verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error verifying ID',
-      error: error.message
-    });
-  }
-};
-
-/**
- * @desc    Upload and verify face
- * @route   POST /api/auth/verify-face
- * @access  Private
- */
-const verifyFace = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-    
-    if (user.isFaceVerified) {
-      return res.status(400).json({
-        success: false,
-        message: 'Face is already verified'
-      });
-    }
-    
-    if (!user.isIDVerified || !user.idVerification.idFrontImage) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please verify your ID first before face verification'
-      });
-    }
-    
-    // Check if selfie was uploaded
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'Selfie image is required'
-      });
-    }
-    
-    const selfiePath = req.file.path;
-    const idPhotoPath = user.idVerification.idFrontImage;
-    
-    // Compare faces
-    const comparisonResult = await compareFaces(idPhotoPath, selfiePath);
-    
-    if (comparisonResult.success && comparisonResult.isMatch) {
-      // Mark face as verified
-      user.isFaceVerified = true;
-      user.faceVerification = {
-        selfieImage: selfiePath,
-        faceDescriptor: comparisonResult.selfieDescriptor || [],
-        matchScore: comparisonResult.similarity,
-        verifiedAt: new Date()
-      };
-      await user.save({ validateBeforeSave: false });
-      
-      res.json({
-        success: true,
-        message: 'Face verified successfully',
-        data: {
-          user: user.getPublicProfile(),
-          verification: {
-            similarity: comparisonResult.similarity,
-            message: comparisonResult.message
-          }
-        }
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: comparisonResult.message || 'Face verification failed',
-        data: {
-          verification: comparisonResult
-        }
-      });
-    }
-  } catch (error) {
-    console.error('Face verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error verifying face',
-      error: error.message
-    });
-  }
-};
-
-/**
  * @desc    Get current user profile
  * @route   GET /api/auth/me
  * @access  Private
@@ -588,34 +342,6 @@ const updateProfile = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error updating profile',
-      error: error.message
-    });
-  }
-};
-
-/**
- * @desc    Get verification status
- * @route   GET /api/auth/verification-status
- * @access  Private
- */
-const getVerificationStatus = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-    
-    res.json({
-      success: true,
-      data: {
-        isEmailVerified: user.isEmailVerified,
-        isIDVerified: user.isIDVerified,
-        isFaceVerified: user.isFaceVerified,
-        isFullyVerified: user.isFullyVerified()
-      }
-    });
-  } catch (error) {
-    console.error('Get verification status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching verification status',
       error: error.message
     });
   }
@@ -759,11 +485,17 @@ module.exports = {
   login,
   verifyEmail,
   resendOTP,
-  verifyID,
-  verifyFace,
   getMe,
   updateProfile,
-  getVerificationStatus,
   forgotPassword,
   resetPassword
 };
+
+
+
+
+
+
+
+
+
