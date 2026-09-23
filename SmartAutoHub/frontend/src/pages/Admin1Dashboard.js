@@ -172,9 +172,9 @@ const Admin1Dashboard = () => {
           setUsers(data.data || []);
         } catch (e) {
           setUsers([
-            { _id: '1', name: 'John Doe', email: 'john@example.com', role: 'seller', isEmailVerified: true, isIDVerified: true, isFaceVerified: true, status: 'active' },
-            { _id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'buyer', isEmailVerified: true, isIDVerified: false, isFaceVerified: false, status: 'active' },
-            { _id: '3', name: 'Mike Mechanic', email: 'mike@example.com', role: 'repairman', isEmailVerified: true, isIDVerified: true, isFaceVerified: true, status: 'active' },
+            { _id: '1', name: 'John Doe', email: 'john@example.com', role: 'seller', isEmailVerified: true, status: 'active' },
+            { _id: '2', name: 'Jane Smith', email: 'jane@example.com', role: 'buyer', isEmailVerified: true, status: 'active' },
+            { _id: '3', name: 'Mike Mechanic', email: 'mike@example.com', role: 'repairman', isEmailVerified: true, status: 'active' },
           ]);
         }
       } else if (tab === 1) {
@@ -657,18 +657,6 @@ const Admin1Dashboard = () => {
                               label="E"
                               size="small"
                               color={user.isEmailVerified ? 'success' : 'default'}
-                              sx={{ minWidth: 30 }}
-                            />
-                            <Chip
-                              label="ID"
-                              size="small"
-                              color={user.isIDVerified ? 'success' : 'default'}
-                              sx={{ minWidth: 35 }}
-                            />
-                            <Chip
-                              label="F"
-                              size="small"
-                              color={user.isFaceVerified ? 'success' : 'default'}
                               sx={{ minWidth: 30 }}
                             />
                           </Box>
@@ -1843,3 +1831,5 @@ const Admin1Dashboard = () => {
 };
 
 export default Admin1Dashboard;
+
+

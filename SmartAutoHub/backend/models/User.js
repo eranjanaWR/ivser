@@ -52,53 +52,11 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  isIDVerified: {
-    type: Boolean,
-    default: false
-  },
-  isFaceVerified: {
-    type: Boolean,
-    default: false
-  },
   
   // OTP for Email Verification
   emailOTP: {
     code: String,
     expiresAt: Date
-  },
-  
-  // ID Verification Data
-  idVerification: {
-    idNumber: String,
-    idFrontImage: String, // URL or base64
-    idBackImage: String,
-    extractedText: String, // Text extracted from ID using Tesseract
-    ocrConfidence: Number, // OCR match confidence percentage
-    verifiedAt: Date
-  },
-
-  // Manual ID Verification flag
-  // Set to true when OCR fails (damaged/faded ID) and user requests manual review
-  manualIDVerification: {
-    type: Boolean,
-    default: false
-  },
-  manualIDStatus: {
-    type: String,
-    enum: ['pending', 'approved', 'rejected', null],
-    default: null
-  },
-  manualIDRejectionReason: {
-    type: String,
-    default: null
-  },
-  
-  // Face Verification Data
-  faceVerification: {
-    selfieImage: String,
-    faceDescriptor: [Number], // Face descriptor from face-api.js
-    matchScore: Number,
-    verifiedAt: Date
   },
   
   // Profile Image
@@ -249,7 +207,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 
 // Check if user is fully verified
 userSchema.methods.isFullyVerified = function() {
-  return this.isEmailVerified && this.isIDVerified && this.isFaceVerified;
+  return this.isEmailVerified;
 };
 
 // Get public profile (without sensitive data)
@@ -263,16 +221,7 @@ userSchema.methods.getPublicProfile = function() {
     role: this.role,
     profileImage: this.profileImage,
     isEmailVerified: this.isEmailVerified,
-    isIDVerified: this.isIDVerified,
-    isFaceVerified: this.isFaceVerified,
     isFullyVerified: this.isFullyVerified(),
-    manualIDVerification: this.manualIDVerification,
-    manualIDStatus: this.manualIDStatus,
-    idVerification: this.idVerification ? {
-      idNumber: this.idVerification.idNumber,
-      idFrontImage: this.idVerification.idFrontImage,
-      ocrConfidence: this.idVerification.ocrConfidence
-    } : null,
     profileImage: this.profileImage,
     address: this.address,
     usedPackages: this.usedPackages || {
@@ -292,3 +241,5 @@ userSchema.methods.getPublicProfile = function() {
 };
 
 module.exports = mongoose.model('User', userSchema);
+
+

@@ -32,8 +32,6 @@ import {
   CameraAlt,
   VerifiedUser,
   Email,
-  Badge,
-  Face,
   Warning,
   NotificationsActive,
   Mail,
@@ -187,8 +185,6 @@ const ProfilePage = () => {
   const getVerificationStatus = () => {
     const steps = [
       { key: 'isEmailVerified', label: 'Email', icon: <Email /> },
-      { key: 'isIDVerified', label: 'ID', icon: <Badge /> },
-      { key: 'isFaceVerified', label: 'Face', icon: <Face /> },
     ];
     
     return steps.map((step) => ({
@@ -197,7 +193,7 @@ const ProfilePage = () => {
     }));
   };
 
-  const isFullyVerified = user?.isEmailVerified && user?.isIDVerified && user?.isFaceVerified;
+  const isFullyVerified = user?.isEmailVerified;
 
   return (
     <Box sx={{ py: 4, bgcolor: '#fafafa', minHeight: '80vh' }}>
@@ -548,3 +544,5 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
+
+

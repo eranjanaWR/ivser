@@ -132,16 +132,6 @@ module.exports = {
   // Multiple fields upload
   uploadFields: (fields) => upload.fields(fields),
   
-  // ID verification upload (front and back, or single idDocument)
-  uploadID: upload.fields([
-    { name: 'idFront', maxCount: 1 },
-    { name: 'idBack', maxCount: 1 },
-    { name: 'idDocument', maxCount: 1 }
-  ]),
-  
-  // Face verification upload
-  uploadSelfie: upload.single('selfie'),
-  
   // Vehicle images upload
   uploadVehicleImages: upload.array('images', 10),
   
@@ -156,13 +146,6 @@ module.exports = {
     { name: 'profileImage', maxCount: 1 },
     { name: 'idImage', maxCount: 1 }
   ]),
-  
-  // Memory storage uploads (for processing without saving)
-  uploadIDMemory: uploadMemory.fields([
-    { name: 'idFront', maxCount: 1 },
-    { name: 'idBack', maxCount: 1 }
-  ]),
-  uploadSelfieMemory: uploadMemory.single('selfie'),
   
   // Error handler middleware
   handleUploadError: (err, req, res, next) => {
@@ -192,3 +175,4 @@ module.exports = {
     next();
   }
 };
+
