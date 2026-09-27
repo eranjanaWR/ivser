@@ -46,7 +46,7 @@ import {
   Navigation,
   MyLocation,
   Refresh,
-  AttachMoney,
+
   Star,
   Warning,
   PlayArrow,
@@ -574,7 +574,7 @@ const RepairmanDashboard = () => {
             onChange={(e) => setEstimatedCost(e.target.value)}
             sx={{ mb: 2 }}
             InputProps={{
-              startAdornment: <AttachMoney />,
+
             }}
           />
           <TextField
@@ -662,7 +662,7 @@ const RepairmanDashboard = () => {
                   onChange={(e) => setFinalCost(e.target.value)}
                   sx={{ mb: 2 }}
                   InputProps={{
-                    startAdornment: <AttachMoney />,
+
                   }}
                 />
                 <Button
