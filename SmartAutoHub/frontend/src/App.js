@@ -43,6 +43,8 @@ import WishlistPage from './pages/WishlistPage';
 import Admin1Dashboard from './pages/Admin1Dashboard';
 import Admin2Dashboard from './pages/Admin2Dashboard';
 import BoostAdPage from './pages/BoostAdPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
 import PremiumPostsPage from './pages/PremiumPostsPage';
 import AdvertisePackagesPage from './pages/AdvertisePackagesPage';
 import FinancialAidsPage from './pages/FinancialAidsPage';
@@ -233,6 +235,8 @@ function App() {
                 <Route path="/advertise-packages" element={<AdvertisePackagesPage />} />
                 <Route path="/financial-aids" element={<FinancialAidsPage />} />
                 <Route path="/takgaala-ai" element={<TakgaalaAIPage />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+                <Route path="/terms-of-service" element={<TermsOfServicePage />} />
                 
                 {/* Protected Routes */}
                 <Route path="/verification" element={

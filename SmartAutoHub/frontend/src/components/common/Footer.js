@@ -145,7 +145,7 @@ const Footer = () => {
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Typography
               component="a"
-              href="#"
+              href="/privacy-policy"
               variant="body2"
               sx={{ color: 'grey.500', textDecoration: 'none', '&:hover': { color: 'white' } }}
             >
@@ -153,7 +153,7 @@ const Footer = () => {
             </Typography>
             <Typography
               component="a"
-              href="#"
+              href="/terms-of-service"
               variant="body2"
               sx={{ color: 'grey.500', textDecoration: 'none', '&:hover': { color: 'white' } }}
             >
