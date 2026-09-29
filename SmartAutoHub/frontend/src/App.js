@@ -21,6 +21,9 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import VerificationPage from './pages/VerificationPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import NotificationHistoryPage from './pages/NotificationHistoryPage';
 import VehiclesPage from './pages/VehiclesPage';
 import VehicleDetailPage from './pages/VehicleDetailPage';
 import ComparisonPage from './pages/ComparisonPage';
@@ -29,6 +32,8 @@ import LeaseCalculatorPage from './pages/LeaseCalculatorPage';
 import AddVehiclePage from './pages/AddVehiclePage';
 import MyVehiclesPage from './pages/MyVehiclesPage';
 import TestDrivesPage from './pages/TestDrivesPage';
+import BookTestDrivePage from './pages/BookTestDrivePage';
+import SellerAvailability from './pages/SellerAvailability';
 import BreakdownPage from './pages/BreakdownPage';
 import RepairmanMapPage from './pages/RepairmanMapPage';
 import RepairmanDashboard from './pages/RepairmanDashboard';
@@ -38,9 +43,12 @@ import WishlistPage from './pages/WishlistPage';
 import Admin1Dashboard from './pages/Admin1Dashboard';
 import Admin2Dashboard from './pages/Admin2Dashboard';
 import BoostAdPage from './pages/BoostAdPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
 import PremiumPostsPage from './pages/PremiumPostsPage';
 import AdvertisePackagesPage from './pages/AdvertisePackagesPage';
 import FinancialAidsPage from './pages/FinancialAidsPage';
+import TakgaalaAIPage from './pages/TakgaalaAIPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Professional, minimal theme similar to Uber
@@ -213,6 +221,8 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/vehicles" element={<VehiclesPage />} />
                 <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
                 <Route path="/vehicles/:vehicleId/boost" element={<BoostAdPage />} />
@@ -224,11 +234,19 @@ function App() {
                 <Route path="/premium-posts" element={<PremiumPostsPage />} />
                 <Route path="/advertise-packages" element={<AdvertisePackagesPage />} />
                 <Route path="/financial-aids" element={<FinancialAidsPage />} />
+                <Route path="/takgaala-ai" element={<TakgaalaAIPage />} />
+                <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+                <Route path="/terms-of-service" element={<TermsOfServicePage />} />
                 
                 {/* Protected Routes */}
                 <Route path="/verification" element={
                   <PrivateRoute>
                     <VerificationPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/notifications" element={
+                  <PrivateRoute>
+                    <NotificationHistoryPage />
                   </PrivateRoute>
                 } />
                 <Route path="/profile" element={
@@ -254,6 +272,16 @@ function App() {
                 <Route path="/test-drives" element={
                   <PrivateRoute>
                     <TestDrivesPage />
+                  </PrivateRoute>
+                } />
+                <Route path="/book-test-drive/:vehicleId" element={
+                  <PrivateRoute>
+                    <BookTestDrivePage />
+                  </PrivateRoute>
+                } />
+                <Route path="/seller-availability" element={
+                  <PrivateRoute roles={['seller', 'buyer/seller', 'admin1']}>
+                    <SellerAvailability />
                   </PrivateRoute>
                 } />
                 <Route path="/breakdown" element={

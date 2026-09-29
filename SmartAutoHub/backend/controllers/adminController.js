@@ -18,34 +18,17 @@ const { sendEmail } = require('../utils/email');
 /**
  * @desc    Get all users with filters
  * @route   GET /api/admin/users
- * @query   role, search, isActive, verificationStatus, startDate, endDate, page, limit
+ * @query   role, search, isActive, startDate, endDate, page, limit
  * @access  Private (Admin1)
  */
 const getAllUsers = async (req, res) => {
   try {
-    const { role, search, isActive, verificationStatus, startDate, endDate, page, limit } = req.query;
+    const { role, search, isActive, startDate, endDate, page, limit } = req.query;
     const { skip, limit: limitNum, page: pageNum } = paginate(page, limit);
     
     const filter = {};
     if (role) filter.role = role;
     if (isActive !== undefined) filter.isActive = isActive === 'true';
-    
-    // Verification status filter
-    if (verificationStatus === 'verified') {
-      filter.isEmailVerified = true;
-      filter.isIDVerified = true;
-      filter.isFaceVerified = true;
-    } else if (verificationStatus === 'partial') {
-      filter.$or = [
-        { isEmailVerified: true, isIDVerified: false },
-        { isEmailVerified: true, isFaceVerified: false },
-        { isIDVerified: true, isFaceVerified: false }
-      ];
-    } else if (verificationStatus === 'unverified') {
-      filter.isEmailVerified = false;
-      filter.isIDVerified = false;
-      filter.isFaceVerified = false;
-    }
     
     // Date range filter
     if (startDate || endDate) {
@@ -64,7 +47,7 @@ const getAllUsers = async (req, res) => {
     
     const [users, total] = await Promise.all([
       User.find(filter)
-        .select('-password -emailOTP -faceVerification.faceDescriptor')
+        .select('-password -emailOTP')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -250,11 +233,7 @@ const generateReports = async (req, res) => {
       User.aggregate([
         { $group: { _id: '$role', count: { $sum: 1 } } }
       ]),
-      User.countDocuments({ 
-        isEmailVerified: true, 
-        isIDVerified: true, 
-        isFaceVerified: true 
-      }),
+      User.countDocuments({ isEmailVerified: true }),
       Vehicle.countDocuments(),
       Vehicle.aggregate([
         { $group: { _id: '$status', count: { $sum: 1 } } }
@@ -408,22 +387,11 @@ const getUnverifiedUsers = async (req, res) => {
     const { page, limit, verificationType, role, startDate, endDate } = req.query;
     const { skip, limit: limitNum, page: pageNum } = paginate(page, limit);
     
-    const filter = {
-      $or: [
-        { isEmailVerified: false },
-        { isIDVerified: false },
-        { isFaceVerified: false }
-      ]
-    };
-    
+    const filter = {};
+
     if (verificationType === 'email') {
       filter.$or = [{ isEmailVerified: false }];
-    } else if (verificationType === 'id') {
-      filter.$or = [{ isIDVerified: false }];
-    } else if (verificationType === 'face') {
-      filter.$or = [{ isFaceVerified: false }];
     }
-    
     // Role filter
     if (role) filter.role = role;
     
@@ -436,7 +404,7 @@ const getUnverifiedUsers = async (req, res) => {
     
     const [users, total] = await Promise.all([
       User.find(filter)
-        .select('-password -faceVerification.faceDescriptor')
+        .select('-password')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -471,7 +439,7 @@ const getFlaggedUsers = async (req, res) => {
     
     const [users, total] = await Promise.all([
       User.find(filter)
-        .select('-password -faceVerification.faceDescriptor')
+        .select('-password')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum),
@@ -499,12 +467,10 @@ const getFlaggedUsers = async (req, res) => {
  */
 const manuallyVerifyUser = async (req, res) => {
   try {
-    const { isEmailVerified, isIDVerified, isFaceVerified } = req.body;
+    const { isEmailVerified } = req.body;
     
     const updates = {};
     if (isEmailVerified !== undefined) updates.isEmailVerified = isEmailVerified;
-    if (isIDVerified !== undefined) updates.isIDVerified = isIDVerified;
-    if (isFaceVerified !== undefined) updates.isFaceVerified = isFaceVerified;
     
     const user = await User.findByIdAndUpdate(
       req.params.id,
@@ -521,7 +487,7 @@ const manuallyVerifyUser = async (req, res) => {
     
     res.json({
       success: true,
-      message: 'User verification status updated',
+      message: 'User email verification status updated',
       data: user
     });
   } catch (error) {
@@ -624,7 +590,7 @@ const getUserDetails = async (req, res) => {
 };
 
 /**
- * @desc    Approve user verification (sets all verification flags to true)
+ * @desc    Approve user verification
  * @route   PUT /api/admin/users/:id/approve
  * @access  Private (Admin2)
  */
@@ -632,10 +598,8 @@ const approveUser = async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { 
+      {
         isEmailVerified: true,
-        isIDVerified: true,
-        isFaceVerified: true,
         isFlagged: false,
         flagReason: null
       },
@@ -651,7 +615,7 @@ const approveUser = async (req, res) => {
     
     res.json({
       success: true,
-      message: 'User approved and fully verified',
+      message: 'User approved and email verified',
       data: user
     });
   } catch (error) {
@@ -727,11 +691,7 @@ const getStats = async (req, res) => {
       Vehicle.countDocuments(),
       Breakdown.countDocuments(),
       User.countDocuments({
-        $or: [
-          { isEmailVerified: false },
-          { isIDVerified: false },
-          { isFaceVerified: false }
-        ]
+        isEmailVerified: false
       })
     ]);
     
@@ -787,11 +747,7 @@ const getDashboard = async (req, res) => {
       TestDrive.countDocuments(),
       TestDrive.countDocuments({ status: 'pending' }),
       User.countDocuments({
-        $or: [
-          { isEmailVerified: false },
-          { isIDVerified: false },
-          { isFaceVerified: false }
-        ]
+        isEmailVerified: false
       }),
       User.countDocuments({ isFlagged: true })
     ]);
@@ -1004,102 +960,6 @@ const deleteVehicle = async (req, res) => {
       message: 'Error deleting vehicle',
       error: error.message
     });
-  }
-};
-
-/**
- * @desc    Get users who requested manual ID verification (damaged/faded IDs)
- * @route   GET /api/admin/manual-id-verifications
- * @access  Private (Admin2, Admin1)
- */
-const getManualIDVerifications = async (req, res) => {
-  try {
-    const users = await User.find({
-      manualIDVerification: true,
-      manualIDStatus: 'pending'
-    })
-      .select('firstName lastName email role profileImage idVerification manualIDVerification manualIDStatus createdAt')
-      .sort({ createdAt: -1 });
-
-    res.json({
-      success: true,
-      data: users
-    });
-  } catch (error) {
-    console.error('Get manual ID verifications error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching manual ID verifications',
-      error: error.message
-    });
-  }
-};
-
-/**
- * @desc    Approve a manual ID verification request
- * @route   PUT /api/admin/users/:id/approve-manual-id
- * @access  Private (Admin2, Admin1)
- */
-const approveManualID = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    if (!user.manualIDVerification) {
-      return res.status(400).json({ success: false, message: 'User did not request manual ID verification' });
-    }
-
-    user.isIDVerified = true;
-    user.manualIDStatus = 'approved';
-    if (user.idVerification) {
-      user.idVerification.verifiedAt = new Date();
-    }
-    await user.save({ validateBeforeSave: false });
-
-    res.json({
-      success: true,
-      message: 'Manual ID verification approved. User ID is now verified.',
-      data: user.getPublicProfile()
-    });
-  } catch (error) {
-    console.error('Approve manual ID error:', error);
-    res.status(500).json({ success: false, message: 'Error approving manual ID', error: error.message });
-  }
-};
-
-/**
- * @desc    Reject a manual ID verification request
- * @route   PUT /api/admin/users/:id/reject-manual-id
- * @access  Private (Admin2, Admin1)
- */
-const rejectManualID = async (req, res) => {
-  try {
-    const { reason } = req.body;
-    const user = await User.findById(req.params.id);
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    if (!user.manualIDVerification) {
-      return res.status(400).json({ success: false, message: 'User did not request manual ID verification' });
-    }
-
-    user.manualIDStatus = 'rejected';
-    user.manualIDRejectionReason = reason || 'ID could not be verified by admin';
-    await user.save({ validateBeforeSave: false });
-
-    res.json({
-      success: true,
-      message: 'Manual ID verification rejected.',
-      data: user.getPublicProfile()
-    });
-  } catch (error) {
-    console.error('Reject manual ID error:', error);
-    res.status(500).json({ success: false, message: 'Error rejecting manual ID', error: error.message });
   }
 };
 
@@ -1516,9 +1376,20 @@ module.exports = {
   flagUser,
   approveUser,
   rejectUser,
-  getManualIDVerifications,
-  approveManualID,
-  rejectManualID,
   // Shared routes
   getUserDetails
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+

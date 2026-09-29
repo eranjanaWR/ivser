@@ -36,8 +36,6 @@ const createTestVehiclesWithImages = async () => {
         password: 'Test@123', // Should be hashed in production
         role: 'seller',
         isEmailVerified: true,
-        isIDVerified: true,
-        isFaceVerified: true,
       });
       console.log('✓ Created test seller');
     }
@@ -181,3 +179,4 @@ const createTestVehiclesWithImages = async () => {
 
 // Run script
 createTestVehiclesWithImages();
+

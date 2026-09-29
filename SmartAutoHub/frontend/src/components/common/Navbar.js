@@ -40,6 +40,7 @@ import {
   VerifiedUser,
 } from '@mui/icons-material';
 import { useAuth } from '../../context/AuthContext';
+import NotificationBell from '../NotificationBell';
 
 const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -72,6 +73,7 @@ const Navbar = () => {
   const navItems = [
     { label: 'Vehicles', path: '/vehicles', icon: <DirectionsCar /> },
     { label: 'Price Prediction', path: '/prediction', icon: <TrendingUp /> },
+    { label: 'Takgaala-AI', path: '/takgaala-ai', icon: <TrendingUp /> },
   ];
 
   const authNavItems = [
@@ -79,9 +81,15 @@ const Navbar = () => {
     { label: 'Breakdown Assist', path: '/breakdown', icon: <Build /> },
   ];
 
+  const canManageAvailability = ['seller', 'buyer/seller', 'admin1'].includes(user?.role);
+
   const sellerNavItems = [
     { label: 'My Vehicles', path: '/my-vehicles', icon: <DirectionsCar /> },
     { label: 'Add Vehicle', path: '/add-vehicle', icon: <DirectionsCar /> },
+  ];
+
+  const repairmanNavItems = [
+    { label: 'Repairman Dashboard', path: '/repairman-dashboard', icon: <Dashboard /> },
   ];
 
   // Mobile drawer content
@@ -125,6 +133,18 @@ const Navbar = () => {
             button 
             key={item.path} 
             component={Link} 
+            to={item.path}
+            onClick={handleDrawerToggle}
+          >
+            <ListItemIcon>{item.icon}</ListItemIcon>
+            <ListItemText primary={item.label} />
+          </ListItem>
+        ))}
+        {isAuthenticated && user?.role === 'repairman' && repairmanNavItems.map((item) => (
+          <ListItem
+            button
+            key={item.path}
+            component={Link}
             to={item.path}
             onClick={handleDrawerToggle}
           >
@@ -267,6 +287,17 @@ const Navbar = () => {
                   {item.label}
                 </Button>
               ))}
+              {isAuthenticated && user?.role === 'repairman' && repairmanNavItems.map((item) => (
+                <Button
+                  key={item.path}
+                  component={Link}
+                  to={item.path}
+                  color="inherit"
+                  startIcon={item.icon}
+                >
+                  {item.label}
+                </Button>
+              ))}
               {isAuthenticated && (
                 <Button
                   component={Link}
@@ -297,6 +328,7 @@ const Navbar = () => {
                     sx={{ display: { xs: 'none', sm: 'flex' } }}
                   />
                 )}
+                <NotificationBell />
                 <IconButton onClick={handleProfileMenuOpen}>
                   <Avatar
                     src={user?.profileImage}
@@ -326,6 +358,12 @@ const Navbar = () => {
                     <MenuItem component={Link} to="/my-vehicles" onClick={handleMenuClose}>
                       <ListItemIcon><DirectionsCar fontSize="small" /></ListItemIcon>
                       My Vehicles
+                    </MenuItem>
+                  )}
+                  {user?.role === 'repairman' && (
+                    <MenuItem component={Link} to="/repairman-dashboard" onClick={handleMenuClose}>
+                      <ListItemIcon><Dashboard fontSize="small" /></ListItemIcon>
+                      Repairman Dashboard
                     </MenuItem>
                   )}
                   {['admin1', 'admin2'].includes(user?.role) && (

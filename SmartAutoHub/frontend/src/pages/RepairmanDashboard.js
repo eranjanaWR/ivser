@@ -46,7 +46,7 @@ import {
   Navigation,
   MyLocation,
   Refresh,
-  AttachMoney,
+
   Star,
   Warning,
   PlayArrow,
@@ -57,6 +57,7 @@ import { io } from 'socket.io-client';
 import api from '../services/api';
 import { RepairmanMap } from '../components';
 import { reverseGeocode, watchPosition, clearPositionWatch } from '../utils/geocoding';
+import { useAuth } from '../context/AuthContext';
 
 const statusColors = {
   pending: 'warning',
@@ -79,6 +80,7 @@ const statusLabels = {
 };
 
 const RepairmanDashboard = () => {
+  const { user } = useAuth();
   const socketRef = useRef(null);
   const watchIdRef = useRef(null);
   
@@ -155,6 +157,12 @@ const RepairmanDashboard = () => {
     const socket = io(process.env.REACT_APP_API_URL || window.location.origin);
     socketRef.current = socket;
 
+    socket.on('connect', () => {
+      if (user?._id) {
+        socket.emit('joinRepairmanRoom', user._id);
+      }
+    });
+
     socket.on('newBreakdownRequest', (data) => {
       setAvailableJobs((prev) => [data, ...prev]);
       setSuccess('New breakdown request received!');
@@ -166,7 +174,7 @@ const RepairmanDashboard = () => {
         clearPositionWatch(watchIdRef.current);
       }
     };
-  }, [fetchJobs]);
+  }, [fetchJobs, user?._id]);
 
   // Start/stop location tracking
   const toggleLocationTracking = () => {
@@ -566,7 +574,7 @@ const RepairmanDashboard = () => {
             onChange={(e) => setEstimatedCost(e.target.value)}
             sx={{ mb: 2 }}
             InputProps={{
-              startAdornment: <AttachMoney />,
+
             }}
           />
           <TextField
@@ -654,7 +662,7 @@ const RepairmanDashboard = () => {
                   onChange={(e) => setFinalCost(e.target.value)}
                   sx={{ mb: 2 }}
                   InputProps={{
-                    startAdornment: <AttachMoney />,
+
                   }}
                 />
                 <Button

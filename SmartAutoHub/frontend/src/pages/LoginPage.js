@@ -101,7 +101,7 @@ const LoginPage = () => {
               value={formData.password}
               onChange={handleChange}
               required
-              sx={{ mb: 3 }}
+              sx={{ mb: 1 }}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -115,6 +115,21 @@ const LoginPage = () => {
                 ),
               }}
             />
+
+            {/* Forgot Password Link */}
+            <Box sx={{ textAlign: 'right', mb: 3 }}>
+              <Link
+                to="/forgot-password"
+                style={{
+                  color: '#1976d2',
+                  textDecoration: 'none',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                }}
+              >
+                Forgot Password?
+              </Link>
+            </Box>
 
             <Button
               type="submit"

@@ -36,10 +36,9 @@ import {
   Phone,
   Email,
   Event,
+  Schedule,
   ChevronLeft,
-  ChevronRight,
-  VerifiedUser,
-  Edit,
+  ChevronRight,  Edit,
   Delete,
   CompareArrows,
   Favorite,
@@ -174,10 +173,11 @@ const VehicleDetailPage = () => {
     setSubmitting(true);
     try {
       await api.post('/test-drives', {
-        vehicle: id,
+        vehicleId: id,
+        date: testDriveDate,
+        time: testDriveTime,
         preferredDate: testDriveDate,
-        preferredTime: testDriveTime,
-        message: testDriveMessage,
+        buyerNotes: testDriveMessage,
       });
       setSuccess('Test drive booked successfully!');
       setTestDriveOpen(false);
@@ -428,7 +428,7 @@ const VehicleDetailPage = () => {
                   fullWidth
                   size="large"
                   startIcon={<Event />}
-                  onClick={() => setTestDriveOpen(true)}
+                  onClick={() => navigate(`/book-test-drive/${id}`)}
                   sx={{
                     backgroundColor: '#4281da',
                     color: '#ffffff',
@@ -483,7 +483,7 @@ const VehicleDetailPage = () => {
                   fullWidth
                   size="large"
                   startIcon={<AttachMoney />}
-                  onClick={() => navigate(`/financial-aids`)}
+                  onClick={() => navigate(`/financial-aids`, { state: { vehiclePrice: vehicle.price } })}
                   sx={{
                     backgroundColor: '#16a34a',
                     color: '#ffffff',
@@ -638,9 +638,6 @@ const VehicleDetailPage = () => {
                           <Typography variant="h6" fontWeight="bold">
                             {vehicle.sellerId.firstName} {vehicle.sellerId.lastName}
                           </Typography>
-                          {vehicle.sellerId.isFaceVerified && (
-                            <VerifiedUser fontSize="small" sx={{ color: '#27ae60' }} title="Face Verified" />
-                          )}
                         </Box>
                         <Typography variant="caption" color="text.secondary">
                           Seller ID: {typeof vehicle.sellerId === 'string' ? vehicle.sellerId.slice(0, 8) : vehicle.sellerId._id?.slice(0, 8)}
@@ -689,6 +686,24 @@ const VehicleDetailPage = () => {
               {/* Owner/Admin Actions (Edit, Delete, Mark as Sold) */}
               {(isOwner || isAdmin) && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {isOwner && (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      size="large"
+                      startIcon={<Schedule />}
+                      onClick={() => navigate('/seller-availability')}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: '#9CA3AF'
+                        }
+                      }}
+                    >
+                      Manage Test Drive Availability
+                    </Button>
+                  )}
+
                   <Box sx={{ display: 'flex', gap: 2 }}>
                     <Button
                       variant="contained"
@@ -820,3 +835,5 @@ const VehicleDetailPage = () => {
 };
 
 export default VehicleDetailPage;
+
+

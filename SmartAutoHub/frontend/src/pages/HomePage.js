@@ -34,7 +34,6 @@ import {
   ArrowForward,
   CalendarToday,
   Favorite,
-  Calculate,
   Balance,
 } from '@mui/icons-material';
 import api from '../services/api';
@@ -322,39 +321,6 @@ const HomePage = () => {
             }}
           >
             <Grid container spacing={2} sx={{ maxWidth: 280, flexDirection: 'column' }}>
-              {/* Lease Calculator Card */}
-              <Grid item xs={12}>
-                <Card
-                  onClick={() => navigate('/lease-calculator')}
-                  sx={{
-                    cursor: 'pointer',
-                    bgcolor: '#2a2a2a',
-                    color: 'white',
-                    textAlign: 'center',
-                    p: 0.75,
-                    transition: 'all 0.3s ease',
-                    border: '2px solid transparent',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
-                      bgcolor: '#333',
-                    },
-                  }}
-                >
-                  <CardContent sx={{ p: 0.25 }}>
-                    <Box sx={{ mb: 0.25 }}>
-                      <Calculate sx={{ fontSize: 24, color: 'white' }} />
-                    </Box>
-                    <Typography variant="caption" fontWeight="bold" sx={{ mb: 0.15, display: 'block', fontSize: '0.65rem' }}>
-                      Lease
-                    </Typography>
-                    <Typography variant="caption" fontWeight="500" sx={{ fontSize: '0.6rem' }}>
-                      Calculator
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-
               {/* Compare Card */}
               <Grid item xs={12}>
                 <Card
@@ -872,3 +838,5 @@ const HomePage = () => {
 };
 
 export default HomePage;
+
+

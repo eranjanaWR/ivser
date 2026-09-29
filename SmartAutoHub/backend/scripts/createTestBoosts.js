@@ -35,8 +35,6 @@ const createTestBoosts = async () => {
         password: 'Test@123',
         role: 'seller',
         isEmailVerified: true,
-        isIDVerified: true,
-        isFaceVerified: true,
       });
       console.log('✓ Created test seller');
     }
@@ -117,3 +115,4 @@ const createTestBoosts = async () => {
 
 // Run the script
 createTestBoosts();
+

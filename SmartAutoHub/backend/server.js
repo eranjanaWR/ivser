@@ -9,6 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const connectDB = require('./config/db');
 
 // Allow both single-port mode (5000) and optional split-port local dev.
@@ -50,7 +51,18 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Serve frontend build files
 const frontendPath = path.join(__dirname, '../frontend/build');
-app.use(express.static(frontendPath));
+const isProduction = process.env.NODE_ENV === 'production';
+const serveFrontendBuild = isProduction || process.env.SERVE_FRONTEND_BUILD === 'true';
+const frontendDevServer = process.env.FRONTEND_DEV_SERVER || 'http://localhost:3000';
+const frontendDevProxy = createProxyMiddleware({
+  target: frontendDevServer,
+  changeOrigin: true,
+  ws: true
+});
+
+if (serveFrontendBuild) {
+  app.use(express.static(frontendPath));
+}
 
 // Make io accessible to routes
 app.set('io', io);
@@ -61,12 +73,18 @@ const userRoutes = require('./routes/user');
 const vehicleRoutes = require('./routes/vehicle');
 const imageRoutes = require('./routes/image');
 const testDriveRoutes = require('./routes/testDrive');
+const buyerBookingRoutes = require('./routes/buyerBooking');
+const availabilityRoutes = require('./routes/availability');
 const breakdownRoutes = require('./routes/breakdown');
 const adminRoutes = require('./routes/admin');
 const predictionRoutes = require('./routes/prediction');
 const searchRoutes = require('./routes/search');
 const notificationRoutes = require('./routes/notification');
+const priceNotificationRoutes = require('./routes/priceNotifications');
 const advertisingRoutes = require('./routes/advertising');
+const financialRoutes = require('./routes/financial');
+const aiRoutes = require('./routes/ai');
+
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -74,12 +92,17 @@ app.use('/api/users', userRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/images', imageRoutes);
 app.use('/api/test-drives', testDriveRoutes);
+app.use('/api/buyer', buyerBookingRoutes);
+app.use('/api/availability', availabilityRoutes);
 app.use('/api/breakdowns', breakdownRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/prediction', predictionRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/user/price-notifications', priceNotificationRoutes);
 app.use('/api/advertising', advertisingRoutes);
+app.use('/api/financial', financialRoutes);
+app.use('/api/ai', aiRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -94,6 +117,13 @@ io.on('connection', (socket) => {
   socket.on('joinBreakdownRoom', (breakdownId) => {
     socket.join(`breakdown_${breakdownId}`);
     console.log(`User joined breakdown room: ${breakdownId}`);
+  });
+
+  // Join a repairman-specific room for incoming job notifications
+  socket.on('joinRepairmanRoom', (repairmanId) => {
+    if (!repairmanId) return;
+    socket.join(`repairman_${repairmanId}`);
+    console.log(`Repairman joined room: ${repairmanId}`);
   });
   
   // Leave a breakdown room
@@ -139,8 +169,14 @@ app.use((err, req, res, next) => {
 });
 
 // Serve React frontend for any non-API route (must be after API routes)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(frontendPath, 'index.html'));
+app.get('*', (req, res, next) => {
+  if (serveFrontendBuild) {
+    return res.sendFile(path.join(frontendPath, 'index.html'));
+  }
+
+  // In development, forward non-API routes to CRA so HMR works,
+  // while keeping backend and API on localhost:5000.
+  return frontendDevProxy(req, res, next);
 });
 
 // Start server

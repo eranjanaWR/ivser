@@ -7,13 +7,17 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect } = require('../middlewares/auth');
-const { uploadID, uploadSelfie, uploadProfileImage } = require('../middlewares/upload');
+const { uploadProfileImage } = require('../middlewares/upload');
 const { validateLogin, validateOTP } = require('../middlewares/validation');
 
 // Public routes
 // Registration accepts optional profile image
 router.post('/register', uploadProfileImage, authController.register);
 router.post('/login', validateLogin, authController.login);
+
+// Password reset (public routes - user not logged in)
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
 
 // Protected routes (requires authentication)
 router.use(protect);
@@ -31,17 +35,9 @@ router.post('/verify-otp', validateOTP, authController.verifyEmail);
 // POST /api/auth/send-otp    — alias used by frontend VerificationPage
 router.post('/resend-otp', authController.resendOTP);
 router.post('/send-otp', authController.resendOTP);
-
-// ID verification (upload front and back of ID)
-router.post('/verify-id', uploadID, authController.verifyID);
-
-// Face verification (upload selfie)
-router.post('/verify-face', uploadSelfie, authController.verifyFace);
-
-// Profile management
+  // Profile management
 router.put('/update-profile', uploadProfileImage, authController.updateProfile);
 
-// Verification status
-router.get('/verification-status', authController.getVerificationStatus);
-
 module.exports = router;
+
+

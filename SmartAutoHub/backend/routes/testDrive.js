@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const testDriveController = require('../controllers/testDriveController');
-const { protect, requireFullyVerified } = require('../middlewares/auth');
+const { protect } = require('../middlewares/auth');
 const { validateTestDrive, validateObjectId, validatePagination } = require('../middlewares/validation');
 
 // All routes require authentication
@@ -15,7 +15,6 @@ router.use(protect);
 // Schedule a test drive (verified buyers)
 router.post(
   '/',
-  requireFullyVerified,
   validateTestDrive,
   testDriveController.scheduleTestDrive
 );

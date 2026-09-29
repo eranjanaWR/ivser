@@ -9,9 +9,11 @@ const Vehicle = require('../models/Vehicle');
 const Image = require('../models/Image');
 const Boost = require('../models/Boost');
 const ViewHistory = require('../models/ViewHistory');
+const BuyerBooking = require('../models/BuyerBooking');
 const { paginate, formatPaginationResponse } = require('../utils/helpers');
 const notificationController = require('./notificationController');
-const { sendNotificationEmail } = require('../utils/email');
+const priceNotificationController = require('./priceNotificationController');
+const { sendNotificationEmail, sendTestDriveCancellationEmail } = require('../utils/email');
 
 /**
  * @desc    Get all vehicles with filters
@@ -92,7 +94,7 @@ const getVehicles = async (req, res) => {
     // Execute query
     const [vehicles, total] = await Promise.all([
       Vehicle.find(filter)
-        .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified isFaceVerified')
+        .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified')
         .populate({
           path: 'images',
           select: '_id filename mimeType order'  // Exclude imageData for list views (performance)
@@ -166,7 +168,7 @@ const getVehicles = async (req, res) => {
 const getVehicleById = async (req, res) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id)
-      .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified isIDVerified isFaceVerified')
+      .populate('sellerId', 'firstName lastName email phone profileImage isEmailVerified')
       .populate({
         path: 'images',
         select: 'filename imageData mimeType order'
@@ -389,6 +391,11 @@ const updateVehicle = async (req, res) => {
       });
     }
     
+    // PRICE CHANGE NOTIFICATION: Capture old price before updating
+    const oldPrice = vehicle.price;
+    const newPrice = req.body.price ? parseFloat(req.body.price) : vehicle.price;
+    const priceChanged = oldPrice !== newPrice;
+    
     // Handle new image uploads - save to database
     if (req.files && req.files.length > 0) {
       const existingImageCount = vehicle.images ? vehicle.images.length : 0;
@@ -482,14 +489,100 @@ const updateVehicle = async (req, res) => {
       }
     });
 
-    // Check if status is changing to 'available' to trigger notifications
-    const wasUnavailable = vehicle.status !== 'available';
-    const isBecomingAvailable = req.body.status === 'available';
+    const previousStatus = vehicle.status;
+    const nextStatus = req.body.status;
+
+    const wasUnavailable = previousStatus !== 'active';
+    const isBecomingAvailable = nextStatus === 'active';
+    const wasAvailable = ['active', 'pending'].includes(previousStatus);
+    const isBecomingUnavailable = ['sold', 'removed', 'inactive'].includes(nextStatus);
     
     // Update other fields
     Object.assign(vehicle, req.body);
     vehicle = await vehicle.save({ runValidators: true });
     
+// Update other fields
+    Object.assign(vehicle, req.body);
+    vehicle = await vehicle.save({ runValidators: true });
+    
+    // 1. TEST DRIVE CANCELLATION LOGIC (ඔයාගේ code එක)
+    if (isBecomingUnavailable && wasAvailable) {
+      try {
+        const activeBookings = await BuyerBooking.find({
+          vehicleId: vehicle._id,
+          status: { $in: ['Pending', 'Accepted'] }
+        }).populate('buyerId', 'email firstName lastName');
+
+        const cancellationReasonMap = {
+          sold: 'Vehicle has been sold',
+          removed: 'Vehicle listing was removed',
+          inactive: 'Vehicle is no longer available for test drives'
+        };
+
+        const cancellationReason = cancellationReasonMap[nextStatus] || 'Vehicle is no longer available';
+        const vehicleName = `${vehicle.year} ${vehicle.brand} ${vehicle.model}`;
+
+        for (const booking of activeBookings) {
+          try {
+            const buyerEmail = booking.buyerId?.email || booking.buyerInfo?.email;
+            const buyerName =
+              `${booking.buyerId?.firstName || ''} ${booking.buyerId?.lastName || ''}`.trim() ||
+              booking.buyerInfo?.fullName ||
+              'Buyer';
+
+            if (buyerEmail) {
+              await sendTestDriveCancellationEmail(
+                buyerEmail,
+                buyerName,
+                vehicleName,
+                cancellationReason
+              );
+            }
+          } catch (emailError) {
+            console.error('Failed to send test drive cancellation email:', emailError.message);
+          }
+
+          booking.status = 'Cancelled';
+          await booking.save();
+        }
+      } catch (testDriveError) {
+        console.error('Error cancelling active test drives on vehicle status change:', testDriveError);
+      }
+    }
+
+    // 2. PRICE CHANGE NOTIFICATION LOGIC (GitHub එකෙන් ආපු code එක)
+    if (priceChanged && vehicle.status === 'active') {
+      try {
+        console.log(`💰 Price changed for vehicle ${vehicle._id}: ${oldPrice} → ${newPrice}`);
+        
+        const buyerIds = vehicle.savedBy || [];
+        
+        if (buyerIds.length > 0) {
+          console.log(`📧 Found ${buyerIds.length} buyers with this vehicle in wishlist`);
+          
+          const vehicleInfo = {
+            vehicleId: vehicle._id,
+            brand: vehicle.brand,
+            model: vehicle.model,
+            year: vehicle.year,
+            image: vehicle.images?.[0]
+          };
+          
+          const result = await priceNotificationController.notifyPriceChange(
+            vehicle._id,
+            oldPrice,
+            newPrice,
+            vehicleInfo,
+            req.user._id,
+            buyerIds
+          );
+          
+          console.log(`✅ Price change notifications sent: ${result.notificationCount} notifications, ${result.emailCount} emails`);
+        }
+      } catch (notificationError) {
+        console.error('Error sending price change notifications:', notificationError);
+      }
+    }
     // Trigger notifications if vehicle is now available
     if (isBecomingAvailable && wasUnavailable) {
       console.log(`Vehicle ${vehicle._id} is now available. Checking for subscriptions...`);
@@ -536,6 +629,42 @@ const deleteVehicle = async (req, res) => {
       });
     }
     
+    try {
+      const activeBookings = await BuyerBooking.find({
+        vehicleId: vehicle._id,
+        status: { $in: ['Pending', 'Accepted'] }
+      }).populate('buyerId', 'email firstName lastName');
+
+      const vehicleName = `${vehicle.year} ${vehicle.brand} ${vehicle.model}`;
+      const cancellationReason = 'Vehicle listing was removed';
+
+      for (const booking of activeBookings) {
+        try {
+          const buyerEmail = booking.buyerId?.email || booking.buyerInfo?.email;
+          const buyerName =
+            `${booking.buyerId?.firstName || ''} ${booking.buyerId?.lastName || ''}`.trim() ||
+            booking.buyerInfo?.fullName ||
+            'Buyer';
+
+          if (buyerEmail) {
+            await sendTestDriveCancellationEmail(
+              buyerEmail,
+              buyerName,
+              vehicleName,
+              cancellationReason
+            );
+          }
+        } catch (emailError) {
+          console.error('Failed to send test drive cancellation email during vehicle delete:', emailError.message);
+        }
+
+        booking.status = 'Cancelled';
+        await booking.save();
+      }
+    } catch (testDriveError) {
+      console.error('Error handling active test drive cancellations during delete:', testDriveError);
+    }
+
     // Delete all associated images from database
     if (vehicle.images && vehicle.images.length > 0) {
       try {
@@ -1091,6 +1220,10 @@ const boostVehicleAd = async (req, res) => {
       console.log(`✅ [BOOST] cardProof saved: ${cardProofPath}`);
     }
 
+    // A stale client date must not create a boost that is already expired.
+    const requestedStartDate = new Date(startDate);
+    const effectiveStartDate = requestedStartDate < new Date() ? new Date() : requestedStartDate;
+
     // Create and save boost record to database
     const newBoost = new Boost({
       vehicleId,
@@ -1098,8 +1231,8 @@ const boostVehicleAd = async (req, res) => {
       packageType,
       duration,
       amount,
-      startDate: new Date(startDate),
-      endDate: new Date(new Date(startDate).getTime() + duration * 24 * 60 * 60 * 1000),
+      startDate: effectiveStartDate,
+      endDate: new Date(effectiveStartDate.getTime() + duration * 24 * 60 * 60 * 1000),
       paymentMethod,
       contactPerson,
       contactPhone,
@@ -1353,6 +1486,10 @@ const approveBoostRequest = async (req, res) => {
     boost.status = 'active';
     boost.approvedBy = adminId;
     boost.approvalDate = new Date();
+    if (boost.endDate < new Date()) {
+      boost.startDate = new Date();
+      boost.endDate = new Date(boost.startDate.getTime() + boost.duration * 24 * 60 * 60 * 1000);
+    }
     if (adminNotes) boost.adminNotes = adminNotes;
     
     await boost.save();
@@ -1755,3 +1892,4 @@ module.exports = {
   getFeaturedVehicles,
   getAllBoosts
 };
+

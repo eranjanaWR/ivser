@@ -103,85 +103,6 @@ const requireEmailVerified = (req, res, next) => {
 };
 
 /**
- * Check if user's ID is verified
- */
-const requireIDVerified = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'Not authorized'
-    });
-  }
-  
-  if (!req.user.isIDVerified) {
-    return res.status(403).json({
-      success: false,
-      message: 'ID verification required',
-      code: 'ID_NOT_VERIFIED'
-    });
-  }
-  
-  next();
-};
-
-/**
- * Check if user's face is verified
- */
-const requireFaceVerified = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'Not authorized'
-    });
-  }
-  
-  if (!req.user.isFaceVerified) {
-    return res.status(403).json({
-      success: false,
-      message: 'Face verification required',
-      code: 'FACE_NOT_VERIFIED'
-    });
-  }
-  
-  next();
-};
-
-/**
- * Check if user is fully verified (email, ID, and face)
- */
-const requireFullyVerified = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'Not authorized'
-    });
-  }
-  
-  const verificationStatus = {
-    email: req.user.isEmailVerified,
-    id: req.user.isIDVerified,
-    face: req.user.isFaceVerified
-  };
-  
-  if (!req.user.isFullyVerified()) {
-    const missing = [];
-    if (!verificationStatus.email) missing.push('email');
-    if (!verificationStatus.id) missing.push('ID');
-    if (!verificationStatus.face) missing.push('face');
-    
-    return res.status(403).json({
-      success: false,
-      message: 'Full verification required',
-      code: 'NOT_FULLY_VERIFIED',
-      missingVerifications: missing,
-      verificationStatus
-    });
-  }
-  
-  next();
-};
-
-/**
  * Optional auth - attaches user if token exists but doesn't require it
  */
 const optionalAuth = async (req, res, next) => {
@@ -212,8 +133,6 @@ module.exports = {
   protect,
   authorize,
   requireEmailVerified,
-  requireIDVerified,
-  requireFaceVerified,
-  requireFullyVerified,
   optionalAuth
 };
+

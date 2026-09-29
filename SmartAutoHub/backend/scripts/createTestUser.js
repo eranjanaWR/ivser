@@ -33,8 +33,6 @@ const createTestUser = async () => {
       role: 'buyer',
       isActive: true,
       isEmailVerified: true,
-      isIDVerified: true,
-      isFaceVerified: true
     });
     await testUser.save();
     console.log('✅ Test user created successfully');
@@ -53,3 +51,4 @@ const createTestUser = async () => {
 };
 
 createTestUser();
+

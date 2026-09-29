@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const breakdownController = require('../controllers/breakdownController');
-const { protect, authorize, requireFullyVerified } = require('../middlewares/auth');
+const { protect, authorize } = require('../middlewares/auth');
 const { uploadBreakdownImages } = require('../middlewares/upload');
 const { validateBreakdown, validateObjectId, validatePagination } = require('../middlewares/validation');
 
@@ -19,10 +19,12 @@ router.get('/nearby-repairmen', breakdownController.getNearbyRepairmen);
 // Calculate ETA between two points
 router.post('/calculate-eta', breakdownController.calculateETA);
 
-// Create breakdown request (verified users)
+// Register current user as repairman from emergency breakdown flow
+router.post('/register-repairman', breakdownController.registerAsRepairman);
+
+// Create breakdown request (authenticated users)
 router.post(
   '/',
-  requireFullyVerified,
   uploadBreakdownImages,
   validateBreakdown,
   breakdownController.createBreakdown
