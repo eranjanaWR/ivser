@@ -1,402 +1,218 @@
-/**
- * Prediction Page
- * Vehicle price prediction form
- */
-
 import React, { useState } from 'react';
+import axios from 'axios';
 import {
-  Box,
   Container,
-  Typography,
+  Paper,
   TextField,
   Button,
-  Paper,
+  Typography,
+  Box,
   Grid,
-  FormControl,
-  InputLabel,
-  Select,
   MenuItem,
-  Alert,
   CircularProgress,
-  Divider,
-  Card,
-  CardContent,
+  Alert
 } from '@mui/material';
-import {
-  TrendingUp,
-  TrendingDown,
-  Speed,
-  CalendarToday,
-  LocalGasStation,
-  AttachMoney,
-} from '@mui/icons-material';
-import api from '../services/api';
-
-const brands = ['Toyota', 'Honda', 'Nissan', 'Suzuki', 'BMW', 'Mercedes', 'Audi', 'Mazda', 'Mitsubishi', 'Hyundai', 'Ford', 'Volkswagen'];
-const fuelTypes = ['Petrol', 'Diesel', 'Hybrid', 'Electric'];
-const transmissions = ['Manual', 'Automatic'];
-const conditions = ['New', 'Used', 'Certified Pre-Owned'];
 
 const PredictionPage = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [prediction, setPrediction] = useState(null);
-  
   const [formData, setFormData] = useState({
-    brand: '',
-    model: '',
-    year: new Date().getFullYear(),
-    mileage: '',
-    fuelType: 'Petrol',
-    transmission: 'Automatic',
-    engineCapacity: '',
-    condition: 'Used',
+    Brand: 'Toyota',
+    Model: 'Camry',
+    Year: 2020,
+    Engine_cc: 1800,
+    Gear: 'Automatic',
+    Fuel_Type: 'Petrol',
+    Millage_KM: 50000,
   });
 
+  const [predictedPrice, setPredictedPrice] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const brands = ['Toyota', 'Honda', 'Nissan', 'Suzuki', 'Hyundai', 'Mitsubishi', 'BMW', 'Mercedes'];
+  const fuelTypes = ['Petrol', 'Diesel', 'Hybrid', 'Electric'];
+  const gears = ['Automatic', 'Manual'];
+
   const handleChange = (e) => {
-    setError('');
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    // Validation
-    if (!formData.brand || !formData.model || !formData.mileage) {
-      setError('Please fill in all required fields');
-      return;
-    }
-    
+  const predictPrice = async () => {
     setLoading(true);
-    setError('');
-    setPrediction(null);
+    setError(null);
     
     try {
-      const { data } = await api.post('/prediction/estimate', formData);
-      setPrediction(data.data);
+      // Calculate Vehicle Age (2026 - year)
+      const currentYear = new Date().getFullYear();
+      const vehicleAge = currentYear - formData.Year;
+      
+      // Send data in the EXACT format your pipeline expects
+      const requestData = {
+        brand: formData.Brand,
+        model: formData.Model,
+        year: parseInt(formData.Year),
+        mileage: parseInt(formData.Millage_KM),
+        fuelType: formData.Fuel_Type,
+        transmission: formData.Gear
+      };
+      
+      console.log('Sending to backend:', requestData);
+      
+      const response = await axios.post('/api/prediction/predict', requestData);
+      const { predictedPrice, priceRange, factors } = response.data.data;
+      setPredictedPrice(predictedPrice);
+      console.log('Prediction result:', { predictedPrice, priceRange, factors });
     } catch (err) {
-      // Generate mock prediction for demo
-      const basePrice = 3000000; // 3M LKR
-      const yearFactor = (formData.year - 2000) * 100000;
-      const mileageFactor = -Number(formData.mileage) * 5;
-      const conditionFactor = formData.condition === 'New' ? 500000 : formData.condition === 'Certified Pre-Owned' ? 200000 : 0;
-      const transmissionFactor = formData.transmission === 'Automatic' ? 300000 : 0;
-      const hybridFactor = formData.fuelType === 'Hybrid' ? 500000 : formData.fuelType === 'Electric' ? 800000 : 0;
-      
-      const estimatedPrice = Math.max(500000, basePrice + yearFactor + mileageFactor + conditionFactor + transmissionFactor + hybridFactor);
-      
-      setPrediction({
-        estimatedPrice: Math.round(estimatedPrice),
-        priceRange: {
-          min: Math.round(estimatedPrice * 0.85),
-          max: Math.round(estimatedPrice * 1.15),
-        },
-        factors: {
-          year: yearFactor > 0 ? 'positive' : 'negative',
-          mileage: 'negative',
-          condition: conditionFactor > 0 ? 'positive' : 'neutral',
-          transmission: transmissionFactor > 0 ? 'positive' : 'neutral',
-          fuelType: hybridFactor > 0 ? 'positive' : 'neutral',
-        },
-        confidence: 85,
-        marketTrend: 'stable',
-      });
+      console.error('Prediction error:', err);
+      setError('Failed to get prediction. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
-
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-LK', {
-      style: 'currency',
-      currency: 'LKR',
-      maximumFractionDigits: 0,
-    }).format(price);
-  };
-
-  const years = [];
-  for (let y = new Date().getFullYear() + 1; y >= 1990; y--) {
-    years.push(y);
-  }
 
   return (
-    <Box sx={{ py: 4, bgcolor: '#fafafa', minHeight: '80vh' }}>
-      <Container maxWidth="md">
-        <Typography variant="h4" fontWeight="bold" gutterBottom>
-          Price Prediction
+    <Container maxWidth="md" sx={{ py: 4 }}>
+      <Paper elevation={3} sx={{ p: 4 }}>
+        <Typography variant="h4" gutterBottom align="center" color="primary">
+           Vehicle Price Predictor
         </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-          Get an accurate market value estimate for any vehicle
+        <Typography variant="body1" align="center" sx={{ mb: 4 }}>
+          Get instant market price estimates for your vehicle
         </Typography>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+          <Alert severity="error" sx={{ mb: 3 }}>
             {error}
           </Alert>
         )}
 
-        <Grid container spacing={4}>
-          {/* Form */}
-          <Grid item xs={12} md={6}>
-            <Paper
-              component="form"
-              onSubmit={handleSubmit}
-              elevation={0}
-              sx={{ p: 3, border: '1px solid', borderColor: 'grey.200' }}
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              select
+              fullWidth
+              label="Brand"
+              name="Brand"
+              value={formData.Brand}
+              onChange={handleChange}
             >
-              <Typography variant="h6" fontWeight="bold" gutterBottom>
-                Vehicle Details
-              </Typography>
-
-              <FormControl fullWidth sx={{ mb: 2 }} required>
-                <InputLabel>Brand</InputLabel>
-                <Select
-                  name="brand"
-                  value={formData.brand}
-                  onChange={handleChange}
-                  label="Brand"
-                >
-                  {brands.map((b) => (
-                    <MenuItem key={b} value={b}>{b}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              <TextField
-                fullWidth
-                label="Model"
-                name="model"
-                value={formData.model}
-                onChange={handleChange}
-                required
-                sx={{ mb: 2 }}
-              />
-
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Year</InputLabel>
-                    <Select
-                      name="year"
-                      value={formData.year}
-                      onChange={handleChange}
-                      label="Year"
-                    >
-                      {years.map((y) => (
-                        <MenuItem key={y} value={y}>{y}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={6}>
-                  <TextField
-                    fullWidth
-                    label="Mileage (km)"
-                    name="mileage"
-                    type="number"
-                    value={formData.mileage}
-                    onChange={handleChange}
-                    required
-                  />
-                </Grid>
-              </Grid>
-
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Fuel Type</InputLabel>
-                    <Select
-                      name="fuelType"
-                      value={formData.fuelType}
-                      onChange={handleChange}
-                      label="Fuel Type"
-                    >
-                      {fuelTypes.map((f) => (
-                        <MenuItem key={f} value={f}>{f}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Transmission</InputLabel>
-                    <Select
-                      name="transmission"
-                      value={formData.transmission}
-                      onChange={handleChange}
-                      label="Transmission"
-                    >
-                      {transmissions.map((t) => (
-                        <MenuItem key={t} value={t}>{t}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
-
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={6}>
-                  <TextField
-                    fullWidth
-                    label="Engine (cc)"
-                    name="engineCapacity"
-                    type="number"
-                    value={formData.engineCapacity}
-                    onChange={handleChange}
-                  />
-                </Grid>
-                <Grid item xs={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Condition</InputLabel>
-                    <Select
-                      name="condition"
-                      value={formData.condition}
-                      onChange={handleChange}
-                      label="Condition"
-                    >
-                      {conditions.map((c) => (
-                        <MenuItem key={c} value={c}>{c}</MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
-              </Grid>
-
-              <Button
-                type="submit"
-                variant="contained"
-                size="large"
-                fullWidth
-                disabled={loading}
-                startIcon={loading ? <CircularProgress size={20} /> : <TrendingUp />}
-              >
-                {loading ? 'Calculating...' : 'Get Estimate'}
-              </Button>
-            </Paper>
+              {brands.map((brand) => (
+                <MenuItem key={brand} value={brand}>{brand}</MenuItem>
+              ))}
+            </TextField>
           </Grid>
 
-          {/* Results */}
-          <Grid item xs={12} md={6}>
-            {prediction ? (
-              <Paper
-                elevation={0}
-                sx={{ p: 3, border: '1px solid', borderColor: 'grey.200' }}
-              >
-                <Typography variant="h6" fontWeight="bold" gutterBottom>
-                  Price Estimate
-                </Typography>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Model"
+              name="Model"
+              placeholder="e.g., Camry, Corolla, Civic"
+              value={formData.Model}
+              onChange={handleChange}
+            />
+          </Grid>
 
-                <Card
-                  sx={{
-                    bgcolor: 'primary.main',
-                    color: 'white',
-                    mb: 3,
-                  }}
-                >
-                  <CardContent sx={{ textAlign: 'center', py: 4 }}>
-                    <AttachMoney sx={{ fontSize: 48, mb: 1 }} />
-                    <Typography variant="h3" fontWeight="bold">
-                      {formatPrice(prediction.estimatedPrice)}
-                    </Typography>
-                    <Typography variant="body2" sx={{ opacity: 0.8, mt: 1 }}>
-                      {formatPrice(prediction.priceRange.min)} - {formatPrice(prediction.priceRange.max)}
-                    </Typography>
-                  </CardContent>
-                </Card>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Year of Manufacture"
+              name="Year"
+              placeholder="e.g., 2020"
+              value={formData.Year}
+              onChange={handleChange}
+              inputProps={{ min: 1980, max: 2026 }}
+            />
+          </Grid>
 
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Confidence Score
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-                  <Box
-                    sx={{
-                      flexGrow: 1,
-                      height: 8,
-                      bgcolor: 'grey.200',
-                      borderRadius: 4,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        width: `${prediction.confidence}%`,
-                        height: '100%',
-                        bgcolor: prediction.confidence > 80 ? 'success.main' : 'warning.main',
-                      }}
-                    />
-                  </Box>
-                  <Typography fontWeight="bold">{prediction.confidence}%</Typography>
-                </Box>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Engine (cc)"
+              name="Engine_cc"
+              placeholder="e.g., 1800"
+              value={formData.Engine_cc}
+              onChange={handleChange}
+              inputProps={{ min: 600, max: 6000 }}
+            />
+          </Grid>
 
-                <Divider sx={{ my: 2 }} />
+          <Grid item xs={12} sm={6}>
+            <TextField
+              select
+              fullWidth
+              label="Gear"
+              name="Gear"
+              value={formData.Gear}
+              onChange={handleChange}
+            >
+              {gears.map((gear) => (
+                <MenuItem key={gear} value={gear}>{gear}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
 
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                  Price Factors
-                </Typography>
-                <Grid container spacing={1}>
-                  <Grid item xs={6}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <CalendarToday fontSize="small" color="action" />
-                      <Typography variant="body2">Year</Typography>
-                      {prediction.factors?.year === 'positive' ? (
-                        <TrendingUp fontSize="small" color="success" />
-                      ) : (
-                        <TrendingDown fontSize="small" color="error" />
-                      )}
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Speed fontSize="small" color="action" />
-                      <Typography variant="body2">Mileage</Typography>
-                      <TrendingDown fontSize="small" color="error" />
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <LocalGasStation fontSize="small" color="action" />
-                      <Typography variant="body2">Fuel Type</Typography>
-                      {prediction.factors?.fuelType === 'positive' ? (
-                        <TrendingUp fontSize="small" color="success" />
-                      ) : (
-                        <Box sx={{ width: 20, height: 20, bgcolor: 'grey.400', borderRadius: '50%' }} />
-                      )}
-                    </Box>
-                  </Grid>
-                </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              select
+              fullWidth
+              label="Fuel Type"
+              name="Fuel_Type"
+              value={formData.Fuel_Type}
+              onChange={handleChange}
+            >
+              {fuelTypes.map((fuel) => (
+                <MenuItem key={fuel} value={fuel}>{fuel}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
 
-                <Alert severity="info" sx={{ mt: 3 }}>
-                  This estimate is based on current market trends and similar vehicle sales.
-                  Actual prices may vary based on specific vehicle condition and market demand.
-                </Alert>
-              </Paper>
-            ) : (
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 4,
-                  border: '1px solid',
-                  borderColor: 'grey.200',
-                  textAlign: 'center',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-              >
-                <TrendingUp sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
-                <Typography variant="h6" color="text.secondary">
-                  Enter vehicle details to get a price estimate
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Our algorithm analyzes thousands of listings to provide accurate market values
-                </Typography>
-              </Paper>
-            )}
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Mileage (KM)"
+              name="Millage_KM"
+              placeholder="e.g., 50000"
+              value={formData.Millage_KM}
+              onChange={handleChange}
+              inputProps={{ min: 0, max: 500000 }}
+            />
+          </Grid>
+
+          <Grid item xs={12}>
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              onClick={predictPrice}
+              disabled={loading}
+              sx={{ mt: 2, py: 1.5 }}
+            >
+              {loading ? <CircularProgress size={24} /> : '🔮 Predict Price'}
+            </Button>
           </Grid>
         </Grid>
-      </Container>
-    </Box>
+
+        {predictedPrice && (
+          <Box sx={{ mt: 4, p: 3, bgcolor: '#e8f5e9', borderRadius: 2, textAlign: 'center' }}>
+            <Typography variant="h6" color="textSecondary">
+              Predicted Market Price
+            </Typography>
+            <Typography variant="h3" color="primary" fontWeight="bold">
+              LKR {predictedPrice.toLocaleString()} Lakhs
+            </Typography>
+            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+              *Estimated price based on market trends
+            </Typography>
+          </Box>
+        )}
+      </Paper>
+    </Container>
   );
 };
 

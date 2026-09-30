@@ -4,7 +4,11 @@
  * In production, this would connect to a trained ML model
  */
 
+const mongoose = require('mongoose');
+const axios = require('axios');
 const Vehicle = require('../models/Vehicle');
+
+const ML_API_URL = process.env.ML_API_URL || 'http://localhost:8080';
 
 /**
  * Base prices for different brands (simplified model)
@@ -71,7 +75,9 @@ const predictPrice = async (req, res) => {
       fuelType,
       transmission,
       bodyType,
-      condition
+      condition,
+      engine_size,
+      Engine_cc
     } = req.body;
     
     // Validate required fields
@@ -81,100 +87,129 @@ const predictPrice = async (req, res) => {
         message: 'Brand, year, and mileage are required for prediction'
       });
     }
-    
-    // Calculate base price from brand
+
+    const engineSizeValue = parseFloat(engine_size || Engine_cc || 0);
+    const mlPayload = {
+      brand,
+      model,
+      yom: parseInt(year, 10),
+      engine_cc: engineSizeValue,
+      gear: transmission,
+      fuel_type: fuelType || '',
+      millage_km: parseFloat(mileage)
+    };
+
     const brandLower = brand.toLowerCase();
     let basePrice = BRAND_BASE_PRICES[brandLower] || BRAND_BASE_PRICES['default'];
-    
-    // Adjust for body type
     const bodyMultiplier = BODY_TYPE_MULTIPLIERS[bodyType] || 1.0;
     basePrice *= bodyMultiplier;
-    
-    // Calculate depreciation based on age
+
     const currentYear = new Date().getFullYear();
-    const age = currentYear - parseInt(year);
-    
-    // Depreciation: ~15% first year, ~10% subsequent years
+    const age = currentYear - parseInt(year, 10);
+
     let depreciationFactor = 1.0;
     if (age > 0) {
-      depreciationFactor = Math.pow(0.90, age - 1) * 0.85; // First year 15%, then 10% each year
+      depreciationFactor = Math.pow(0.90, age - 1) * 0.85;
     }
-    
-    // Adjust for mileage (average 12,000 miles/year)
+
     const expectedMileage = age * 12000;
-    const mileageNum = parseInt(mileage);
+    const mileageNum = parseInt(mileage, 10);
     let mileageAdjustment = 1.0;
-    
+
     if (mileageNum > expectedMileage) {
-      // Higher than average mileage - reduce price
       const excessMiles = mileageNum - expectedMileage;
       mileageAdjustment = Math.max(0.7, 1 - (excessMiles / 100000) * 0.2);
     } else if (mileageNum < expectedMileage) {
-      // Lower than average mileage - increase price
       const savedMiles = expectedMileage - mileageNum;
       mileageAdjustment = Math.min(1.15, 1 + (savedMiles / 100000) * 0.1);
     }
-    
-    // Adjust for condition
+
     const conditionMultiplier = CONDITION_MULTIPLIERS[condition] || 0.70;
-    
-    // Adjust for fuel type
+
     let fuelMultiplier = 1.0;
     if (fuelType === 'electric') {
-      fuelMultiplier = 1.15; // Electric premium
+      fuelMultiplier = 1.15;
     } else if (fuelType === 'hybrid') {
-      fuelMultiplier = 1.10; // Hybrid premium
+      fuelMultiplier = 1.10;
     } else if (fuelType === 'diesel') {
-      fuelMultiplier = 1.05; // Diesel slight premium
+      fuelMultiplier = 1.05;
     }
-    
-    // Adjust for transmission
+
     let transmissionMultiplier = 1.0;
     if (transmission === 'manual') {
-      transmissionMultiplier = 0.95; // Manual slightly lower
+      transmissionMultiplier = 0.95;
     }
-    
-    // Calculate final predicted price
-    let predictedPrice = basePrice * 
-      depreciationFactor * 
-      mileageAdjustment * 
-      conditionMultiplier * 
-      fuelMultiplier * 
-      transmissionMultiplier;
-    
-    // Round to nearest 100
-    predictedPrice = Math.round(predictedPrice / 100) * 100;
-    
-    // Calculate price range (±10%)
+
+    let predictedPrice = null;
+    let predictionSource = 'local';
+
+    try {
+      const mlResponse = await axios.post(`${ML_API_URL}/predict`, mlPayload, { timeout: 5000 });
+      if (mlResponse.data && mlResponse.data.status === 'success' && typeof mlResponse.data.predicted_price_lkr === 'number') {
+        predictedPrice = Math.round(mlResponse.data.predicted_price_lkr * 100) / 100;
+        predictionSource = 'fastapi';
+      }
+    } catch (mlError) {
+      console.warn('FastAPI prediction unavailable, using fallback:', mlError.message);
+    }
+
+    if (predictedPrice === null) {
+      predictedPrice = basePrice * 
+        depreciationFactor * 
+        mileageAdjustment * 
+        conditionMultiplier * 
+        fuelMultiplier * 
+        transmissionMultiplier;
+      predictedPrice = Math.round(predictedPrice / 100) * 100;
+      predictionSource = 'fallback';
+    }
+
     const minPrice = Math.round(predictedPrice * 0.9 / 100) * 100;
     const maxPrice = Math.round(predictedPrice * 1.1 / 100) * 100;
     
-    // Get similar vehicles from database for comparison
-    const similarVehicles = await Vehicle.find({
-      brand: new RegExp(brand, 'i'),
-      year: { $gte: parseInt(year) - 2, $lte: parseInt(year) + 2 },
-      status: 'available'
-    })
-    .select('brand model year mileage price')
-    .limit(5);
-    
-    // Calculate average market price from similar vehicles
+    // Get similar vehicles from database for comparison (with timeout)
+    let similarVehicles = [];
     let marketAverage = null;
-    if (similarVehicles.length > 0) {
-      const totalPrice = similarVehicles.reduce((sum, v) => sum + v.price, 0);
-      marketAverage = Math.round(totalPrice / similarVehicles.length / 100) * 100;
+    
+    try {
+      // Only try database query if connection is available
+      if (mongoose.connection.readyState === 1) {
+        const vehicles = await Promise.race([
+          Vehicle.find({
+            brand: new RegExp(brand, 'i'),
+            year: { $gte: parseInt(year) - 2, $lte: parseInt(year) + 2 },
+            status: 'available'
+          })
+          .select('brand model year mileage price')
+          .limit(5),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Database query timeout')), 3000)
+          )
+        ]);
+        
+        similarVehicles = vehicles || [];
+        
+        // Calculate average market price from similar vehicles
+        if (similarVehicles.length > 0) {
+          const totalPrice = similarVehicles.reduce((sum, v) => sum + v.price, 0);
+          marketAverage = Math.round(totalPrice / similarVehicles.length / 100) * 100;
+        }
+      }
+    } catch (dbError) {
+      console.warn('Database unavailable for market comparison:', dbError.message);
+      // Continue with prediction without market data
     }
     
     res.json({
       success: true,
       data: {
         predictedPrice,
+        predictionSource,
         priceRange: {
           min: minPrice,
           max: maxPrice
         },
         factors: {
-          basePrice,
           depreciation: `${Math.round((1 - depreciationFactor) * 100)}%`,
           mileageImpact: `${Math.round((mileageAdjustment - 1) * 100)}%`,
           condition: condition || 'good',

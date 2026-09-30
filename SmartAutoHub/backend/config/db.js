@@ -41,7 +41,8 @@ const connectDB = async () => {
     
   } catch (error) {
     console.error(`Error connecting to MongoDB: ${error.message}`);
-    console.warn('⚠️ MongoDB connection failed. Frontend will still be served, but API may not work.');
+    console.warn('⚠️  Continuing without database - Prediction will use fallback algorithm');
+    // Don't exit - allow server to run with fallback
   }
 };
 
