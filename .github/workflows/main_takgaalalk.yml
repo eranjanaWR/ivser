@@ -1,0 +1,75 @@
+name: Build and deploy SmartAutoHub to Azure Web App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "SmartAutoHub/**"
+      - ".github/workflows/main_takgaalalk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    env:
+      APP_PATH: SmartAutoHub
+      AZURE_WEBAPP_NAME: takgaalalk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+          cache-dependency-path: |
+            SmartAutoHub/backend/package-lock.json
+            SmartAutoHub/frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix "$APP_PATH/backend"
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix "$APP_PATH/frontend"
+
+      - name: Build frontend for production
+        run: CI=false npm run build --prefix "$APP_PATH/frontend"
+
+      - name: Keep only production backend packages
+        run: npm prune --omit=dev --prefix "$APP_PATH/backend"
+
+      - name: Remove frontend node_modules from deployment package
+        run: rm -rf "$APP_PATH/frontend/node_modules"
+
+      - name: Remove local backend env file from deployment package
+        run: rm -f "$APP_PATH/backend/.env"
+
+      - name: Create deployment ZIP from SmartAutoHub root
+        run: |
+          cd "$APP_PATH"
+          zip -r ../release.zip . \
+            -x "backend/node_modules/.cache/*" \
+            -x "frontend/node_modules/*" \
+            -x "**/.DS_Store"
+
+      - name: Login to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_CE75FE4440144D4CA1FCE444D018822E }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_A48B2BDAFFB44E749F223D2B4089F9E3 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_E8F98E3DE184456081C5110E95017CD6 }}
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          slot-name: Production
+          package: release.zip
+          

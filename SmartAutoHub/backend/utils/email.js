@@ -1,0 +1,632 @@
+/**
+ * Email Utility
+ * Handles email sending using Nodemailer
+ * Supports Gmail, SendGrid, and other SMTP providers
+ */
+
+const nodemailer = require('nodemailer');
+
+/**
+ * Create email transporter based on configuration
+ * 
+ * For Gmail:
+ *   1. Enable 2-Step Verification on your Google account
+ *   2. Go to https://myaccount.google.com/apppasswords
+ *   3. Generate an App Password for "Mail"
+ *   4. Set EMAIL_USER = your Gmail address
+ *   5. Set EMAIL_PASS = the 16-character App Password (no spaces)
+ */
+const createTransporter = () => {
+  // Check if email credentials are configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('⚠ Email credentials not configured. Set EMAIL_USER and EMAIL_PASS in .env file.');
+    return null; // Return null if credentials missing
+  }
+
+  if (process.env.EMAIL_SERVICE === 'sendgrid') {
+    // SendGrid configuration
+    return nodemailer.createTransport({
+      host: 'smtp.sendgrid.net',
+      port: 587,
+      auth: {
+        user: 'apikey',
+        pass: process.env.SENDGRID_API_KEY
+      }
+    });
+  }
+
+  // Gmail SMTP configuration using App Password (free, no paid API needed)
+  // Works with any Gmail or Google Workspace account
+  return nodemailer.createTransport({
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // use SSL
+    auth: {
+      user: process.env.EMAIL_USER, // e.g. yourname@gmail.com
+      pass: process.env.EMAIL_PASS  // 16-char Google App Password
+    }
+  });
+};
+
+/**
+ * Generate a 6-digit OTP
+ */
+const generateOTP = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+/**
+ * Send OTP email for verification
+ */
+const sendOTPEmail = async (email, otp, firstName) => {
+  try {
+    const transporter = createTransporter();
+    
+    // Check if transporter is null (email credentials not configured)
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping OTP email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
+    
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Email Verification - TakGaala.lk',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .otp-box { background: #fff; border: 2px solid #0066ff; padding: 20px; text-align: center; margin: 20px 0; }
+            .otp-code { font-size: 32px; font-weight: bold; color: #0066ff; letter-spacing: 5px; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>Hello ${firstName},</h2>
+              <p>Thank you for registering with TakGaala.lk. Please use the following OTP to verify your email address:</p>
+              <div class="otp-box">
+                <div class="otp-code">${otp}</div>
+              </div>
+              <p>This OTP is valid for <strong>10 minutes</strong>.</p>
+              <p>If you didn't request this verification, please ignore this email.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ OTP email sent successfully to:', email, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending OTP email to', email, ':', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send notification email
+ */
+const sendNotificationEmail = async (email, subject, message, firstName) => {
+  try {
+    const transporter = createTransporter();
+    
+    // Check if transporter is null (email credentials not configured)
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
+    
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: subject,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>Hello ${firstName},</h2>
+              <p>${message}</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Notification email sent successfully to:', email, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending notification email to', email, ':', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send test drive notification to seller
+ */
+const sendTestDriveNotification = async (sellerEmail, sellerName, buyerName, vehicleName, date, time) => {
+  const subject = 'New Test Drive Request - TakGaala.lk';
+  const message = `
+    You have received a new test drive request!<br><br>
+    <strong>Buyer:</strong> ${buyerName}<br>
+    <strong>Vehicle:</strong> ${vehicleName}<br>
+    <strong>Date:</strong> ${date}<br>
+    <strong>Time:</strong> ${time}<br><br>
+    Please log in to your dashboard to approve or reject this request.
+  `;
+  
+  return await sendNotificationEmail(sellerEmail, subject, message, sellerName);
+};
+
+/**
+ * Send approved test drive email to buyer
+ */
+const sendTestDriveApprovedEmail = async (buyerEmail, buyerFirstName, vehicleName, details = {}) => {
+  const subject = 'Test Drive Request Approved - TakGaala.lk';
+  const message = `
+    Great news! Your test drive request has been approved.<br><br>
+    <strong>Vehicle:</strong> ${vehicleName}<br>
+    <strong>Date:</strong> ${details.date || 'N/A'}<br>
+    <strong>Time:</strong> ${details.time || 'N/A'}<br>
+    <strong>Seller:</strong> ${details.sellerName || 'N/A'}<br>
+    <strong>Seller Contact:</strong> ${details.sellerPhone || 'N/A'}<br><br>
+    Please contact the seller if you need any additional details before the appointment.
+  `;
+
+  return await sendNotificationEmail(
+    buyerEmail,
+    subject,
+    message,
+    buyerFirstName || 'Buyer'
+  );
+};
+
+/**
+ * Send rejected/cancelled test drive email to buyer
+ */
+const sendTestDriveRejectedEmail = async (buyerEmail, buyerFirstName, vehicleName, details = {}) => {
+  const subject = 'Test Drive Request Update - TakGaala.lk';
+  const message = `
+    Your test drive request has been updated.<br><br>
+    <strong>Vehicle:</strong> ${vehicleName}<br>
+    <strong>Date:</strong> ${details.date || 'N/A'}<br>
+    <strong>Time:</strong> ${details.time || 'N/A'}<br>
+    <strong>Seller:</strong> ${details.sellerName || 'N/A'}<br><br>
+    If needed, you can submit a new request with another preferred time.
+  `;
+
+  return await sendNotificationEmail(
+    buyerEmail,
+    subject,
+    message,
+    buyerFirstName || 'Buyer'
+  );
+};
+
+/**
+ * Send cancellation email to buyers when vehicle becomes unavailable/deleted
+ */
+const sendTestDriveCancellationEmail = async (buyerEmail, buyerName, vehicleName, reason) => {
+  const subject = 'Test Drive Cancelled - TakGaala.lk';
+  const message = `
+    We are sorry, your active test drive has been cancelled.<br><br>
+    <strong>Vehicle:</strong> ${vehicleName}<br>
+    <strong>Reason:</strong> ${reason || 'Vehicle is no longer available'}<br><br>
+    You can browse similar vehicles and submit another test drive request.
+  `;
+
+  return await sendNotificationEmail(
+    buyerEmail,
+    subject,
+    message,
+    buyerName || 'Buyer'
+  );
+};
+
+/**
+ * Send breakdown notification to repairman
+ */
+const sendBreakdownNotification = async (repairmanEmail, repairmanName, location, description, category) => {
+  const subject = 'New Breakdown Request - TakGaala.lk';
+  const message = `
+    You have received a new breakdown assistance request!<br><br>
+    <strong>Location:</strong> ${location}<br>
+    <strong>Category:</strong> ${category}<br>
+    <strong>Description:</strong> ${description}<br><br>
+    Please log in to accept this job.
+  `;
+  
+  return await sendNotificationEmail(repairmanEmail, subject, message, repairmanName);
+};
+
+/**
+ * Send generic email with template support
+ */
+const sendEmail = async (options) => {
+  try {
+    const { to, email, subject, template, data, html } = options;
+    const transporter = createTransporter();
+
+    // If transporter is null (no credentials), return error message
+    if (!transporter) {
+      console.warn('⚠ Transporter not initialized - email credentials missing');
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    let emailHtml = html || '';
+
+    // If HTML is provided directly, use it
+    if (html) {
+      const mailOptions = {
+        from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+        to: to || email,
+        subject: subject,
+        html: html,
+      };
+      const result = await transporter.sendMail(mailOptions);
+      console.log('Email sent:', result.messageId);
+      return { success: true, messageId: result.messageId };
+    }
+
+    // Otherwise, use template-based approach
+    if (template === 'notification-subscription') {
+      const { searchCriteria } = data;
+      emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .criteria { background: white; border-left: 4px solid #0066ff; padding: 15px; margin: 20px 0; }
+            .criteria p { margin: 5px 0; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>Subscription Confirmed! 🎉</h2>
+              <p>Thank you for subscribing to vehicle notifications. We'll send you an email as soon as a matching vehicle is added to our system.</p>
+              
+              <div class="criteria">
+                <h3 style="margin-top: 0; color: #1a1a1a;">Your Search Criteria:</h3>
+                ${searchCriteria.brand ? `<p><strong>Brand:</strong> ${searchCriteria.brand}</p>` : ''}
+                ${searchCriteria.vehicleType ? `<p><strong>Vehicle Type:</strong> ${searchCriteria.vehicleType}</p>` : ''}
+                ${searchCriteria.fuelType ? `<p><strong>Fuel Type:</strong> ${searchCriteria.fuelType}</p>` : ''}
+                ${searchCriteria.transmission ? `<p><strong>Transmission:</strong> ${searchCriteria.transmission}</p>` : ''}
+                ${searchCriteria.condition ? `<p><strong>Condition:</strong> ${searchCriteria.condition}</p>` : ''}
+                <p><strong>Price Range:</strong> LKR ${searchCriteria.minPrice?.toLocaleString()} - LKR ${searchCriteria.maxPrice?.toLocaleString()}</p>
+              </div>
+              
+              <p>You can manage your notifications anytime from your account dashboard.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+    } else if (template === 'vehicle-notification') {
+      const { vehicle } = data;
+      const formatPrice = (price) =>
+        new Intl.NumberFormat('en-LK', {
+          style: 'currency',
+          currency: 'LKR',
+          maximumFractionDigits: 0,
+        }).format(price);
+
+      emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .vehicle-card { background: white; border-radius: 8px; overflow: hidden; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .vehicle-image { width: 100%; height: 300px; object-fit: cover; }
+            .vehicle-details { padding: 20px; }
+            .vehicle-title { font-size: 24px; font-weight: bold; color: #1a1a1a; margin: 10px 0; }
+            .vehicle-price { font-size: 20px; color: #0066ff; font-weight: bold; margin: 10px 0; }
+            .vehicle-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; }
+            .spec { background: #f0f0f0; padding: 10px; border-radius: 4px; font-size: 14px; }
+            .spec-label { font-weight: bold; color: #666; }
+            .cta-button { background: #0066ff; color: white; padding: 12px 30px; border-radius: 4px; text-align: center; text-decoration: none; display: inline-block; margin: 20px 0; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>🚗 New Vehicle Available!</h1>
+            </div>
+            <div class="content">
+              <h2>Great News!</h2>
+              <p>A vehicle matching your search criteria has been added to TakGaala.lk.</p>
+              
+              <div class="vehicle-card">
+                ${vehicle.image ? `<img src="${vehicle.image}" alt="${vehicle.brand} ${vehicle.model}" class="vehicle-image">` : ''}
+                <div class="vehicle-details">
+                  <div class="vehicle-title">${vehicle.brand} ${vehicle.model}</div>
+                  <div class="vehicle-price">${formatPrice(vehicle.price)}</div>
+                  
+                  <div class="vehicle-specs">
+                    <div class="spec">
+                      <div class="spec-label">Year</div>
+                      <div>${vehicle.year}</div>
+                    </div>
+                    <div class="spec">
+                      <div class="spec-label">Condition</div>
+                      <div>${vehicle.condition}</div>
+                    </div>
+                    <div class="spec">
+                      <div class="spec-label">Fuel Type</div>
+                      <div>${vehicle.fuelType}</div>
+                    </div>
+                    <div class="spec">
+                      <div class="spec-label">Location</div>
+                      <div>${vehicle.city}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <a href="${process.env.FRONTEND_URL}/vehicles/${vehicle._id}" class="cta-button">View Vehicle Details →</a>
+              
+              <p>Contact the seller directly to arrange a test drive or get more information about this vehicle.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+    }
+
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: to || email,
+      subject: subject,
+      html: emailHtml,
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Email sent:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('Error sending email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send password reset OTP email
+ */
+const sendPasswordResetOTP = async (email, otp, firstName) => {
+  try {
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping password reset email send to:', email);
+      return { success: false, error: 'Email service not configured' };
+    }
+    
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Password Reset Request - TakGaala.lk',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .otp-box { background: #fff; border: 2px solid #d32f2f; padding: 20px; text-align: center; margin: 20px 0; }
+            .otp-code { font-size: 32px; font-weight: bold; color: #d32f2f; letter-spacing: 5px; }
+            .warning { background: #fff3e0; border-left: 4px solid #f57c00; padding: 15px; margin: 20px 0; color: #e65100; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>Password Reset Request</h2>
+              <p>Hello ${firstName},</p>
+              <p>We received a request to reset the password for your TakGaala.lk account.</p>
+              <p>Use the following OTP to reset your password:</p>
+              <div class="otp-box">
+                <div class="otp-code">${otp}</div>
+              </div>
+              <div class="warning">
+                <strong>⚠️ Important:</strong> This OTP is valid for <strong>1 minute only</strong>. Do not share this code with anyone.
+              </div>
+              <p>If you didn't request this password reset, please ignore this email. Your account remains secure.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Password reset OTP email sent successfully to:', email, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending password reset OTP email to', email, ':', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send price change notification email
+ */
+const sendPriceChangeNotification = async (buyerEmail, buyerName, vehicleInfo, oldPrice, newPrice) => {
+  try {
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.warn('⚠ Email service is not configured. Skipping price change email to:', buyerEmail);
+      return { success: false, error: 'Email service not configured' };
+    }
+
+    const priceChange = newPrice - oldPrice;
+    const priceChangePercent = ((priceChange / oldPrice) * 100).toFixed(1);
+    const isPriceIncrease = priceChange > 0;
+    
+    const priceColor = isPriceIncrease ? '#d32f2f' : '#2e7d32'; // Red for increase, Green for decrease
+    const priceChangeLabel = isPriceIncrease ? 'Price Increased' : 'Price Decreased';
+    const priceChangeIcon = isPriceIncrease ? '📈' : '📉';
+
+    const formatPrice = (price) => {
+      return new Intl.NumberFormat('en-LK', {
+        style: 'currency',
+        currency: 'LKR',
+        maximumFractionDigits: 0,
+      }).format(price);
+    };
+
+    const mailOptions = {
+      from: `"TakGaala.lk" <${process.env.EMAIL_USER}>`,
+      to: buyerEmail,
+      subject: `Price Alert: ${vehicleInfo.brand} ${vehicleInfo.model} - ${priceChangeLabel}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+            .content { padding: 30px; background: #f9f9f9; }
+            .price-alert { background: #fff; border-left: 5px solid ${priceColor}; padding: 20px; margin: 20px 0; }
+            .price-box { background: ${priceColor}; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 15px 0; }
+            .old-price { font-size: 14px; opacity: 0.9; text-decoration: line-through; }
+            .new-price { font-size: 28px; font-weight: bold; }
+            .price-change { font-size: 18px; margin-top: 10px; }
+            .vehicle-info { background: #fff; padding: 15px; border: 1px solid #e0e0e0; border-radius: 8px; margin: 20px 0; }
+            .vehicle-name { font-size: 18px; font-weight: bold; color: #1a1a1a; }
+            .vehicle-year { color: #666; font-size: 14px; }
+            .action-button { background: #1976d2; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block; margin-top: 15px; }
+            .footer { padding: 20px; text-align: center; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>TakGaala.lk</h1>
+            </div>
+            <div class="content">
+              <h2>${priceChangeIcon} Price Alert for Your Wishlist Vehicle</h2>
+              <p>Hello ${buyerName},</p>
+              <p>A vehicle you're watching in your wishlist has had a price change!</p>
+              
+              <div class="vehicle-info">
+                <div class="vehicle-name">${vehicleInfo.brand} ${vehicleInfo.model}</div>
+                <div class="vehicle-year">Year: ${vehicleInfo.year}</div>
+              </div>
+
+              <div class="price-alert">
+                <h3 style="color: ${priceColor}; margin-top: 0;">Price Changed</h3>
+                <div class="price-box">
+                  <div class="old-price">Previous Price: ${formatPrice(oldPrice)}</div>
+                  <div class="new-price">${formatPrice(newPrice)}</div>
+                  <div class="price-change" style="color: ${priceColor};">
+                    ${isPriceIncrease ? '+' : ''}${formatPrice(priceChange)} (${isPriceIncrease ? '+' : ''}${priceChangePercent}%)
+                  </div>
+                </div>
+              </div>
+
+              <p style="text-align: center; margin-top: 25px;">
+                <a href="${process.env.FRONTEND_URL}/vehicles/${vehicleInfo.vehicleId}" class="action-button">
+                  View Vehicle
+                </a>
+              </p>
+
+              <p style="color: #666; font-size: 14px; margin-top: 25px;">
+                You received this email because you have this vehicle in your wishlist and price change notifications enabled.
+              </p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} TakGaala.lk. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Price change notification email sent to:', buyerEmail, '| Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Error sending price change email to', buyerEmail, ':', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+module.exports = {
+  generateOTP,
+  sendOTPEmail,
+  sendNotificationEmail,
+  sendTestDriveNotification,
+  sendTestDriveApprovedEmail,
+  sendTestDriveRejectedEmail,
+  sendTestDriveCancellationEmail,
+  sendBreakdownNotification,
+  sendEmail,
+  sendPasswordResetOTP,
+  sendPriceChangeNotification
+};
+

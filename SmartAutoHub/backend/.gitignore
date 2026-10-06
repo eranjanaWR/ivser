@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Env
+.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Uploads
+uploads/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Face API models (download separately)
+public/models/
+
+# Build
+dist/

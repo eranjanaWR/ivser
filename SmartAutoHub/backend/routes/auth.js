@@ -1,0 +1,43 @@
+/**
+ * Authentication Routes
+ * Handles signup, login, email/ID/face verification
+ */
+
+const express = require('express');
+const router = express.Router();
+const authController = require('../controllers/authController');
+const { protect } = require('../middlewares/auth');
+const { uploadProfileImage } = require('../middlewares/upload');
+const { validateLogin, validateOTP } = require('../middlewares/validation');
+
+// Public routes
+// Registration accepts optional profile image
+router.post('/register', uploadProfileImage, authController.register);
+router.post('/login', validateLogin, authController.login);
+
+// Password reset (public routes - user not logged in)
+router.post('/forgot-password', authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
+
+// Protected routes (requires authentication)
+router.use(protect);
+
+// Get current user
+router.get('/me', authController.getMe);
+
+// Email verification
+// POST /api/auth/verify-email  — verify OTP (original route)
+// POST /api/auth/verify-otp    — alias used by frontend VerificationPage
+router.post('/verify-email', validateOTP, authController.verifyEmail);
+router.post('/verify-otp', validateOTP, authController.verifyEmail);
+
+// POST /api/auth/resend-otp  — resend OTP (original route)
+// POST /api/auth/send-otp    — alias used by frontend VerificationPage
+router.post('/resend-otp', authController.resendOTP);
+router.post('/send-otp', authController.resendOTP);
+  // Profile management
+router.put('/update-profile', uploadProfileImage, authController.updateProfile);
+
+module.exports = router;
+
+
