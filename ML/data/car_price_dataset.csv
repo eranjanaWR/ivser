@@ -1,0 +1,16 @@
+Brand,Model,YOM,Engine (cc),Gear,Fuel Type,Millage(KM),Price
+Toyota,Corolla,2018,1500,Automatic,Petrol,60000,7500000
+Toyota,Aqua,2016,1500,Automatic,Hybrid,85000,6200000
+Honda,Civic,2017,1800,Automatic,Petrol,70000,8200000
+Nissan,X-Trail,2015,2000,Automatic,Petrol,95000,6800000
+Suzuki,Wagon R,2019,1000,Automatic,Petrol,45000,4900000
+Suzuki,Swift,2018,1200,Manual,Petrol,52000,5400000
+Mitsubishi,Lancer,2014,1500,Automatic,Petrol,110000,4300000
+BMW,320i,2016,2000,Automatic,Petrol,65000,11800000
+Mercedes,C200,2017,2000,Automatic,Petrol,58000,12600000
+Toyota,Prius,2015,1800,Automatic,Hybrid,90000,7100000
+Honda,Fit,2016,1300,Automatic,Hybrid,80000,5600000
+Nissan,Leaf,2018,0,Automatic,Electric,50000,6900000
+Kia,Rio,2017,1400,Manual,Petrol,76000,4700000
+Mazda,Demio,2019,1300,Automatic,Petrol,42000,6100000
+Hyundai,Elantra,2016,1600,Automatic,Petrol,83000,5900000

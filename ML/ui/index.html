@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Pulse AI - Price Predictor</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Arial, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #111827;
+      color: #f9fafb;
+    }
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      background: #1f2937;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+    p {
+      color: #d1d5db;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: #e5e7eb;
+    }
+    input, select, button {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 8px;
+      border: 1px solid #4b5563;
+      padding: 10px;
+      font-size: 14px;
+      background: #111827;
+      color: #f9fafb;
+    }
+    button {
+      margin-top: 8px;
+      cursor: pointer;
+      border: none;
+      background: #2563eb;
+      font-weight: 600;
+    }
+    button:hover {
+      background: #1d4ed8;
+    }
+    .full {
+      grid-column: 1 / -1;
+    }
+    .result {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      min-height: 44px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Auto Pulse AI - Vehicle Price Predictor</h1>
+    <p>Enter vehicle details and get a predicted price from the API.</p>
+
+    <form id="predict-form">
+      <div class="grid">
+        <div>
+          <label for="brand">Brand</label>
+          <input id="brand" name="brand" required placeholder="Toyota" />
+        </div>
+        <div>
+          <label for="model">Model</label>
+          <input id="model" name="model" required placeholder="Corolla" />
+        </div>
+        <div>
+          <label for="yom">Year of Manufacture</label>
+          <input id="yom" name="yom" type="number" min="1901" max="2026" value="2018" required />
+        </div>
+        <div>
+          <label for="engine_cc">Engine (cc)</label>
+          <input id="engine_cc" name="engine_cc" type="number" min="1" value="1500" required />
+        </div>
+        <div>
+          <label for="gear">Gear</label>
+          <select id="gear" name="gear" required>
+            <option value="Automatic">Automatic</option>
+            <option value="Manual">Manual</option>
+          </select>
+        </div>
+        <div>
+          <label for="fuel_type">Fuel Type</label>
+          <select id="fuel_type" name="fuel_type" required>
+            <option value="Petrol">Petrol</option>
+            <option value="Diesel">Diesel</option>
+            <option value="Hybrid">Hybrid</option>
+            <option value="Electric">Electric</option>
+          </select>
+        </div>
+        <div class="full">
+          <label for="millage_km">Mileage (KM)</label>
+          <input id="millage_km" name="millage_km" type="number" min="1" value="60000" required />
+        </div>
+      </div>
+
+      <button type="submit">Predict Price</button>
+    </form>
+
+    <div id="result" class="result">Waiting for input...</div>
+  </div>
+
+  <script>
+    const form = document.getElementById("predict-form");
+    const resultBox = document.getElementById("result");
+    const apiOrigin = window.location.port === "5500"
+      ? `${window.location.protocol}//${window.location.hostname}:8080`
+      : window.location.origin;
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        brand: form.brand.value.trim(),
+        model: form.model.value.trim(),
+        yom: Number(form.yom.value),
+        engine_cc: Number(form.engine_cc.value),
+        gear: form.gear.value,
+        fuel_type: form.fuel_type.value,
+        millage_km: Number(form.millage_km.value)
+      };
+
+      resultBox.textContent = "Predicting...";
+
+      try {
+        const response = await fetch(`${apiOrigin}/predict`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          resultBox.textContent = `Error ${response.status}: ${data.detail || "Request failed"}`;
+          return;
+        }
+
+        resultBox.textContent = `Predicted Price (LKR): ${Math.round(data.predicted_price_lkr).toLocaleString()}`;
+      } catch (error) {
+        resultBox.textContent = `Request error: ${error.message}`;
+      }
+    });
+  </script>
+</body>
+</html>
